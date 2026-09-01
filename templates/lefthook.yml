@@ -1,0 +1,32 @@
+# Lefthook owns the git hook wiring; this gate owns the checks.
+# Installed by quality-gate/install.ps1, activated by `lefthook install`.
+#
+# VERIFIED TRAP (lefthook 2.1.12, Windows): a job written as
+#   run: pwsh -NoProfile -Command "exit 1"
+# is reported as SUCCESS -- the exit code is swallowed. `pwsh -NoProfile -File
+# <script>` propagates it correctly, and so does a bare executable. Always call
+# the gate through -File. Never -Command, never wrapped in `cmd /c` (also
+# swallows it). Related: lefthook issue #1256.
+pre-commit:
+  jobs:
+    - name: quality-gate
+      run: pwsh -NoProfile -File tools/quality-gate/check.ps1 -All -Full
+
+# The agent Stop hook is deliberately NOT generated through lefthook's `ai:`
+# key. Measured on 2.1.12: the generated command is `lefthook run <hook>`, which
+# exits 1 on failure -- but Claude Code only blocks the turn on exit **2**, so
+# the generated wiring runs the gate and then lets the agent finish anyway. It
+# also has no retry cap. tools/quality-gate/stop-hook.ps1 does both; wire it
+# directly in .claude/settings.json (install.ps1 prints the snippet).
+#
+# If you want lefthook to own the agent wiring too and can live without
+# blocking, replace that snippet with:
+#   ai:
+#     claude:
+#       Stop: gate-fast
+#   gate-fast:
+#     jobs:
+#       - name: quality-gate-fast
+#         run: pwsh -NoProfile -File tools/quality-gate/check.ps1 -All -Fast
+# `lefthook install` then writes .claude/settings.json for you, merging with
+# whatever is already in it (verified) and using an absolute lefthook path.

@@ -111,16 +111,27 @@ linters:
     #   - '^cmd/scratch/'
     rules:
       # ---------------------------------------------------------------------
-      # CLEANUP QUEUE -- how to adopt this config on an existing codebase.
+      # ADOPTING THIS ON AN EXISTING CODEBASE
       #
       # A first run on an unlinted repo returns hundreds of findings. The usual
       # reaction is to disable the noisy linters globally, and a globally
       # disabled linter is never re-enabled.
       #
-      # Instead: leave every linter enabled repo-wide and defer the noisy ones
-      # PER PACKAGE here. Pick the few that dominate the count (for us:
-      # errcheck, noctx, gosec, contextcheck, forcetypeassert) and list every
-      # package that is not clean yet:
+      # DEFAULT: a real baseline, not an exclusion list.
+      #   check.ps1 -Baseline <rev>   ->   golangci-lint run --new-from-rev <rev> --whole-files
+      # Everything older than <rev> is out of scope, everything new is strict --
+      # including a new defect in a package nobody has cleaned yet. Use
+      # HEAD~ or the merge base in CI; --whole-files judges a touched file as a
+      # whole rather than only the changed lines.
+      #
+      # FALLBACK: the cleanup queue below. Coarser and weaker -- a new violation
+      # inside a still-excluded package stays hidden -- so use it only for tools
+      # with no baseline mode, or when you want the backlog visible in the diff.
+      #
+      # Leave every linter enabled repo-wide and defer the noisy ones PER
+      # PACKAGE here. Pick the few that dominate the count (for us: errcheck,
+      # noctx, gosec, contextcheck, forcetypeassert) and list every package that
+      # is not clean yet:
       #
       #   - path: '^internal/foo/[^/]+\.go$'
       #     linters: [errcheck, noctx, gosec, contextcheck, forcetypeassert]
@@ -139,6 +150,11 @@ linters:
       #   * Order the queue by descending finding count, except a package with
       #     zero test coverage: write characterisation tests for it first.
       #
+      # A cleaned entry that no longer suppresses anything must not rot here.
+      # golangci-lint has no unused-exclusion report, so re-run without the
+      # exclusion after cleaning a package and delete the line the same commit.
+      # (ESLint does have one -- see the frontend note in README.)
+      #
       # NOTE on gosec's taint rules (G70x): they report one finding at a time, so
       # suppressing or moving one makes the next appear, and the analysis is
       # inter-package. Verify with `golangci-lint cache clean` +
@@ -149,3 +165,16 @@ linters:
 issues:
   max-issues-per-linter: 0
   max-same-issues: 0
+
+# OPT-IN, not wired into the gate. Add to the full level (pre-commit / CI) once
+# you have run each one by hand and seen its output:
+#   govulncheck ./...   known CVEs in the dependency graph. Worth it; needs
+#                       network, so it belongs in CI or the full level only.
+#   NilAway (go.uber.org/nilaway)  nil-panic analysis. Worth it, but adopt it
+#                       per package -- a whole-repo first run is unusable.
+#   govet nilness       already enabled above under `govet.enable`.
+#   gosec G70x (taint)  real value, but see the nondeterminism note above; keep
+#                       it trial-only until a clean-cache whole-repo run is
+#                       stable across two consecutive runs.
+# NOT recommended: `govet shadow` -- measured 178 hits on a mid-size codebase,
+# nearly all legitimate `err` scoping. It drowns the signal.
