@@ -89,7 +89,16 @@ func main() {
     Write-Output '[skip] golangci-lint not on PATH'
 }
 
-# 7. A present-but-unverifiable stack must FAIL, never pass silently.
+# 7. Provenance: every phase names the marker that created it.
+$out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $go -All -Why 2>&1 | Out-String)
+Check 'provenance names the found marker' ($out -match '\[WHY\] go .*found go\.mod') $out
+Check 'provenance names an absent stack' ($out -match '\[WHY\] python -- absent') $out
+
+# 8. Fail closed: an unusable root is a failure, never "nothing to check".
+$r = Invoke-Gate (Join-Path $tmp 'does-not-exist')
+Check 'unusable root fails closed' ($r.Code -ne 0) $r.Out
+
+# 9. A present-but-unverifiable stack must FAIL, never pass silently.
 $web = Join-Path $tmp 'web'
 Copy-Item (Join-Path $PSScriptRoot 'testdata\web-fixture') $web -Recurse
 $r = Invoke-Gate $web
