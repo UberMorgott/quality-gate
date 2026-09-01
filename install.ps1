@@ -1,0 +1,75 @@
+# Installs the quality gate into a target repository. Idempotent.
+#
+#   pwsh -NoProfile -File <this-repo>\install.ps1 -Target C:\path\to\repo
+#
+# Copies gate/ into <target>/tools/quality-gate/, drops a .golangci.yml next to
+# every go.mod that has none, installs the pre-commit hook, and prints what it
+# enabled and what it skipped. Existing configs are never overwritten silently.
+[CmdletBinding()]
+param(
+    [string]$Target = (Get-Location).Path,
+    [switch]$NoHook
+)
+
+$ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'gate\detect.ps1')
+
+$root = Get-RepoRoot (Resolve-Path $Target).Path
+$dest = Join-Path $root 'tools\quality-gate'
+New-Item -ItemType Directory -Path $dest -Force | Out-Null
+Copy-Item (Join-Path $PSScriptRoot 'gate\*.ps1') $dest -Force
+Write-Output "gate      -> $dest"
+
+foreach ($s in @(Get-Stacks $root)) {
+    $where = if ($s.Rel) { $s.Rel + '/' } else { './' }
+    if (-not $s.Implemented) {
+        Write-Output "skipped   $($s.Stack) at $where -- not implemented, nothing will be checked there"
+        continue
+    }
+    if ($s.Stack -eq 'go') {
+        $cfg = Join-Path $s.Dir '.golangci.yml'
+        if (Test-Path $cfg) {
+            Write-Output "go        $where -- kept existing .golangci.yml"
+        } else {
+            Copy-Item (Join-Path $PSScriptRoot 'templates\.golangci.yml') $cfg
+            Write-Output "go        $where -- installed .golangci.yml"
+            $s.Warn = '' # the warning was about the file we just created
+
+        }
+        $ga = Join-Path $root '.gitattributes'
+        if (-not (Test-Path $ga) -or ((Get-Content $ga -Raw) -notmatch '\*\.go')) {
+            Write-Output '  warn:   add "*.go text eol=lf" to .gitattributes -- gofmt reports a CRLF checkout as unformatted'
+        }
+    } else {
+        Write-Output "$($s.Stack.PadRight(9)) $where -- enabled"
+    }
+    if ($s.Warn) { Write-Output "  warn:   $($s.Warn)" }
+}
+
+$hookBody = @'
+#!/bin/sh
+# Quality gate. Installed by quality-gate/install.ps1 -- do not edit here.
+exec pwsh -NoProfile -File "$(git rev-parse --show-toplevel)/tools/quality-gate/check.ps1" -All -Full
+'@ -replace "`r`n", "`n"
+
+$hook = Join-Path $root '.git\hooks\pre-commit'
+if ($NoHook) {
+    Write-Output 'pre-commit-- skipped (-NoHook)'
+} elseif (-not (Test-Path (Join-Path $root '.git'))) {
+    Write-Output 'pre-commit-- skipped: not a git repository'
+} elseif ((Test-Path $hook) -and -not ((Get-Content $hook -Raw) -match 'quality-gate')) {
+    # Never clobber someone else's hook; core.hooksPath is deliberately not
+    # touched either -- redirecting it would disable other hooks in .git/hooks.
+    Write-Output "pre-commit-- EXISTS and is not ours, left alone. Add this line to it yourself:"
+    Write-Output '  exec pwsh -NoProfile -File "$(git rev-parse --show-toplevel)/tools/quality-gate/check.ps1" -All -Full'
+} else {
+    New-Item -ItemType Directory -Path (Split-Path $hook) -Force | Out-Null
+    Set-Content -Path $hook -Value $hookBody -Encoding utf8 -NoNewline
+    Write-Output "pre-commit-> $hook"
+}
+
+Write-Output ''
+Write-Output 'Agent Stop hook (add to .claude/settings.json, ABSOLUTE path via $CLAUDE_PROJECT_DIR):'
+Write-Output '  "hooks": { "Stop": [ { "hooks": [ { "type": "command",'
+Write-Output '    "command": "pwsh -NoProfile -File \"$CLAUDE_PROJECT_DIR/tools/quality-gate/stop-hook.ps1\"" } ] } ] }'
+Write-Output 'Then break something on purpose and confirm the hook complains.'
