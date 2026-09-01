@@ -92,7 +92,35 @@ qgate wire -NoCI              # без CI-воркфлоу
 qgate update      # git pull --ff-only в каталоге установки
 qgate selftest    # red-then-green самопроверка гейта
 qgate where       # каталог установки + короткий коммит
+qgate outdated    # отчёт об устаревших прямых зависимостях и тулчейнах
 ```
+
+## Устаревшие зависимости
+
+```powershell
+qgate outdated
+```
+
+Отдельная команда, а не фаза: «устарело» — не дефект, а гейт, чей вердикт зависит от того, что
+мир опубликовал сегодня (тот же коммит зелёный сегодня и красный завтра). Уязвимости —
+отдельный вопрос, здесь сознательно не обрабатываются.
+
+Что проверяет:
+- **Go** — только прямые зависимости (`go list -m -u`; косвенные — дело того, кто их тянет);
+- **npm** — `npm outdated --json`; требует `node_modules` (иначе `[SKIP] ... run npm ci`);
+- **тулчейны** — go (`go.dev/VERSION?m=text`) и golangci-lint (GitHub API `releases/latest`).
+
+Вывод: `[OUTDATED] go  ./ github.com/foo v1.2.3 -> v1.3.0`,
+`[OUTDATED] npm ./ vue 3.5.0 -> 3.6.1`, `[OUTDATED] tool go 1.26.2 -> 1.27.0`; если всё
+свежее — `[OK] every direct dependency and toolchain is current`.
+
+Никогда не роняет прогон (exit 0 всегда) — в том числе офлайн, при rate limit GitHub API или
+мусорном ответе реестра. Сетевые ответы кэшируются по репозиторию на 24 часа в TEMP, поэтому
+pre-commit не платит за поход в реестр каждый раз; явный `qgate outdated` кэш игнорирует.
+
+**Интеграция с гейтом:** при `-Full` и только если все фазы прошли, в конец отчёта добавляется
+одна строка `[INFO] N update(s) available -- qgate outdated`. Не блокирует, exit code не меняет.
+Stop-хук агента работает на `-Fast` и этой строки не видит — сети на ход агента нет.
 
 ## Определение стеков
 
@@ -262,7 +290,7 @@ qgate selftest
 недостающем `.golangci.yml` ровно один раз, ошибка `go vet`, ошибка `errcheck` (доказывает, что
 фаза линтера живая, а не просто присутствует), fail-closed на нерабочем корне, фронтенд без
 `node_modules`, который обязан упасть, и три проверки агентского контракта через .cmd shim
-(exit code ровно 2, причина на stderr, stdout чист). 20 проверок. Гейт, который никто не видел
+(exit code ровно 2, причина на stderr, stdout чист). 21 проверок. Гейт, который никто не видел
 красным, не считается работающим.
 
 ## CI
@@ -278,9 +306,10 @@ bin/qgate.ps1            единственная точка входа
 bin/qgate.cmd            shim для вызова без pwsh-префикса
 gate/check.ps1           выбор стеков, фазы, отчёт
 gate/detect.ps1          определение стеков по файлам-признакам
+gate/outdated.ps1        отчёт об устаревших прямых зависимостях и тулчейнах
 gate/stop-hook.ps1       обёртка для Stop-хука агента
 install.ps1              qgate wire: конфигурация целевого репозитория
-selftest.ps1             red-then-green проверка самого гейта (20 checks)
+selftest.ps1             red-then-green проверка самого гейта (21 checks)
 templates/.golangci.yml  конфиг линтера с обоснованием каждого выбора
 templates/lefthook.yml   git-хуки через lefthook + замеренные ловушки Windows
 templates/ci.yml         GitHub Actions воркфлоу

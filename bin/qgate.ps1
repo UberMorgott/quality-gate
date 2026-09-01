@@ -4,6 +4,7 @@
 #   qgate                 run the gate on the current repo (fast level)
 #   qgate -All -Full      any flag of gate/check.ps1, passed straight through
 #   qgate wire            wire the current repo: agent hooks, configs, CI
+#   qgate outdated        dependencies and toolchains with a newer release
 #   qgate stop-hook       Claude Code `Stop` hook entry (reads stdin JSON)
 #   qgate update          git pull in the install directory
 #   qgate selftest        run the gate's own red-then-green self-test
@@ -23,6 +24,7 @@ function Invoke-Child([string]$script, [object[]]$argv) {
 switch ($cmd) {
     ''          { Invoke-Child 'gate\check.ps1'     $rest }
     'run'       { Invoke-Child 'gate\check.ps1'     $rest }
+    'outdated'  { Invoke-Child 'gate\outdated.ps1'  $rest }
     'stop-hook' { Invoke-Child 'gate\stop-hook.ps1' $rest }
     'wire'      { Invoke-Child 'install.ps1'        $rest }
     'selftest'  { Invoke-Child 'selftest.ps1'       $rest }
@@ -37,7 +39,7 @@ switch ($cmd) {
         exit 0
     }
     default {
-        [Console]::Error.WriteLine("qgate: unknown command '$cmd'. Try: run, wire, stop-hook, update, selftest, where")
+        [Console]::Error.WriteLine("qgate: unknown command '$cmd'. Try: run, wire, outdated, stop-hook, update, selftest, where")
         exit 64
     }
 }

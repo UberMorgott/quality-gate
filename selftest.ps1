@@ -119,7 +119,12 @@ Set-Content $eslintCfg 'mine' -NoNewline
 & pwsh -NoProfile -File $installer -Target $wire -NoHook -NoCI *> $null
 Check 'wire keeps a config the project already had' ((Get-Content $eslintCfg -Raw) -eq 'mine')
 
-# 11. The agent contract: `qgate stop-hook` must reach Claude Code as exit code 2
+# 11. The version report is advisory. It must never fail a run -- offline, rate
+# limited or with a registry that answers garbage, the exit code stays 0.
+$outdated = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\outdated.ps1') -Root $go 2>&1 | Out-String)
+Check 'outdated never fails the run' ($LASTEXITCODE -eq 0) $outdated
+
+# 12. The agent contract: `qgate stop-hook` must reach Claude Code as exit code 2
 # with the reason on stderr, through the .cmd shim it is actually invoked by.
 # Anything less and a failing gate silently lets the agent declare victory.
 $hookRepo = Join-Path $tmp 'hook'

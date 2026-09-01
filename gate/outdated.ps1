@@ -1,0 +1,102 @@
+# Reports dependencies and toolchains that have a newer release. Never fails:
+# "outdated" is not a defect, and a gate whose verdict depends on what the world
+# published today is not a gate. Vulnerabilities are a different question and are
+# deliberately not handled here.
+#
+#   qgate outdated            full report
+#   qgate outdated -Summary   one line, used by the -Full run of the gate
+#
+# The network answers are cached per repo for a day: the pre-commit run must not
+# pay for a registry round trip every time.
+[CmdletBinding()]
+param(
+    [string]$Root,
+    [switch]$Summary
+)
+
+$ErrorActionPreference = 'Continue'
+. (Join-Path $PSScriptRoot 'detect.ps1')
+
+if (-not $Root) { $Root = Get-RepoRoot (Get-Location).Path }
+if (-not (Test-Path $Root)) { Write-Output "[FAIL] root not found: $Root"; exit 0 }
+$Root = (Resolve-Path $Root).Path
+
+$key = [BitConverter]::ToString(
+    [Security.Cryptography.MD5]::HashData(
+        [Text.Encoding]::UTF8.GetBytes($Root.ToLowerInvariant()))).Replace('-', '')
+$cacheFile = Join-Path ([IO.Path]::GetTempPath()) "quality-gate-outdated-$key.txt"
+
+# The summary is the only caller allowed to answer from cache: an explicit
+# `qgate outdated` must always go and look.
+if ($Summary -and (Test-Path $cacheFile) -and
+    ((Get-Date) - (Get-Item $cacheFile).LastWriteTime).TotalHours -lt 24) {
+    $cached = @(Get-Content $cacheFile | Where-Object { $_ })
+    if ($cached.Count) { Write-Output "[INFO] $($cached.Count) update(s) available -- qgate outdated" }
+    exit 0
+}
+
+function Get-Latest([string]$Url, [string]$Property) {
+    # Offline, rate-limited or renamed endpoint: say nothing rather than guess.
+    try {
+        $r = Invoke-RestMethod -Uri $Url -TimeoutSec 5 -MaximumRedirection 3
+        if ($Property) { $r.$Property } else { ($r -split "`n")[0].Trim() }
+    } catch { $null }
+}
+
+$found = @()
+
+foreach ($s in @(Get-Stacks $Root)) {
+    if (-not $s.Implemented) { continue }
+    Push-Location $s.Dir
+    try {
+        $where = if ($s.Rel) { $s.Rel + '/' } else { './' }
+        if ($s.Stack -eq 'go') {
+            # Direct requirements only: an indirect module is the business of the
+            # dependency that pulls it in.
+            $tmpl = '{{if and (not .Indirect) .Update}}{{.Path}} {{.Version}} -> {{.Update.Version}}{{end}}'
+            foreach ($line in (& go list -m -u -f $tmpl all 2>$null)) {
+                if ($line) { $found += "[OUTDATED] go   $where $line" }
+            }
+        } elseif ($s.Stack -eq 'web') {
+            if (-not (Test-Path (Join-Path $s.Dir 'node_modules'))) {
+                $found += "[SKIP] npm  $where node_modules missing, run npm ci"
+            } else {
+                # npm outdated exits 1 when it finds something -- that is data, not failure.
+                $json = (& npm outdated --json 2>$null | Out-String).Trim()
+                $global:LASTEXITCODE = 0
+                if ($json) {
+                    $pkgs = $json | ConvertFrom-Json
+                    foreach ($p in $pkgs.PSObject.Properties) {
+                        if ($p.Value.current -and $p.Value.latest -and $p.Value.current -ne $p.Value.latest) {
+                            $found += "[OUTDATED] npm  $where $($p.Name) $($p.Value.current) -> $($p.Value.latest)"
+                        }
+                    }
+                }
+            }
+        }
+    } finally { Pop-Location }
+}
+
+# Toolchains: the gate's own results depend on these versions, so a stale one is
+# worth knowing about even when every dependency is current.
+if (Get-Command go -ErrorAction SilentlyContinue) {
+    $cur = if ((& go version) -match 'go(\d+\.\d+(\.\d+)?)') { $Matches[1] } else { $null }
+    $latest = Get-Latest 'https://go.dev/VERSION?m=text' $null
+    if ($cur -and $latest -and "go$cur" -ne $latest) { $found += "[OUTDATED] tool go $cur -> $($latest -replace '^go', '')" }
+}
+if (Get-Command golangci-lint -ErrorAction SilentlyContinue) {
+    $cur = if ((& golangci-lint --version) -match 'version (\S+)') { $Matches[1].TrimStart('v') } else { $null }
+    $latest = (Get-Latest 'https://api.github.com/repos/golangci/golangci-lint/releases/latest' 'tag_name')
+    if ($latest) { $latest = $latest.TrimStart('v') }
+    if ($cur -and $latest -and $cur -ne $latest) { $found += "[OUTDATED] tool golangci-lint $cur -> $latest" }
+}
+
+Set-Content -Path $cacheFile -Value ($found -join "`n")
+
+if ($Summary) {
+    if ($found.Count) { Write-Output "[INFO] $($found.Count) update(s) available -- qgate outdated" }
+    exit 0
+}
+if ($found.Count) { $found | ForEach-Object { Write-Output $_ } }
+else { Write-Output '[OK] every direct dependency and toolchain is current' }
+exit 0

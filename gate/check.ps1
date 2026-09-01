@@ -206,5 +206,12 @@ foreach ($s in $stacks) {
     }
 }
 
+# Only on the full level, only when everything passed: a note about newer releases,
+# never a verdict. It cannot fail the run, and the Stop hook (-Fast) never sees it.
+if ($Full -and -not $script:Failed -and -not $Quiet) {
+    $note = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'outdated.ps1') -Root $Root -Summary 2>$null)
+    if ($note) { $report += $note }
+}
+
 if ($report -and -not ($Quiet -and -not $script:Failed)) { $report | ForEach-Object { Write-Output $_ } }
 exit ($(if ($script:Failed) { 1 } else { 0 }))
