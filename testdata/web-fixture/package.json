@@ -1,0 +1,9 @@
+{
+  "name": "web-fixture",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build-only": "vite build",
+    "type-check": "vue-tsc --build"
+  }
+}
