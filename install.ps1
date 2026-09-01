@@ -12,7 +12,7 @@
 param(
     [string]$Target = (Get-Location).Path,
     [switch]$NoHook,
-    [switch]$NoCI
+    [switch]$CI      # write .github/workflows/quality-gate.yml (opt-in)
 )
 
 $ErrorActionPreference = 'Stop'
@@ -203,17 +203,18 @@ Set-StopHook
 Set-AgentDoc 'AGENTS.md'
 Set-AgentDoc 'CLAUDE.md'
 
-if ($NoCI) {
-    Write-Output 'ci        -- skipped (-NoCI)'
+# CI is opt-in. Writing it by default made deleting it impossible: a repo whose own
+# workflow already covers this ground got the file back on the next `wire`, and
+# `wire` is exactly what you re-run after `qgate update`.
+$wf = Join-Path $root '.github\workflows\quality-gate.yml'
+if (Test-Path $wf) {
+    Write-Output 'ci        -- kept existing .github/workflows/quality-gate.yml'
+} elseif ($CI) {
+    New-Item -ItemType Directory -Path (Split-Path $wf) -Force | Out-Null
+    Copy-Item (Join-Path $PSScriptRoot 'templates\ci.yml') $wf
+    Write-Output "ci        -> $wf"
 } else {
-    $wf = Join-Path $root '.github\workflows\quality-gate.yml'
-    if (Test-Path $wf) {
-        Write-Output 'ci        -- kept existing .github/workflows/quality-gate.yml'
-    } else {
-        New-Item -ItemType Directory -Path (Split-Path $wf) -Force | Out-Null
-        Copy-Item (Join-Path $PSScriptRoot 'templates\ci.yml') $wf
-        Write-Output "ci        -> $wf"
-    }
+    Write-Output 'ci        -- not installed; `qgate wire -CI` adds a GitHub Actions workflow'
 }
 
 Write-Output ''

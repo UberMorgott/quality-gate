@@ -7,10 +7,18 @@
 # propagates it correctly, and so does `pwsh -NoProfile -File <script>`. Never
 # -Command, never wrapped in `cmd /c` (also swallows it). Related: lefthook
 # issue #1256.
+#
+# The `.cmd` is LOAD-BEARING, not a typo: lefthook runs jobs through Git Bash on
+# Windows, and bash does not apply PATHEXT. Bare `qgate` gives "command not
+# found" (exit 127) because bin/ holds qgate.cmd and qgate.ps1, no extensionless
+# file. `pwsh -File <path>` is not an option either -- with a global install the
+# gate's path is machine-specific and cannot be committed. qgate.cmd is a bare
+# executable, so it satisfies the exit-code rule above as well; the `command -v`
+# fallback keeps this same committed file working on a POSIX runner.
 pre-commit:
   jobs:
     - name: quality-gate
-      run: qgate -All -Full
+      run: 'if command -v qgate.cmd >/dev/null 2>&1; then qgate.cmd -All -Full; else qgate -All -Full; fi'
 
 # The agent Stop hook is deliberately NOT generated through lefthook's `ai:`
 # key. Measured on 2.1.12: the generated command is `lefthook run <hook>`, which

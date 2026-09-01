@@ -35,7 +35,7 @@ if ($Summary -and (Test-Path $cacheFile) -and
     ((Get-Date) - (Get-Item $cacheFile).LastWriteTime).TotalHours -lt 24 -and
     (-not $newestManifest -or $newestManifest.LastWriteTime -lt (Get-Item $cacheFile).LastWriteTime)) {
     $cached = @(Get-Content $cacheFile | Where-Object { $_ })
-    if ($cached.Count) { Write-Output "[INFO] $($cached.Count) update(s) available -- qgate outdated" }
+    if ($cached.Count) { Write-Output "[INFO] $($cached.Count) dependency update(s) available -- run 'qgate outdated' for the list" }
     exit 0
 }
 
@@ -110,7 +110,7 @@ if (Get-Command cargo -ErrorAction SilentlyContinue) {
 if (-not $unknown.Count) { Set-Content -Path $cacheFile -Value ($found -join "`n") }
 
 if ($Summary) {
-    if ($found.Count) { Write-Output "[INFO] $($found.Count) update(s) available -- qgate outdated" }
+    if ($found.Count) { Write-Output "[INFO] $($found.Count) dependency update(s) available -- run 'qgate outdated' for the list" }
     exit 0
 }
 if ($found.Count) { $found | ForEach-Object { Write-Output $_ } }

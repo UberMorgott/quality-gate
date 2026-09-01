@@ -13,7 +13,26 @@ $ErrorActionPreference = 'Stop'
 $home_ = Split-Path -Parent $PSScriptRoot
 $rest = @($args)
 $cmd = if ($rest.Count -gt 0 -and $rest[0] -notlike '-*') { $rest[0] } else { '' }
+# Help flags are not gate flags: without this they reached check.ps1 and came back
+# as "A parameter cannot be found that matches parameter name 'h'".
+if ($rest.Count -gt 0 -and $rest[0] -in '-h', '-?', '--help', '/?') { $cmd = 'help' }
 if ($cmd) { $rest = @($rest | Select-Object -Skip 1) }
+
+$usage = @'
+qgate -- one quality gate for every stack in the repository
+
+  qgate                 run the gate on the current repo (fast level: changed files)
+  qgate -All -Full      any flag of the gate, passed straight through
+  qgate wire            wire the current repo (configs, agent hooks; -CI adds a workflow)
+  qgate outdated        dependencies and toolchains with a newer release
+  qgate stop-hook       Claude Code `Stop` hook entry (reads stdin JSON)
+  qgate update          git pull in the install directory
+  qgate selftest        the gate's own red-then-green self-test
+  qgate where           install path, commit and the tool versions in use
+
+Gate flags: -All  -Fast  -Full  -Only <stack>  -Why  -Baseline <rev>  -Root <path>
+Exit codes: 0 pass, 1 fail, 2 from `stop-hook` blocks the agent's turn.
+'@
 
 function Invoke-Child([string]$script, [object[]]$argv) {
     # -File keeps $LASTEXITCODE meaningful; child scripts own their own output.
@@ -34,8 +53,27 @@ switch ($cmd) {
         Write-Output "quality-gate $(git -C $home_ rev-parse --short HEAD) at $home_"
         exit 0
     }
+    'help' { Write-Output $usage; exit 0 }
     'where' {
-        Write-Output "$home_  $(git -C $home_ rev-parse --short HEAD 2>$null)"
+        # Which gate actually ran, and with which tools. A second checkout earlier
+        # on PATH silently answering for every repo on the machine is a real thing
+        # that happened; so is a linter whose patch version differs from CI's.
+        Write-Output "install   $home_  $(git -C $home_ rev-parse --short HEAD 2>$null)"
+        Write-Output "resolved  $((Get-Command qgate -ErrorAction SilentlyContinue).Source)"
+        foreach ($t in 'go', 'golangci-lint', 'govulncheck', 'node', 'npm', 'cargo', 'lefthook') {
+            $exe = Get-Command $t -ErrorAction SilentlyContinue
+            if (-not $exe) { continue }
+            $v = switch ($t) {
+                'go' { (& go version) }
+                'golangci-lint' { (& golangci-lint --version) }
+                'node' { "node $(& node --version)" }
+                'npm' { "npm $(& npm --version)" }
+                'cargo' { (& cargo --version) }
+                'lefthook' { (& lefthook version) }
+                default { $t }
+            }
+            Write-Output "  $(($v | Select-Object -First 1))"
+        }
         exit 0
     }
     default {

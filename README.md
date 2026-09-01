@@ -25,6 +25,8 @@ irm https://raw.githubusercontent.com/UberMorgott/quality-gate/main/bootstrap.ps
 (переопределяется через `$env:QUALITY_GATE_HOME` перед запуском), добавляет `<install>\bin` в
 пользовательский PATH через реестр (исходный тип значения `REG_SZ`/`REG_EXPAND_SZ` сохраняется;
 ведущие и двойные `;` не появляются). В GitHub Actions вместо реестра пишет в `$env:GITHUB_PATH`.
+Предупреждает, если после установки `qgate` резолвится не в тот каталог, куда только что
+поставили (PATH-шэдоуинг — второй чекаут раньше в PATH молча отвечал за все репозитории).
 
 Уже запущенные терминалы и агенты сохраняют старый PATH — их нужно перезапустить.
 
@@ -41,6 +43,7 @@ qgate -Only go              # только Go
 qgate -Why                  # провенанс: какой файл-признак создал каждую фазу
 qgate -All -Baseline HEAD~  # новые находки от ревизии (см. «Внедрение»)
 qgate -Root C:\other\repo   # явный корень репозитория
+qgate -h                    # справка (также --help, -?, help); exit 0
 ```
 
 Все флаги (`-All`, `-Fast`, `-Full`, `-Only <stack>`, `-Why`, `-Baseline <rev>`, `-Root <path>`)
@@ -63,7 +66,7 @@ qgate -Root C:\other\repo   # явный корень репозитория
 qgate wire                    # текущий репозиторий
 qgate wire -Target C:\repo    # другой репозиторий
 qgate wire -NoHook            # без git-хука
-qgate wire -NoCI              # без CI-воркфлоу
+qgate wire -CI                # с CI-воркфлоу (по умолчанию не создаётся)
 ```
 
 Скрипты в целевой репозиторий **не копируются**. `qgate wire` записывает только конфигурацию:
@@ -74,11 +77,15 @@ qgate wire -NoCI              # без CI-воркфлоу
   нет (существующий не трогает — `kept existing eslint config`). Печатает строку установки:
   `npm i -D eslint @eslint/js typescript-eslint eslint-plugin-vue stylelint stylelint-config-standard-scss stylelint-config-recommended-vue`.
   Пакеты не поставлены — бинарь линтера отсутствует — фаза падает громко, молчаливого пропуска нет;
-- `lefthook.yml` (шаблон зовёт `qgate -All -Full`) + `lefthook install`, если lefthook в PATH;
+- `lefthook.yml` + `lefthook install`, если lefthook в PATH;
   иначе git-хук `pre-commit`, запускающий `exec qgate -All -Full`. В worktree и подмодулях
   путь к хукам берётся у git (`git rev-parse --git-path hooks`). Если в репозитории уже лежит
   чужой `lefthook.yml` без задания quality-gate — громкое предупреждение с точными строками,
-  которые надо вставить;
+  которые надо вставить. Шаблон:
+  `run: 'if command -v qgate.cmd >/dev/null 2>&1; then qgate.cmd -All -Full; else qgate -All -Full; fi'`
+  — lefthook на Windows гоняет задания через Git Bash, где PATHEXT не применяется и голый `qgate`
+  даёт «command not found» (в `bin/` лежат `qgate.cmd` и `qgate.ps1`, файла без расширения нет);
+  фолбэк на `qgate` оставляет тот же файл рабочим на POSIX-раннере;
 - `.claude/settings.json` — **мержится**, не заменяется — с Stop-хуком, вызывающим
   `qgate stop-hook`;
 - маркированный блок `<!-- quality-gate --> ... <!-- /quality-gate -->` в начале `AGENTS.md` и
@@ -87,10 +94,14 @@ qgate wire -NoCI              # без CI-воркфлоу
   Если гейт сам неправ (падает, обвиняет корректный код, пропускает стек) — не обходить, а
   завести issue: `qgate where` даёт путь и коммит для воспроизведения,
   `gh issue create --repo UberMorgott/quality-gate` (шаблон `.github/ISSUE_TEMPLATE/gate-bug.md`);
-- `.github/workflows/quality-gate.yml` из `templates/ci.yml` (windows-latest; определяет стеки
-  по файлам-маркерам и ставит только нужное: `setup-go` + `golangci-lint` + `govulncheck` для Go,
-  `setup-node` + `npm ci` для web, `dtolnay/rust-toolchain` с clippy и rustfmt для Rust;
-  `continue-on-error` убран; гейт по-прежнему ставится по тегу `$QG_REF`, по умолчанию `v1`).
+- `.github/workflows/quality-gate.yml` из `templates/ci.yml` — **только при `qgate wire -CI`**
+  (по умолчанию не создаётся; раньше репозиторий, осознанно удаливший этот workflow, получал его
+  обратно на следующем `wire`). windows-latest; определяет стеки по файлам-маркерам и ставит
+  только нужное: `setup-go` + `golangci-lint` + `govulncheck` для Go, `setup-node` + `npm ci`
+  для web, `dtolnay/rust-toolchain` с clippy и rustfmt для Rust; `continue-on-error` убран; гейт
+  по-прежнему ставится по тегу `$QG_REF`, по умолчанию `v1`. Монорепо: `go-version-file` получает
+  найденный путь (например `server/go.mod`) из шага определения стеков; `npm ci` запускается в
+  каталоге найденного `package.json` через `working-directory`.
 
 Идемпотентна: повторный запуск сообщает «kept existing» / «already wired» / «unchanged» и ничего
 не меняет. Предупреждает, если `qgate` не в PATH.
@@ -100,7 +111,7 @@ qgate wire -NoCI              # без CI-воркфлоу
 ```powershell
 qgate update      # git pull --ff-only в каталоге установки
 qgate selftest    # red-then-green самопроверка гейта
-qgate where       # каталог установки + короткий коммит
+qgate where       # путь установки, коммит, resolved-путь, версии тулчейнов
 qgate outdated    # отчёт об устаревших прямых зависимостях и тулчейнах
 ```
 
@@ -133,7 +144,8 @@ qgate outdated
 `qgate outdated` кэш игнорирует.
 
 **Интеграция с гейтом:** при `-Full` и только если все фазы прошли, в конец отчёта добавляется
-одна строка `[INFO] N update(s) available -- qgate outdated`. Не блокирует, exit code не меняет.
+одна строка `[INFO] N dependency update(s) available -- run 'qgate outdated' for the list`.
+Не блокирует, exit code не меняет.
 Stop-хук агента работает на `-Fast` и этой строки не видит — сети на ход агента нет.
 
 ## Проверка уязвимостей
@@ -145,6 +157,18 @@ Stop-хук агента работает на `-Fast` и этой строки 
 
 Отличие от «устарело»: уязвимость — дефект, поэтому падает.
 
+## Пиннинг версий тулчейнов
+
+Необязательный `qgate.json` в корне репозитория:
+
+```json
+{"tools": {"golangci-lint": "2.13.1", "go": "1.26.2"}}
+```
+
+Гейт сверяет версии на PATH с указанными и печатает `[WARN]` при расхождении — никогда не
+падение, гейт не ставит тулчейны. Причина: вывод линтера нестабилен даже между патч-версиями,
+поэтому зелёный локальный прогон на 2.13.2 ничего не говорит о CI, который пинит 2.13.1.
+
 ## Определение стеков
 
 По факту наличия файла-признака, а не по конфигу. Признака нет — стека нет — ноль затрат,
@@ -154,12 +178,12 @@ Stop-хук агента работает на `-Fast` и этой строки 
 |------|---------|--------|
 | go | `go.mod` | реализован |
 | web | `package.json` + `vite/next/webpack/rollup.config.*` | реализован |
-| godot | `project.godot` | **не реализован**, помечается `[SKIP]` |
-| proto | `buf.yaml` | **не реализован** |
-| python | `pyproject.toml` / `requirements.txt` | **не реализован** |
+| godot | `project.godot` | реализован |
+| proto | `buf.yaml` | реализован |
+| python | `pyproject.toml` / `requirements.txt` | **не реализован**, помечается `[SKIP]` |
 | rust | `Cargo.toml` | реализован |
 
-Нереализованный стек печатает `[SKIP] ... not implemented` и не влияет на код возврата.
+Нереализованный стек (python) печатает `[SKIP] ... not implemented` и не влияет на код возврата.
 `Cargo.toml` без секции `[package]` (член workspace) пропускается — его покрывает корень
 workspace. Нет `cargo` на PATH — стек падает (непроверяемый стек не проходит молча), как с
 `node_modules`. Фазы, которая молча проходит, здесь нет — это было бы хуже отсутствия проверки.
@@ -184,9 +208,11 @@ workspace. Нет `cargo` на PATH — стек падает (непровер�
    показанные — появляются новые). На `-Full` отсутствие `golangci-lint` в PATH — **падение**
    (гейт, который на коммите молча теряет главный линтер, не гейт). На быстром уровне — `[WARN]`,
    прогон продолжается.
-5. `go test -count=1 -failfast -shuffle=on -timeout=10m ./...` — без кеша и с перемешиванием,
-   иначе тесты незаметно начинают зависеть от порядка. Без `-race`: детектору нужен cgo/gcc,
-   которого на Windows-машине обычно нет — это отдельная job в CI.
+5. Тесты разведены по уровням. **Быстрый:** `go test -short -failfast ./...` — `-short` даёт
+   репозиторию способ убрать медленные наборы за `testing.Short()`, кэш тестов сохраняется.
+   **Полный:** `go test -count=1 -failfast -shuffle=on -timeout=10m ./...` (без кеша, с
+   перемешиванием) плюс `go test -race -short ./...`. Race-детектору нужен cgo/gcc — без него
+   предупреждение, не падение.
 
 **web** (в каталоге `package.json`): `stylelint` -> `eslint` -> `type-check` -> `build`.
 `tsconfig.json` есть, а `vue-tsc`/`tsc` не установлен — фаза падает (непроверяемое не зелёное).
@@ -202,6 +228,36 @@ workspace. Нет `cargo` на PATH — стек падает (непровер�
 2. `cargo clippy --all-targets --quiet -- -D warnings` — отдельной фазы `cargo build` нет
    намеренно: clippy компилирует, пока линтит.
 3. `cargo test --quiet`
+
+**proto** (в каталоге `buf.yaml`; нет `buf` на PATH — стек падает):
+1. `buf lint`
+2. `buf format --diff --exit-code`
+3. (только `-Full`) `buf breaking --against` — база: merge-base с origin/main, иначе HEAD~1;
+   нет базовой ревизии или в ней ещё нет .proto — предупреждение, не падение.
+4. (только `-Full`) `buf generate` + проверка дрейфа сгенерированного кода относительно .proto;
+   нет `buf.gen.yaml` — пропуск с предупреждением. Рабочее дерево возвращается в исходное
+   состояние.
+
+**godot** (в каталоге `project.godot`; бинарь из `$env:GODOT_BIN`, иначе `godot` на PATH;
+нет ни того ни другого — падение с явным упоминанием `GODOT_BIN`):
+1. (быстрый) `gdformat --check` и `gdlint` по изменённым `.gd` — нет gdtoolkit: предупреждение
+   с `pip install gdtoolkit`, не падение.
+2. (быстрый) сканер `res://` и `uid://` — ищет в `.tscn`, `.tres`, `.gd` ссылки, которые не
+   резолвятся, и `uid://` без соответствия; сообщает `файл:строка`. Несовпадение регистра в
+   `res://` считается ошибкой даже на Windows (Godot резолвит без учёта регистра на Windows,
+   но с учётом на Linux — иначе ошибка всплывает только в Linux-CI).
+3. (полный) `--import` дважды (первый проход создаёт `.godot/`, значим только второй).
+4. (полный) каждый `*_headless_test.gd` через `--script`.
+5. (полный) смоук `--quit-after 1`.
+
+Ключевая ловушка Godot: ошибки пишутся в stdout, не в stderr, и код возврата 0 для целого
+класса ошибок скриптов. Поэтому вывод сканируется на `SCRIPT ERROR` и `ERROR:` — кода
+возврата недостаточно. Это самый частый источник ложно-зелёного Godot-CI.
+
+**Кросс-стековый фан-аут:** изменение только в каталоге с `.proto` больше не сужает проверку
+до proto. Сгенерированный код пересекает границы стеков — правка схемы ломает и Go-сервер,
+и Godot-клиент. Печатается `[WHY] proto changed -- generated code crosses stacks` и
+проверяются все стеки.
 
 ## Два уровня
 
@@ -330,10 +386,12 @@ qgate selftest
 фаза линтера живая, а не просто присутствует), fail-closed на нерабочем корне, фронтенд без
 `node_modules`, который обязан упасть, rust red-then-green (три проверки), не-git каталог
 проверяется а не пропускается, шаблон lefthook зовёт `qgate`, `wire` пишет правило
-`.gitattributes`, и три проверки агентского контракта через .cmd shim (exit code ровно 2,
-причина на stderr, stdout чист). 27 проверок. Временный каталог самопроверки уникален на прогон
-(два параллельных прогона не удаляют фикстуры друг друга). Гейт, который никто не видел
-красным, не считается работающим.
+`.gitattributes`, три проверки агентского контракта через .cmd shim (exit code ровно 2,
+причина на stderr, stdout чист), proto red-then-green, определение godot-стека, громкое падение
+godot без бинаря, сканер `res://` на битой ссылке и на несовпадении регистра, висячий `uid://`.
+37 проверок (один `[skip]`, когда не задан `GODOT_BIN`). Временный каталог самопроверки уникален
+на прогон (два параллельных прогона не удаляют фикстуры друг друга). Гейт, который никто не
+видел красным, не считается работающим.
 
 ## CI
 
@@ -351,11 +409,13 @@ gate/detect.ps1          определение стеков по файлам-�
 gate/outdated.ps1        отчёт об устаревших прямых зависимостях и тулчейнах
 gate/stop-hook.ps1       обёртка для Stop-хука агента
 install.ps1              qgate wire: конфигурация целевого репозитория
-selftest.ps1             red-then-green проверка самого гейта (27 checks)
+selftest.ps1             red-then-green проверка самого гейта (37 checks)
 templates/.golangci.yml  конфиг линтера с обоснованием каждого выбора
 templates/lefthook.yml   git-хуки через lefthook + замеренные ловушки Windows
 templates/ci.yml         GitHub Actions воркфлоу
 testdata/                минимальные фикстуры для selftest
 testdata/rust-fixture/src/main.rs
+testdata/godot-fixture/  фикстуры godot-стека
+testdata/proto-fixture/  фикстуры proto-стека
 PLAYBOOK.md              метод целиком: волны, тесты, ревью вторым движком
 ```

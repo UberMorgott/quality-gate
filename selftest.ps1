@@ -30,6 +30,8 @@ $stacks = @(Get-Stacks (Join-Path $PSScriptRoot 'testdata'))
 Check 'detects go stack'   ([bool]($stacks | Where-Object { $_.Stack -eq 'go' -and $_.Implemented }))
 Check 'detects web stack'  ([bool]($stacks | Where-Object { $_.Stack -eq 'web' -and $_.Implemented }))
 Check 'detects rust stack'  ([bool]($stacks | Where-Object { $_.Stack -eq 'rust' -and $_.Implemented }))
+Check 'detects proto stack' ([bool]($stacks | Where-Object { $_.Stack -eq 'proto' -and $_.Implemented }))
+Check 'detects godot stack' ([bool]($stacks | Where-Object { $_.Stack -eq 'godot' -and $_.Implemented }))
 Check 'no phantom python stack' (-not ($stacks | Where-Object { $_.Stack -eq 'python' }))
 
 # 2. Clean Go fixture, no linter config -> passes, warns exactly once.
@@ -112,12 +114,12 @@ $wire = Join-Path $tmp 'wire'
 Copy-Item (Join-Path $PSScriptRoot 'testdata\web-fixture') $wire -Recurse
 git -C $wire init -q 2>$null
 $installer = Join-Path $PSScriptRoot 'install.ps1'
-& pwsh -NoProfile -File $installer -Target $wire -NoHook -NoCI *> $null
+& pwsh -NoProfile -File $installer -Target $wire -NoHook *> $null
 $eslintCfg = Join-Path $wire 'eslint.config.js'
 Check 'wire installs the frontend linter configs' `
     ((Test-Path $eslintCfg) -and (Test-Path (Join-Path $wire '.stylelintrc.json')))
 Set-Content $eslintCfg 'mine' -NoNewline
-& pwsh -NoProfile -File $installer -Target $wire -NoHook -NoCI *> $null
+& pwsh -NoProfile -File $installer -Target $wire -NoHook *> $null
 Check 'wire keeps a config the project already had' ((Get-Content $eslintCfg -Raw) -eq 'mine')
 
 # 11. Rust is checked for real now, red then green like Go.
@@ -136,6 +138,61 @@ Check 'rust violation fails the gate' ($r.Code -ne 0) $r.Out
 $r = Invoke-Gate $rust
 Check 'rust green again after the fix' ($r.Code -eq 0) $r.Out
 
+# 16. Proto, red then green. buf ships with nothing else, so its absence is a
+# skip -- same rule as golangci-lint above.
+if (Get-Command buf -ErrorAction SilentlyContinue) {
+    $proto = Join-Path $tmp 'proto'
+    Copy-Item (Join-Path $PSScriptRoot 'testdata\proto-fixture') $proto -Recurse
+    $r = Invoke-Gate $proto
+    Check 'clean proto fixture passes' ($r.Code -eq 0) $r.Out
+    $pf = Join-Path $proto 'example\v1\greeting.proto'
+    $pClean = [IO.File]::ReadAllText($pf)
+    [IO.File]::WriteAllText($pf, $pClean.Replace('string text = 1;', 'string Text = 1;'))
+    $r = Invoke-Gate $proto
+    Check 'proto lint violation fails the gate' (($r.Code -ne 0) -and ($r.Out -match '\[FAIL\] buf lint')) $r.Out
+    [IO.File]::WriteAllText($pf, $pClean)
+    $r = Invoke-Gate $proto
+    Check 'proto green again after the fix' ($r.Code -eq 0) $r.Out
+} else {
+    Write-Output '[skip] buf not on PATH'
+}
+
+# 17. Godot. The binary is usually absent on Windows, which is exactly when a
+# naive gate goes quiet -- so the phases that need no binary are checked for real
+# here, and the missing binary itself has to be a loud failure.
+$gdt = Join-Path $tmp 'godot'
+Copy-Item (Join-Path $PSScriptRoot 'testdata\godot-fixture') $gdt -Recurse
+$gdMain = Join-Path $gdt 'main.gd'
+$gdClean = [IO.File]::ReadAllText($gdMain)
+[IO.File]::WriteAllText($gdMain, "extends Node`n`nconst MISSING := preload(`"res://does_not_exist.gd`")`n")
+$r = Invoke-Gate $gdt
+Check 'dangling res:// reference fails the gate' `
+    (($r.Code -ne 0) -and ($r.Out -match 'res://does_not_exist\.gd does not resolve')) $r.Out
+# The one Windows cannot catch by asking the filesystem: right file, wrong case.
+# It loads here and breaks in a Linux CI run or export.
+[IO.File]::WriteAllText($gdMain, "extends Node`n`nconst S := preload(`"res://Main.gd`")`n")
+$r = Invoke-Gate $gdt
+Check 'wrong-case res:// reference fails the gate' `
+    (($r.Code -ne 0) -and ($r.Out -match 'res://Main\.gd does not resolve')) $r.Out
+[IO.File]::WriteAllText($gdMain, $gdClean)
+# A uid:// cannot be checked against a path -- only against the file that declares
+# it -- and Godot rewrites paths by uid, so a stale one silently loads nothing.
+$gdScene = Join-Path $gdt 'main.tscn'
+$scClean = [IO.File]::ReadAllText($gdScene)
+[IO.File]::WriteAllText($gdScene, $scClean.Replace('[ext_resource type="Script"', '[ext_resource type="Script" uid="uid://cnotdeclared"'))
+$r = Invoke-Gate $gdt
+Check 'dangling uid:// reference fails the gate' `
+    (($r.Code -ne 0) -and ($r.Out -match 'main\.tscn:\d+: uid://cnotdeclared matches nothing')) $r.Out
+[IO.File]::WriteAllText($gdScene, $scClean)
+$r = Invoke-Gate $gdt
+Check 'res:// scan clean once the reference is fixed' (($r.Out -notmatch 'does not resolve') -and ($r.Out -notmatch 'matches nothing')) $r.Out
+if (Get-GodotBin) {
+    Check 'godot fixture passes with a real binary' ($r.Code -eq 0) $r.Out
+} else {
+    Check 'godot without a binary fails loudly' (($r.Code -ne 0) -and ($r.Out -match 'set GODOT_BIN')) $r.Out
+    Write-Output '[skip] GODOT_BIN unset -- import/test/smoke phases not exercised'
+}
+
 # 12. A directory that is not a git repository must not pass by way of "no
 # changes": the default run has nothing to narrow by and has to check everything.
 $nogit = Join-Path $tmp 'nogit'
@@ -147,15 +204,17 @@ Check 'non-git directory is checked, not skipped' (($LASTEXITCODE -ne 0) -and ($
 # 13. The wiring templates must call the entry point that actually exists. The
 # lefthook job pointed at a path `wire` no longer creates, which broke every
 # commit in a repo that had lefthook.
+# It must also call qgate.cmd, not bare qgate: lefthook runs jobs through Git Bash,
+# where PATHEXT does not apply and a bare `qgate` exits 127, command not found.
 $lh = Get-Content (Join-Path $PSScriptRoot 'templates\lefthook.yml') -Raw
-Check 'lefthook template calls qgate' (($lh -match 'run:\s*qgate ') -and ($lh -notmatch 'tools/quality-gate')) $lh
+Check 'lefthook template calls qgate.cmd' (($lh -match 'run:.*qgate\.cmd ') -and ($lh -notmatch 'tools/quality-gate')) $lh
 
 # 14. gofmt reads a CRLF checkout as unformatted, so the .gitattributes line is a
 # prerequisite, not advice -- wire has to write it. Go repo: it is a Go rule.
 $goWire = Join-Path $tmp 'gowire'
 Copy-Item (Join-Path $PSScriptRoot 'testdata\go-fixture') $goWire -Recurse
 git -C $goWire init -q 2>$null
-& pwsh -NoProfile -File $installer -Target $goWire -NoHook -NoCI *> $null
+& pwsh -NoProfile -File $installer -Target $goWire -NoHook *> $null
 $ga = Join-Path $goWire '.gitattributes'
 Check 'wire writes the gofmt eol rule' ((Test-Path $ga) -and ((Get-Content $ga -Raw) -match '\*\.go text eol=lf')) `
     "$(if (Test-Path $ga) { Get-Content $ga -Raw })"

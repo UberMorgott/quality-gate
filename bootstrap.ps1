@@ -45,5 +45,16 @@ if ($env:GITHUB_PATH) {
 }
 
 Write-Output "installed $dir  $(git -C $dir rev-parse --short HEAD)"
+
+# An earlier entry on PATH wins. Reporting a successful install while a different
+# checkout keeps answering for every repo on the machine is the worst kind of
+# silent success -- one of them may be a working tree with uncommitted edits.
+$resolved = (Get-Command qgate -ErrorAction SilentlyContinue).Source
+if ($resolved -and (Split-Path -Parent $resolved) -ne $bin) {
+    Write-Output ''
+    Write-Output "WARNING: `qgate` still resolves to $resolved"
+    Write-Output "         An earlier PATH entry shadows the copy just installed. Remove it,"
+    Write-Output "         or move $bin ahead of it, then check with: qgate where"
+}
 Write-Output 'Restart your terminals and any running agent -- they hold the old PATH.'
 Write-Output 'next:     cd <your repo>; qgate wire'

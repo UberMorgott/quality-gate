@@ -31,6 +31,29 @@ if (-not (Test-Path $Root)) { Write-Output "[FAIL] root not found: $Root"; exit 
 $Root = (Resolve-Path $Root).Path
 
 $stacks = @(Get-Stacks $Root)
+$allStacks = $stacks
+
+# Optional qgate.json: {"tools": {"golangci-lint": "2.13.1"}}. Linter output is not
+# stable across patch releases, so a green run against a different version than CI
+# pins predicts nothing. A warning, never a failure -- the gate does not install
+# toolchains.
+$pinFile = Join-Path $Root 'qgate.json'
+if (Test-Path $pinFile) {
+    try { $pins = (Get-Content $pinFile -Raw | ConvertFrom-Json).tools } catch { $pins = $null }
+    foreach ($p in $pins.PSObject.Properties) {
+        $have = switch ($p.Name) {
+            'go' { if ((& go version 2>$null) -match 'go(\d+\.\d+(\.\d+)?)') { $Matches[1] } }
+            'golangci-lint' { if ((& golangci-lint --version 2>$null) -match 'version (\S+)') { $Matches[1].TrimStart('v') } }
+            'cargo' { if ((& cargo --version 2>$null) -match 'cargo (\S+)') { $Matches[1] } }
+            'node' { ((& node --version 2>$null) -as [string]) -replace '^v', '' }
+            default { $null }
+        }
+        if ($have -and $have -ne ([string]$p.Value).TrimStart('v')) {
+            Write-Output "[WARN] $($p.Name) $have on PATH, qgate.json pins $($p.Value) -- this run may not match CI"
+        }
+    }
+}
+
 if ($Why) {
     foreach ($s in $stacks) { Write-Output "[WHY] $($s.Stack) at $(if ($s.Rel) { $s.Rel + '/' } else { './' }) -- found $($s.Marker)" }
     foreach ($k in $script:KnownMarkers.Keys) {
@@ -90,6 +113,13 @@ if ($Only) {
             $selected += $owner
         }
         $stacks = @($selected | Sort-Object Stack, Rel -Unique)
+        # Generated code crosses stack boundaries: a .proto edit produces Go and
+        # GDScript that nobody touched, so narrowing to the schema directory would
+        # report green on a break. Conservative and cheap: re-check everything.
+        if ($stacks | Where-Object { $_.Stack -eq 'proto' }) {
+            if (-not $Quiet) { Write-Output '[WHY] proto changed -- generated code crosses stacks, checking all of them' }
+            $stacks = $allStacks
+        }
     }
 }
 
@@ -160,7 +190,22 @@ function Invoke-GoStack($s) {
     } else {
         $script:Lines += '[WARN] golangci-lint not on PATH -- phase skipped'
     }
-    Phase 'go test' { go test -count=1 -failfast -shuffle=on -timeout=10m ./... }
+    if ($Full) {
+        # A trustworthy verdict: no cache, and shuffled so order dependence surfaces.
+        Phase 'go test' { go test -count=1 -failfast -shuffle=on -timeout=10m ./... }
+        # The race detector catches a bug class go vet and golangci-lint structurally
+        # cannot. It needs a cgo toolchain, so its absence is a warning, not a failure.
+        if ($env:CGO_ENABLED -ne '0' -and (Have 'gcc')) {
+            Phase 'go test -race' { go test -race -short -failfast -timeout=15m ./... }
+        } else {
+            $script:Lines += '[WARN] no cgo toolchain (gcc) -- go test -race skipped'
+        }
+    } else {
+        # Both -count=1 and -shuffle=on defeat the Go test cache, so the fast lane
+        # re-ran every package on every agent turn. -short lets a repo park its slow
+        # suites behind testing.Short() instead of paying for them each turn.
+        Phase 'go test' { go test -short -failfast -timeout=10m ./... }
+    }
     # Known vulnerabilities ARE defects, so unlike "outdated" they fail the run --
     # but only on the full level: the database lives on the network and no agent
     # turn should pay for that.
@@ -233,6 +278,172 @@ function Invoke-WebStack($s) {
     }
 }
 
+function Invoke-ProtoStack($s) {
+    Set-Location $s.Dir
+    if (-not (Have 'buf')) {
+        # Same rule as cargo: an unverifiable stack must never pass silently.
+        Fail 'proto: buf not on PATH (cannot verify this stack)'
+        return
+    }
+    Phase 'buf lint' { buf lint }
+    # --exit-code turns the formatter into a checker: it reports, it never rewrites.
+    Phase 'buf format' { buf format --diff --exit-code }
+    if (-not $Full) { return }
+
+    $top = (& git -C $s.Dir rev-parse --show-toplevel 2>$null)
+    if ($LASTEXITCODE -ne 0 -or -not $top) { $top = $null } else { $top = ($top -replace '/', '\') }
+
+    # Wire compatibility is judged against the branch point, not the tip: against
+    # origin/main it reports what THIS branch broke rather than what the last commit
+    # did. A fresh repo has neither reference -- that is a missing baseline, not a
+    # breaking change, so it warns instead of failing.
+    $base = $null
+    if ($top) {
+        $base = (& git -C $top merge-base HEAD origin/main 2>$null)
+        if ($LASTEXITCODE -ne 0 -or -not $base) { $base = (& git -C $top rev-parse --verify --quiet 'HEAD~1^{commit}' 2>$null) }
+        if ($LASTEXITCODE -ne 0) { $base = $null }
+    }
+    # A baseline that predates the schema has nothing to compare against, and buf
+    # reports that as a hard error ("had no .proto files"). Adding the first .proto
+    # in a module is not a breaking change.
+    $baseHasProto = $false
+    if ($base) {
+        $scope = if ($s.Rel) { $s.Rel } else { '.' }
+        $baseHasProto = [bool](@(& git -C $top ls-tree -r --name-only $base -- $scope 2>$null) -like '*.proto')
+    }
+    if ($base -and $baseHasProto) {
+        $subdir = if ($s.Rel) { ",subdir=$($s.Rel)" } else { '' }
+        $against = "$(Join-Path $top '.git')#ref=$(([string]$base).Trim())$subdir"
+        Phase 'buf breaking' { buf breaking --against $against }
+    } elseif ($base) {
+        $script:Lines += '[WARN] no .proto in the baseline revision -- buf breaking skipped'
+    } else {
+        $script:Lines += '[WARN] no origin/main and no HEAD~1 -- buf breaking skipped'
+    }
+
+    if (-not (Test-Path (Join-Path $s.Dir 'buf.gen.yaml'))) {
+        $script:Lines += '[WARN] no buf.gen.yaml -- generate/drift check skipped'
+    } elseif (-not $top) {
+        $script:Lines += '[WARN] not a git repository -- generate/drift check skipped'
+    } else {
+        # The valuable one: generated code that no longer matches its .proto still
+        # compiles and is still wrong. Generating writes files, so the tree is put
+        # back before the phase returns -- a check must not leave the tree modified.
+        # Both lists are snapshotted first, or an unrelated edit already in the tree
+        # would be reported as drift.
+        Phase 'buf generate drift' {
+            $wasDirty = @(& git -C $top diff --name-only)
+            $wasNew = @(& git -C $top ls-files --others --exclude-standard)
+            buf generate
+            if ($LASTEXITCODE -ne 0) { return }
+            $dirty = @(& git -C $top diff --name-only | Where-Object { $_ -and $wasDirty -notcontains $_ })
+            $new = @(& git -C $top ls-files --others --exclude-standard | Where-Object { $_ -and $wasNew -notcontains $_ })
+            foreach ($p in $dirty) { "drifted from its .proto source: $p" }
+            foreach ($p in $new) { "generated but never committed: $p" }
+            if ($dirty) { & git -C $top checkout -- @dirty *>&1 | Out-Null }
+            $global:LASTEXITCODE = $(if ($dirty -or $new) { 1 } else { 0 })
+        }
+    }
+}
+
+function Invoke-GodotStack($s) {
+    Set-Location $s.Dir
+    $noGodotDir = '[\\/]\.godot[\\/]'
+    $gd = @(Get-ChildItem $s.Dir -Recurse -File -Filter '*.gd' -ErrorAction SilentlyContinue |
+        Where-Object { $_.FullName -notmatch $noGodotDir })
+    if (-not $Full) {
+        # The fast lane runs on every agent turn: lint only what git says changed.
+        $changed = Get-ChangedPaths $Root
+        if ($null -ne $changed) {
+            $want = @($changed | Where-Object { $_ -like '*.gd' } | ForEach-Object { Join-Path $Root ($_ -replace '/', '\') })
+            $gd = @($gd | Where-Object { $want -contains $_.FullName })
+        }
+    }
+    if ($gd.Count -gt 0) {
+        if ((Have 'gdformat') -and (Have 'gdlint')) {
+            $paths = @($gd.FullName)
+            Phase 'gdformat' { gdformat --check @paths }
+            Phase 'gdlint' { gdlint @paths }
+        } else {
+            # gdtoolkit is a pip package, a toolchain of its own -- its absence says
+            # nothing about whether the Godot binary is there.
+            $script:Lines += '[WARN] gdformat/gdlint not on PATH -- phases skipped (pip install gdtoolkit)'
+        }
+    }
+
+    # Godot resolves res:// case-sensitively on Linux. A reference whose case is
+    # wrong opens fine on a Windows dev box and breaks the Linux CI run or export,
+    # so this compares ordinally against a case-exact index of the project instead
+    # of asking the filesystem.
+    Phase 'res:// references' {
+        $known = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+        foreach ($e in Get-ChildItem $s.Dir -Recurse -Force -ErrorAction SilentlyContinue) {
+            [void]$known.Add($e.FullName.Substring($s.Dir.Length).TrimStart('\').Replace('\', '/'))
+        }
+        # A uid:// resolves through the file that DECLARES it, never through a path.
+        # Only the [gd_scene]/[gd_resource] header line and an .import sidecar declare
+        # one; every other uid= (an [ext_resource], a preload) is a reference to a
+        # file that must exist.
+        $decl = '^\[gd_(scene|resource)\b'
+        $uids = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+        foreach ($f in Get-ChildItem $s.Dir -Recurse -File -ErrorAction SilentlyContinue |
+            Where-Object { $_.Extension -in '.tscn', '.tres', '.import' -and $_.FullName -notmatch $noGodotDir }) {
+            foreach ($l in [IO.File]::ReadAllLines($f.FullName)) {
+                if ($f.Extension -ne '.import' -and $l -notmatch $decl) { continue }
+                foreach ($m in [regex]::Matches($l, 'uid\s*=\s*"uid://([^"]+)"')) { [void]$uids.Add($m.Groups[1].Value) }
+            }
+        }
+        foreach ($f in Get-ChildItem $s.Dir -Recurse -File -ErrorAction SilentlyContinue |
+            Where-Object { $_.Extension -in '.tscn', '.tres', '.gd' -and $_.FullName -notmatch $noGodotDir }) {
+            # Plain text, no parsing: this runs on every agent turn.
+            $lines = [IO.File]::ReadAllLines($f.FullName)
+            for ($i = 0; $i -lt $lines.Count; $i++) {
+                foreach ($m in [regex]::Matches($lines[$i], 'res://([^"'':)\s]*)')) {
+                    $p = $m.Groups[1].Value.TrimEnd('/')
+                    if ($p -and -not $known.Contains($p)) { "$($f.Name):$($i + 1): res://$p does not resolve" }
+                }
+                if ($lines[$i] -match $decl) { continue }
+                foreach ($m in [regex]::Matches($lines[$i], 'uid://([^"'':)\s]*)')) {
+                    $u = $m.Groups[1].Value
+                    if ($u -and -not $uids.Contains($u)) { "$($f.Name):$($i + 1): uid://$u matches nothing in the project" }
+                }
+            }
+        }
+    } -FailIfOutput
+
+    $godot = Get-GodotBin
+    if (-not $godot) {
+        # Same rule as cargo and node_modules: unverifiable is not the same as clean.
+        Fail 'godot: set GODOT_BIN to the Godot executable (cannot verify this stack)'
+        return
+    }
+    if (-not $Full) { return }
+
+    # THE Godot trap: it writes script errors to STDOUT and still exits 0 for a
+    # large class of them, so an exit-code-only check reports false green. Every
+    # phase below filters its run down to the error lines and fails on any output;
+    # a clean run prints nothing.
+    $errs = 'SCRIPT ERROR|ERROR:'
+    # Run twice: the first pass creates .godot/ and routinely reports errors that
+    # exist only because it did not yet. Only the second pass is a verdict.
+    Phase 'godot import' {
+        & $godot --headless --path $s.Dir --import *>&1 | Out-Null
+        (& $godot --headless --path $s.Dir --import *>&1) | Where-Object { $_ -match $errs }
+    } -FailIfOutput
+    foreach ($t in Get-ChildItem $s.Dir -Recurse -File -Filter '*_headless_test.gd' -ErrorAction SilentlyContinue |
+        Where-Object { $_.FullName -notmatch $noGodotDir }) {
+        $tf = $t.FullName
+        Phase "godot test $($t.Name)" {
+            (& $godot --headless --path $s.Dir --script $tf *>&1) | Where-Object { $_ -match $errs }
+        } -FailIfOutput
+    }
+    # Boots the main scene and quits: catches autoload and boot-order breakage that
+    # neither the import nor a script test ever loads.
+    Phase 'godot smoke' {
+        (& $godot --headless --path $s.Dir --quit-after 1 *>&1) | Where-Object { $_ -match $errs }
+    } -FailIfOutput
+}
+
 # --- run -------------------------------------------------------------------
 $cwd = (Get-Location).Path
 $report = @()
@@ -250,6 +461,8 @@ foreach ($s in $stacks) {
             'go' { Invoke-GoStack $s }
             'web' { Invoke-WebStack $s }
             'rust' { Invoke-RustStack $s }
+            'proto' { Invoke-ProtoStack $s }
+            'godot' { Invoke-GodotStack $s }
         }
     } catch {
         # Fail closed: a crash in the gate is a failure, never a silent pass.

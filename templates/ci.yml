@@ -23,18 +23,29 @@ jobs:
         id: stacks
         shell: pwsh
         run: |
-          $go = [bool](Get-ChildItem -Recurse -Depth 3 -Filter go.mod -File -EA SilentlyContinue)
-          $web = [bool](Get-ChildItem -Recurse -Depth 3 -Filter package.json -File -EA SilentlyContinue |
-                        Where-Object { $_.FullName -notmatch '\\node_modules\\' })
+          # A monorepo has no marker at the root: find where each stack actually
+          # lives and hand setup-go the go.mod that exists, not an assumed one.
+          $gomod = Get-ChildItem -Recurse -Depth 3 -Filter go.mod -File -EA SilentlyContinue |
+                   Select-Object -First 1
+          $pkg = Get-ChildItem -Recurse -Depth 3 -Filter package.json -File -EA SilentlyContinue |
+                 Where-Object { $_.FullName -notmatch '\\node_modules\\' } | Select-Object -First 1
+          $web = $null -ne $pkg
+          if ($pkg) {
+            "webdir=$(($pkg.DirectoryName.Substring($PWD.Path.Length).Trim('\') -replace '\\', '/'))" |
+              Add-Content $env:GITHUB_OUTPUT
+          }
           $rust = [bool](Get-ChildItem -Recurse -Depth 3 -Filter Cargo.toml -File -EA SilentlyContinue)
-          "go=$($go.ToString().ToLower())"     | Add-Content $env:GITHUB_OUTPUT
+          "go=$(($null -ne $gomod).ToString().ToLower())" | Add-Content $env:GITHUB_OUTPUT
+          if ($gomod) {
+            "gomod=$($gomod.FullName.Substring($PWD.Path.Length + 1) -replace '\\', '/')" | Add-Content $env:GITHUB_OUTPUT
+          }
           "web=$($web.ToString().ToLower())"   | Add-Content $env:GITHUB_OUTPUT
           "rust=$($rust.ToString().ToLower())" | Add-Content $env:GITHUB_OUTPUT
 
       - uses: actions/setup-go@v5
         if: steps.stacks.outputs.go == 'true'
         with:
-          go-version-file: go.mod
+          go-version-file: ${{ steps.stacks.outputs.gomod }}
 
       # The full level requires golangci-lint; without it the gate fails closed.
       - name: install golangci-lint
@@ -55,6 +66,7 @@ jobs:
       - name: npm ci
         if: steps.stacks.outputs.web == 'true'
         shell: pwsh
+        working-directory: ${{ steps.stacks.outputs.webdir || '.' }}
         run: npm ci
 
       - uses: dtolnay/rust-toolchain@stable

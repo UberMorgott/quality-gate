@@ -1,0 +1,8 @@
+syntax = "proto3";
+
+package example.v1;
+
+// Greeting is the payload the fixture lints.
+message Greeting {
+  string text = 1;
+}

@@ -1,3 +1,5 @@
 * text=auto
 # gofmt reports a CRLF checkout as unformatted -- the gate's own fixtures must be LF.
 *.go text eol=lf
+*.proto text eol=lf
+*.gd text eol=lf

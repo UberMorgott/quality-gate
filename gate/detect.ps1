@@ -41,6 +41,15 @@ function Get-PathKey([string]$Text) {
             [Text.Encoding]::UTF8.GetBytes($Text.ToLowerInvariant()))).Replace('-', '')
 }
 
+# The Godot editor binary is almost never on PATH on Windows (no installer, no
+# stable name), so GODOT_BIN is the primary answer and PATH the fallback.
+function Get-GodotBin {
+    if ($env:GODOT_BIN -and (Test-Path $env:GODOT_BIN)) { return $env:GODOT_BIN }
+    $cmd = Get-Command godot -ErrorAction SilentlyContinue
+    if ($cmd) { return $cmd.Source }
+    return $null
+}
+
 function Test-AnyFile([string]$Dir, [string[]]$Patterns) {
     foreach ($p in $Patterns) {
         if (Get-ChildItem -Path $Dir -Filter $p -File -Force -ErrorAction SilentlyContinue) { return $true }
@@ -96,9 +105,27 @@ function Get-Stacks([string]$Root) {
         $stacks += [pscustomobject]@{ Stack = 'rust'; Dir = $dir; Rel = (& $rel $dir); Marker = 'Cargo.toml'; Implemented = $true; Warn = $warn }
     }
 
+    foreach ($m in Find-Marker $Root @('buf.yaml')) {
+        $dir = $m.DirectoryName
+        $warn = ''
+        if (-not (Get-Command buf -ErrorAction SilentlyContinue)) {
+            $warn = 'buf not on PATH -- the gate cannot verify this stack until it is'
+        }
+        $stacks += [pscustomobject]@{ Stack = 'proto'; Dir = $dir; Rel = (& $rel $dir); Marker = 'buf.yaml'; Implemented = $true; Warn = $warn }
+    }
+
+    foreach ($m in Find-Marker $Root @('project.godot')) {
+        $dir = $m.DirectoryName
+        $warn = ''
+        if (-not (Get-GodotBin)) {
+            $warn = 'no Godot binary -- set GODOT_BIN; the gate cannot verify this stack until then'
+        }
+        $stacks += [pscustomobject]@{ Stack = 'godot'; Dir = $dir; Rel = (& $rel $dir); Marker = 'project.godot'; Implemented = $true; Warn = $warn }
+    }
+
     # Declared, detected, NOT checked. Reported so nobody mistakes silence for a
     # passing stack. Implement one only after it has been run for real.
-    $todo = @{ 'project.godot' = 'godot'; 'buf.yaml' = 'proto'; 'pyproject.toml' = 'python'; 'requirements.txt' = 'python' }
+    $todo = @{ 'pyproject.toml' = 'python'; 'requirements.txt' = 'python' }
     foreach ($m in Find-Marker $Root ($todo.Keys)) {
         $dir = $m.DirectoryName
         $name = $todo[$m.Name]
