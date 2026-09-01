@@ -314,7 +314,14 @@ function Invoke-ProtoStack($s) {
     if ($base -and $baseHasProto) {
         $subdir = if ($s.Rel) { ",subdir=$($s.Rel)" } else { '' }
         $against = "$(Join-Path $top '.git')#ref=$(([string]$base).Trim())$subdir"
-        Phase 'buf breaking' { buf breaking --against $against }
+        # buf clones the ref to read it, and that clone runs git's LFS smudge
+        # filter over every tracked binary with no remote to fetch from. The
+        # .proto files are never LFS objects, so skip the smudge for this call.
+        Phase 'buf breaking' {
+            $prior = $env:GIT_LFS_SKIP_SMUDGE
+            $env:GIT_LFS_SKIP_SMUDGE = '1'
+            try { buf breaking --against $against } finally { $env:GIT_LFS_SKIP_SMUDGE = $prior }
+        }
     } elseif ($base) {
         $script:Lines += '[WARN] no .proto in the baseline revision -- buf breaking skipped'
     } else {
@@ -348,7 +355,10 @@ function Invoke-ProtoStack($s) {
 
 function Invoke-GodotStack($s) {
     Set-Location $s.Dir
-    $noGodotDir = '[\\/]\.godot[\\/]'
+    # addons/ is other people's code: a project cannot fix its formatting and
+    # should not be blocked by its docstrings. Its files still count as targets
+    # a reference may resolve to (see $known below); they are just not scanned.
+    $noGodotDir = '[\\/](\.godot|addons)[\\/]'
     $gd = @(Get-ChildItem $s.Dir -Recurse -File -Filter '*.gd' -ErrorAction SilentlyContinue |
         Where-Object { $_.FullName -notmatch $noGodotDir })
     if (-not $Full) {
@@ -395,17 +405,21 @@ function Invoke-GodotStack($s) {
         }
         foreach ($f in Get-ChildItem $s.Dir -Recurse -File -ErrorAction SilentlyContinue |
             Where-Object { $_.Extension -in '.tscn', '.tres', '.gd' -and $_.FullName -notmatch $noGodotDir }) {
-            # Plain text, no parsing: this runs on every agent turn.
+            # Plain text, no parsing: this runs on every agent turn. A reference is
+            # a quoted string literal; res:// in a comment, a docstring or a format
+            # template ("res://addons/%s/plugin.cfg") is prose and is not checked.
+            $rel = $f.FullName.Substring($s.Dir.Length).TrimStart('\').Replace('\', '/')
             $lines = [IO.File]::ReadAllLines($f.FullName)
             for ($i = 0; $i -lt $lines.Count; $i++) {
-                foreach ($m in [regex]::Matches($lines[$i], 'res://([^"'':)\s]*)')) {
+                foreach ($m in [regex]::Matches($lines[$i], '["'']res://([^"'']*)["'']')) {
                     $p = $m.Groups[1].Value.TrimEnd('/')
-                    if ($p -and -not $known.Contains($p)) { "$($f.Name):$($i + 1): res://$p does not resolve" }
+                    if ($p -match '[%*<>\[\]]') { continue }
+                    if ($p -and -not $known.Contains($p)) { "${rel}:$($i + 1): res://$p does not resolve" }
                 }
                 if ($lines[$i] -match $decl) { continue }
-                foreach ($m in [regex]::Matches($lines[$i], 'uid://([^"'':)\s]*)')) {
+                foreach ($m in [regex]::Matches($lines[$i], '["'']uid://([^"'']*)["'']')) {
                     $u = $m.Groups[1].Value
-                    if ($u -and -not $uids.Contains($u)) { "$($f.Name):$($i + 1): uid://$u matches nothing in the project" }
+                    if ($u -and -not $uids.Contains($u)) { "${rel}:$($i + 1): uid://$u matches nothing in the project" }
                 }
             }
         }
@@ -430,11 +444,17 @@ function Invoke-GodotStack($s) {
         & $godot --headless --path $s.Dir --import *>&1 | Out-Null
         (& $godot --headless --path $s.Dir --import *>&1) | Where-Object { $_ -match $errs }
     } -FailIfOutput
+    # A test that exercises a rejection path makes the engine print ERROR: lines
+    # on purpose (a codec refusing a corrupt frame, say) -- that is the code under
+    # test working. So here only a script that failed to load or parse is a
+    # verdict from the output; the test itself speaks through its exit code, which
+    # Phase already checks.
+    $scriptErrs = 'SCRIPT ERROR|Parse Error|Failed to load script'
     foreach ($t in Get-ChildItem $s.Dir -Recurse -File -Filter '*_headless_test.gd' -ErrorAction SilentlyContinue |
         Where-Object { $_.FullName -notmatch $noGodotDir }) {
         $tf = $t.FullName
         Phase "godot test $($t.Name)" {
-            (& $godot --headless --path $s.Dir --script $tf *>&1) | Where-Object { $_ -match $errs }
+            (& $godot --headless --path $s.Dir --script $tf *>&1) | Where-Object { $_ -match $scriptErrs }
         } -FailIfOutput
     }
     # Boots the main scene and quits: catches autoload and boot-order breakage that
