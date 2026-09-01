@@ -4,6 +4,18 @@
 # mentioned. A stack whose marker is present but whose linter config is missing
 # is reported once, clearly, and the run continues.
 
+# Every stack this gate knows about and the file that proves it exists.
+# Used for provenance output: `check.ps1 -Why` names the marker behind every
+# phase that ran and every stack that does not exist here.
+$script:KnownMarkers = [ordered]@{
+    go     = 'go.mod'
+    web    = 'package.json + vite/next/webpack/rollup.config.*'
+    godot  = 'project.godot'
+    proto  = 'buf.yaml'
+    python = 'pyproject.toml or requirements.txt'
+    rust   = 'Cargo.toml'
+}
+
 # Directories that never hold a project we own.
 $script:SkipDirs = @('node_modules', '.git', 'vendor', 'dist', 'build', '.cache', '.venv', 'target', 'bin', 'obj')
 
@@ -32,6 +44,7 @@ function Test-AnyFile([string]$Dir, [string[]]$Patterns) {
 #   Stack       go | web | godot | proto | python | rust
 #   Dir         absolute directory holding the marker
 #   Rel         path relative to the repo root, forward slashes, '' for the root
+#   Marker      the file whose presence created this phase (provenance)
 #   Implemented $true only for stacks this gate actually checks
 #   Warn        one-line message about missing tooling/config, or ''
 function Get-Stacks([string]$Root) {
@@ -48,17 +61,19 @@ function Get-Stacks([string]$Root) {
         if (-not (Test-Path (Join-Path $dir '.golangci.yml')) -and -not (Test-Path (Join-Path $dir '.golangci.yaml'))) {
             $warn = 'no .golangci.yml -- running golangci-lint on its defaults; copy templates/.golangci.yml'
         }
-        $stacks += [pscustomobject]@{ Stack = 'go'; Dir = $dir; Rel = (& $rel $dir); Implemented = $true; Warn = $warn }
+        $stacks += [pscustomobject]@{ Stack = 'go'; Dir = $dir; Rel = (& $rel $dir); Marker = 'go.mod'; Implemented = $true; Warn = $warn }
     }
 
     foreach ($m in Find-Marker $Root @('package.json')) {
         $dir = $m.DirectoryName
-        if (-not (Test-AnyFile $dir @('vite.config.*', 'next.config.*', 'webpack.config.*', 'rollup.config.*'))) { continue }
+        $bundler = @('vite.config.*', 'next.config.*', 'webpack.config.*', 'rollup.config.*') |
+            Where-Object { Test-AnyFile $dir @($_) } | Select-Object -First 1
+        if (-not $bundler) { continue }
         $warn = ''
         if (-not (Test-Path (Join-Path $dir 'node_modules'))) {
             $warn = 'node_modules missing -- run npm ci; the gate cannot verify this stack until then'
         }
-        $stacks += [pscustomobject]@{ Stack = 'web'; Dir = $dir; Rel = (& $rel $dir); Implemented = $true; Warn = $warn }
+        $stacks += [pscustomobject]@{ Stack = 'web'; Dir = $dir; Rel = (& $rel $dir); Marker = "package.json + $bundler"; Implemented = $true; Warn = $warn }
     }
 
     # Declared, detected, NOT checked. Reported so nobody mistakes silence for a
@@ -68,7 +83,7 @@ function Get-Stacks([string]$Root) {
         $dir = $m.DirectoryName
         $name = $todo[$m.Name]
         if ($stacks | Where-Object { $_.Stack -eq $name -and $_.Dir -eq $dir }) { continue }
-        $stacks += [pscustomobject]@{ Stack = $name; Dir = $dir; Rel = (& $rel $dir); Implemented = $false; Warn = 'not implemented -- nothing is checked here' }
+        $stacks += [pscustomobject]@{ Stack = $name; Dir = $dir; Rel = (& $rel $dir); Marker = $m.Name; Implemented = $false; Warn = 'not implemented -- nothing is checked here' }
     }
 
     $stacks

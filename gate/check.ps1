@@ -16,6 +16,8 @@ param(
     [switch]$Fast,
     [switch]$Full,
     [switch]$Quiet,
+    [switch]$Why,         # provenance: which marker file created (or did not create) each phase
+    [string]$Baseline,    # git rev: report only issues newer than it (adoption on a dirty codebase)
     [string]$Root         # repo root; defaults to the git root of the cwd
 )
 
@@ -24,9 +26,17 @@ $ErrorActionPreference = 'Continue'
 
 $MaxChars = 6000
 if (-not $Root) { $Root = Get-RepoRoot (Get-Location).Path }
+# Fail closed: an unusable root is a failure, not "nothing to check".
+if (-not (Test-Path $Root)) { Write-Output "[FAIL] root not found: $Root"; exit 1 }
 $Root = (Resolve-Path $Root).Path
 
 $stacks = @(Get-Stacks $Root)
+if ($Why) {
+    foreach ($s in $stacks) { Write-Output "[WHY] $($s.Stack) at $(if ($s.Rel) { $s.Rel + '/' } else { './' }) -- found $($s.Marker)" }
+    foreach ($k in $script:KnownMarkers.Keys) {
+        if (-not ($stacks | Where-Object { $_.Stack -eq $k })) { Write-Output "[WHY] $k -- absent, no $($script:KnownMarkers[$k])" }
+    }
+}
 if ($stacks.Count -eq 0) {
     if (-not $Quiet) { Write-Output '[SKIP] no known stack found' }
     exit 0
@@ -106,9 +116,15 @@ function Invoke-GoStack($s) {
     if (Have 'golangci-lint') {
         # No issue caps: a capped report lies about the totals, so fixing the
         # listed issues just makes new ones appear.
+        # -Baseline: report only issues newer than that revision. This is the
+        # recommended way to adopt the linter on a dirty codebase -- unlike a
+        # per-package exclusion list it still catches a NEW defect inside an
+        # untouched package. --whole-files, not just changed lines, so a touched
+        # file is judged as a whole.
+        $newFrom = if ($Baseline) { @('--new-from-rev', $Baseline, '--whole-files') } else { @() }
         Phase 'golangci-lint' {
             golangci-lint run --output.text.print-issued-lines=false --output.text.colors=false `
-                --max-issues-per-linter=0 --max-same-issues=0 ./...
+                --max-issues-per-linter=0 --max-same-issues=0 @newFrom ./...
         }
     } else {
         $script:Lines += '[WARN] golangci-lint not on PATH -- phase skipped'
@@ -160,7 +176,7 @@ $report = @()
 foreach ($s in $stacks) {
     $label = if ($s.Rel) { "$($s.Stack) $($s.Rel)/" } else { $s.Stack }
     if (-not $s.Implemented) {
-        $report += "[SKIP] $label -- $($s.Warn)"
+        $report += "[SKIP] $label ($($s.Marker)) -- $($s.Warn)"
         continue
     }
     if ($script:Failed) { break }
@@ -171,6 +187,9 @@ foreach ($s in $stacks) {
             'go' { Invoke-GoStack $s }
             'web' { Invoke-WebStack $s }
         }
+    } catch {
+        # Fail closed: a crash in the gate is a failure, never a silent pass.
+        Fail "${label}: gate crashed -- $($_.Exception.Message)"
     } finally { Set-Location $cwd }
 
     if ($script:Failed) {
@@ -183,7 +202,7 @@ foreach ($s in $stacks) {
         $report += $out
     } elseif (-not $Quiet) {
         $timings = ($script:Lines | Where-Object { $_ -match '^\[(PASS|WARN)\]' }) -join ' '
-        $report += "[PASS] $label $timings"
+        $report += "[PASS] $label ($($s.Marker)) $timings"
     }
 }
 
