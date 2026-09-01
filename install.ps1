@@ -100,11 +100,18 @@ function Set-StopHook {
         Write-Output 'stop-hook -- already wired'
         return
     }
-    $settings.hooks.Stop = @($stop | Where-Object { $_ }) + @{
+    $existing = @($stop | Where-Object { $_ })
+    $settings.hooks.Stop = $existing + @{
         hooks = @(@{ type = 'command'; command = $cmd })
     }
     Set-Content -Path $file -Value ($settings | ConvertTo-Json -Depth 10) -Encoding utf8
     Write-Output "stop-hook -> $file"
+    # Appending next to someone else's hook is the right call, but saying nothing
+    # about it leaves two hooks running overlapping checks on every turn and the
+    # user discovering that on their own.
+    if ($existing) {
+        Write-Output "  note:   this repo already had $($existing.Count) other Stop hook(s) -- if they check the same stack, both now run on every turn"
+    }
 }
 
 # --- instructions for agents without a hook mechanism ------------------------
