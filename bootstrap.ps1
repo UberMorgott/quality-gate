@@ -31,9 +31,14 @@ if ($env:GITHUB_PATH) {
     # Read the raw user PATH from the registry: SetEnvironmentVariable would otherwise
     # write back an expanded copy and freeze whatever %VARS% other installers put there.
     $key = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Environment', $true)
-    $path = $key.GetValue('Path', '', 'DoNotExpandEnvironmentNames')
+    $path = [string]$key.GetValue('Path', '', 'DoNotExpandEnvironmentNames')
     if (($path -split ';') -notcontains $bin) {
-        $key.SetValue('Path', ($path.TrimEnd(';') + ';' + $bin), 'ExpandString')
+        # An empty segment in PATH means "the current directory" -- never leave a
+        # leading or doubled ';' behind. And keep the value's existing kind: turning
+        # a REG_SZ into REG_EXPAND_SZ would start expanding literal % in other entries.
+        $kind = if ($path) { $key.GetValueKind('Path') } else { 'ExpandString' }
+        $merged = (@($path -split ';') + $bin | Where-Object { $_ }) -join ';'
+        $key.SetValue('Path', $merged, $kind)
         Write-Output "PATH      += $bin"
     }
     $key.Dispose()

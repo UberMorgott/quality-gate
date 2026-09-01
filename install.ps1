@@ -63,9 +63,14 @@ foreach ($s in @(Get-Stacks $root)) {
             Write-Output "go        $where -- installed .golangci.yml"
             $s.Warn = '' # the warning was about the file we just created
         }
+        # gofmt reports a CRLF checkout as unformatted, so the whole tree fails on a
+        # Windows clone. This is not advice, it is a prerequisite -- write it.
         $ga = Join-Path $root '.gitattributes'
-        if (-not (Test-Path $ga) -or ((Get-Content $ga -Raw) -notmatch '\*\.go')) {
-            Write-Output '  warn:   add "*.go text eol=lf" to .gitattributes -- gofmt reports a CRLF checkout as unformatted'
+        $gaBody = if (Test-Path $ga) { Get-Content $ga -Raw } else { '' }
+        if ($gaBody -notmatch '\*\.go') {
+            $line = '*.go text eol=lf'
+            Set-Content -Path $ga -Value (($gaBody.TrimEnd() + "`n" + $line).TrimStart() + "`n") -Encoding utf8 -NoNewline
+            Write-Output "  fixed:  added `"$line`" to .gitattributes"
         }
     } elseif ($s.Stack -eq 'web') {
         Write-Output "web       $where -- enabled"
@@ -148,6 +153,13 @@ function Install-Lefthook {
     $cfg = Join-Path $root 'lefthook.yml'
     if (Test-Path $cfg) {
         Write-Output 'lefthook  -- kept existing lefthook.yml'
+        # Keeping a foreign config is right, but "kept" must not read as "wired":
+        # `lefthook install` would then succeed with no gate job in it at all.
+        if ((Get-Content $cfg -Raw) -notmatch 'qgate') {
+            Write-Output '  warn:   it has no quality-gate job -- add this under pre-commit.jobs yourself:'
+            Write-Output '            - name: quality-gate'
+            Write-Output '              run: qgate -All -Full'
+        }
     } else {
         Copy-Item (Join-Path $PSScriptRoot 'templates\lefthook.yml') $cfg
         Write-Output "lefthook  -> $cfg"
@@ -163,10 +175,14 @@ $hookBody = @'
 exec qgate -All -Full
 '@ -replace "`r`n", "`n"
 
-$hook = Join-Path $root '.git\hooks\pre-commit'
+# Ask git where the hooks live: in a worktree or a submodule `.git` is a FILE and
+# `<root>\.git\hooks` does not exist at all.
+$hooksDir = (& git -C $root rev-parse --path-format=absolute --git-path hooks 2>$null)
+$isRepo = $LASTEXITCODE -eq 0 -and $hooksDir
+$hook = if ($isRepo) { Join-Path ($hooksDir -replace '/', '\') 'pre-commit' } else { $null }
 if ($NoHook) {
     Write-Output 'pre-commit-- skipped (-NoHook)'
-} elseif (-not (Test-Path (Join-Path $root '.git'))) {
+} elseif (-not $isRepo) {
     Write-Output 'pre-commit-- skipped: not a git repository'
 } elseif (Get-Command lefthook -ErrorAction SilentlyContinue) {
     # Lefthook owns the hook wiring where it is available; the fallback below is

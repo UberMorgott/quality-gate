@@ -42,37 +42,62 @@ if ($stacks.Count -eq 0) {
     exit 0
 }
 
+# Returns $null when this is not a git repository -- distinct from "no changes",
+# which is an empty list. Conflating the two let a non-git directory pass the
+# default run without a single check.
 function Get-ChangedPaths([string]$Repo) {
-    # Porcelain lines are "XY <path>" and may carry a rename ("old -> new") and quotes.
+    # -z: NUL separated and NOT quoted/escaped. With plain --porcelain git escapes
+    # spaces, tabs and every non-ASCII byte, and the escaped string then matches no
+    # stack directory -- the gate would check the wrong stack, or none.
+    $raw = (& git -C $Repo status --porcelain=v1 -z 2>$null | Out-String)
+    if ($LASTEXITCODE -ne 0) { return $null }
     $paths = @()
-    foreach ($line in (& git -C $Repo status --porcelain 2>$null)) {
-        if ($line.Length -le 3) { continue }
-        $p = $line.Substring(3)
-        if ($p -match ' -> ') { $p = $p -replace '^.* -> ', '' }
-        $paths += $p.Trim('"')
+    $items = @($raw -split "`0")
+    for ($i = 0; $i -lt $items.Count; $i++) {
+        $e = $items[$i]
+        if ($e.Length -le 3) { continue }
+        $paths += $e.Substring(3)
+        # A rename or copy stores the source path as the next record; skip it, the
+        # destination above is the path that matters.
+        if ($e[0] -eq 'R' -or $e[0] -eq 'C' -or $e[1] -eq 'R' -or $e[1] -eq 'C') { $i++ }
     }
-    $paths += (& git -C $Repo diff --name-only HEAD 2>$null)
-    $paths | Where-Object { $_ } | ForEach-Object { $_ -replace '\\', '/' } | Sort-Object -Unique
+    $paths += @((& git -C $Repo diff --name-only -z HEAD 2>$null | Out-String) -split "`0")
+    @($paths | Where-Object { $_ } | ForEach-Object { $_.Trim("`n", "`r") -replace '\\', '/' } | Sort-Object -Unique)
 }
 
 # --- select which stacks to run -------------------------------------------
 if ($Only) {
     $stacks = @($stacks | Where-Object { $Only -contains $_.Stack })
 } elseif (-not $All) {
-    $changed = @(Get-ChangedPaths $Root)
-    if ($changed.Count -eq 0) {
+    $changed = Get-ChangedPaths $Root
+    if ($null -eq $changed) {
+        # No git, so nothing to narrow by. Checking everything is the only honest
+        # answer -- an empty change list here used to mean "[SKIP] no changes".
+        if (-not $Quiet) { Write-Output '[WARN] not a git repository -- checking every stack' }
+    } elseif ($changed.Count -eq 0) {
         if (-not $Quiet) { Write-Output '[SKIP] no changes' }
         exit 0
+    } else {
+        $selected = @()
+        foreach ($p in $changed) {
+            # Longest match wins: with nested modules a/go.mod and a/b/go.mod, a
+            # file under a/b belongs to a/b alone.
+            $owner = $stacks | Where-Object { $_.Rel -and $p.StartsWith("$($_.Rel)/") } |
+                Sort-Object { $_.Rel.Length } -Descending | Select-Object -First 1
+            # A path outside every stack directory (CI config, build scripts, root
+            # files) can affect any of them -> run everything.
+            if (-not $owner) { $selected = $stacks; break }
+            $selected += $owner
+        }
+        $stacks = @($selected | Sort-Object Stack, Rel -Unique)
     }
-    $selected = @()
-    foreach ($p in $changed) {
-        $owner = $stacks | Where-Object { $_.Rel -and $p.StartsWith("$($_.Rel)/") }
-        # A path outside every stack directory (CI config, build scripts, root
-        # files) can affect any of them -> run everything.
-        if (-not $owner) { $selected = $stacks; break }
-        $selected += $owner
-    }
-    $stacks = @($selected | Sort-Object Stack, Rel -Unique)
+}
+
+# A baseline that does not resolve would surface as a confusing linter error deep
+# in the run; say so here instead.
+if ($Baseline) {
+    & git -C $Root rev-parse --verify --quiet "$Baseline^{commit}" *> $null
+    if ($LASTEXITCODE -ne 0) { Write-Output "[FAIL] baseline revision not found: $Baseline"; exit 1 }
 }
 
 $script:Failed = $false
@@ -109,7 +134,9 @@ function Invoke-GoStack($s) {
     Phase 'gofmt' { gofmt -l . } -FailIfOutput
     # -o into a temp dir: a bare `go build ./...` drops the linked binary of every
     # main package into the working tree.
-    $outDir = Join-Path ([IO.Path]::GetTempPath()) 'quality-gate-build'
+    # Keyed by module directory: two agents, two worktrees or two modules must not
+    # write their binaries over each other.
+    $outDir = Join-Path ([IO.Path]::GetTempPath()) "quality-gate-build-$(Get-PathKey $s.Dir)"
     New-Item -ItemType Directory -Path $outDir -Force | Out-Null
     Phase 'go build' { go build -o $outDir ./... }
     Phase 'go vet' { go vet ./... }
@@ -126,10 +153,35 @@ function Invoke-GoStack($s) {
             golangci-lint run --output.text.print-issued-lines=false --output.text.colors=false `
                 --max-issues-per-linter=0 --max-same-issues=0 @newFrom ./...
         }
+    } elseif ($Full) {
+        # The full level is what guards a commit and CI. A gate that quietly drops
+        # its main linter there is not a gate.
+        Fail 'golangci-lint not on PATH -- required at the full level (go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest)'
     } else {
         $script:Lines += '[WARN] golangci-lint not on PATH -- phase skipped'
     }
     Phase 'go test' { go test -count=1 -failfast -shuffle=on -timeout=10m ./... }
+    # Known vulnerabilities ARE defects, so unlike "outdated" they fail the run --
+    # but only on the full level: the database lives on the network and no agent
+    # turn should pay for that.
+    if ($Full) {
+        if (Have 'govulncheck') { Phase 'govulncheck' { govulncheck ./... } }
+        else { $script:Lines += '[WARN] govulncheck not on PATH -- phase skipped (go install golang.org/x/vuln/cmd/govulncheck@latest)' }
+    }
+}
+
+function Invoke-RustStack($s) {
+    Set-Location $s.Dir
+    if (-not (Have 'cargo')) {
+        # Same rule as node_modules: an unverifiable stack must never pass silently.
+        Fail 'rust: cargo not on PATH (cannot verify this stack)'
+        return
+    }
+    Phase 'cargo fmt' { cargo fmt --check }
+    # clippy compiles as it lints, so a separate `cargo build` would only pay the
+    # same cost twice. --all-targets covers tests and benches, not just the binary.
+    Phase 'cargo clippy' { cargo clippy --all-targets --quiet -- -D warnings }
+    Phase 'cargo test' { cargo test --quiet }
 }
 
 function Invoke-WebStack($s) {
@@ -162,11 +214,22 @@ function Invoke-WebStack($s) {
     } elseif (Test-Path (Join-Path $s.Dir 'tsconfig.json')) {
         $tsc = if (Test-Path "$bin\vue-tsc.cmd") { "$bin\vue-tsc.cmd" } elseif (Test-Path "$bin\tsc.cmd") { "$bin\tsc.cmd" } else { $null }
         if ($tsc) { Phase 'type-check' { & $tsc --noEmit --pretty false } }
+        # A typed project whose type checker is not installed is unverifiable, not fine.
+        else { Fail 'web: tsconfig.json present but neither vue-tsc nor tsc is installed (cannot verify types)' }
     }
     # The expensive one (bundling): full level only.
     if (-not ($Fast -and -not $Full)) {
         $buildScript = @('build-only', 'build') | Where-Object { $scripts -contains $_ } | Select-Object -First 1
         if ($buildScript) { Phase 'build' { npm run $buildScript } }
+    }
+    # See the govulncheck note above: a real defect, full level only, and it needs
+    # a lockfile to have anything to resolve against.
+    if ($Full) {
+        if (Test-AnyFile $s.Dir @('package-lock.json', 'npm-shrinkwrap.json')) {
+            Phase 'npm audit' { npm audit --audit-level=high }
+        } else {
+            $script:Lines += '[WARN] no package-lock.json -- npm audit skipped'
+        }
     }
 }
 
@@ -186,6 +249,7 @@ foreach ($s in $stacks) {
         switch ($s.Stack) {
             'go' { Invoke-GoStack $s }
             'web' { Invoke-WebStack $s }
+            'rust' { Invoke-RustStack $s }
         }
     } catch {
         # Fail closed: a crash in the gate is a failure, never a silent pass.

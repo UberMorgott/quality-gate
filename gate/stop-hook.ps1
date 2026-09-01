@@ -24,11 +24,13 @@ $raw = [Console]::In.ReadToEnd()
 if ($raw) {
     try { $session = ($raw | ConvertFrom-Json).session_id } catch { }
 }
-$key = [BitConverter]::ToString(
-    [Security.Cryptography.MD5]::HashData(
-        [Text.Encoding]::UTF8.GetBytes("$($root.ToLowerInvariant())|$session"))
-).Replace('-', '')
-$stateFile = Join-Path ([IO.Path]::GetTempPath()) "quality-gate-stop-$key.txt"
+$stateFile = Join-Path ([IO.Path]::GetTempPath()) "quality-gate-stop-$(Get-PathKey "$root|$session").txt"
+
+# Counters from sessions that ended days ago would otherwise sit in TEMP forever,
+# and a reused session id would inherit their attempts.
+Get-ChildItem ([IO.Path]::GetTempPath()) -Filter 'quality-gate-stop-*.txt' -ErrorAction SilentlyContinue |
+    Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-1) } |
+    Remove-Item -ErrorAction SilentlyContinue
 
 $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'check.ps1') -Root $root -Fast -Quiet 2>&1 | Out-String).TrimEnd()
 if ($LASTEXITCODE -eq 0) {

@@ -5,8 +5,9 @@
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'gate\detect.ps1')
 
-$tmp = Join-Path ([IO.Path]::GetTempPath()) 'quality-gate-selftest'
-if (Test-Path $tmp) { Remove-Item $tmp -Recurse -Force }
+# Unique per run: a fixed directory made two concurrent self-tests delete each
+# other's fixtures mid-check.
+$tmp = Join-Path ([IO.Path]::GetTempPath()) "quality-gate-selftest-$([guid]::NewGuid())"
 New-Item -ItemType Directory -Path $tmp | Out-Null
 
 $script:Fails = 0
@@ -28,7 +29,7 @@ function Invoke-Gate([string]$Root) {
 $stacks = @(Get-Stacks (Join-Path $PSScriptRoot 'testdata'))
 Check 'detects go stack'   ([bool]($stacks | Where-Object { $_.Stack -eq 'go' -and $_.Implemented }))
 Check 'detects web stack'  ([bool]($stacks | Where-Object { $_.Stack -eq 'web' -and $_.Implemented }))
-Check 'rust marked not implemented' ([bool]($stacks | Where-Object { $_.Stack -eq 'rust' -and -not $_.Implemented }))
+Check 'detects rust stack'  ([bool]($stacks | Where-Object { $_.Stack -eq 'rust' -and $_.Implemented }))
 Check 'no phantom python stack' (-not ($stacks | Where-Object { $_.Stack -eq 'python' }))
 
 # 2. Clean Go fixture, no linter config -> passes, warns exactly once.
@@ -119,7 +120,47 @@ Set-Content $eslintCfg 'mine' -NoNewline
 & pwsh -NoProfile -File $installer -Target $wire -NoHook -NoCI *> $null
 Check 'wire keeps a config the project already had' ((Get-Content $eslintCfg -Raw) -eq 'mine')
 
-# 11. The version report is advisory. It must never fail a run -- offline, rate
+# 11. Rust is checked for real now, red then green like Go.
+$rust = Join-Path $tmp 'rust'
+Copy-Item (Join-Path $PSScriptRoot 'testdata\rust-fixture') $rust -Recurse
+$r = Invoke-Gate $rust
+Check 'clean rust fixture passes' ($r.Code -eq 0) $r.Out
+$rsMain = Join-Path $rust 'src\main.rs'
+$rsClean = Get-Content $rsMain -Raw
+# Badly formatted AND clippy-hostile: `== true` is a clippy error, the spacing is
+# a rustfmt error. Either one alone would prove only half the pipeline.
+[IO.File]::WriteAllText($rsMain, 'fn main() {  let x = true; if x == true { println!("y"); } }' + "`n")
+$r = Invoke-Gate $rust
+Check 'rust violation fails the gate' ($r.Code -ne 0) $r.Out
+[IO.File]::WriteAllText($rsMain, $rsClean)
+$r = Invoke-Gate $rust
+Check 'rust green again after the fix' ($r.Code -eq 0) $r.Out
+
+# 12. A directory that is not a git repository must not pass by way of "no
+# changes": the default run has nothing to narrow by and has to check everything.
+$nogit = Join-Path $tmp 'nogit'
+Copy-Item (Join-Path $PSScriptRoot 'testdata\go-fixture') $nogit -Recurse
+Set-GoFile (Join-Path $nogit 'broken.go') "package main`nfunc  Broken() {}"
+$out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $nogit 2>&1 | Out-String)
+Check 'non-git directory is checked, not skipped' (($LASTEXITCODE -ne 0) -and ($out -notmatch 'no changes')) $out
+
+# 13. The wiring templates must call the entry point that actually exists. The
+# lefthook job pointed at a path `wire` no longer creates, which broke every
+# commit in a repo that had lefthook.
+$lh = Get-Content (Join-Path $PSScriptRoot 'templates\lefthook.yml') -Raw
+Check 'lefthook template calls qgate' (($lh -match 'run:\s*qgate ') -and ($lh -notmatch 'tools/quality-gate')) $lh
+
+# 14. gofmt reads a CRLF checkout as unformatted, so the .gitattributes line is a
+# prerequisite, not advice -- wire has to write it. Go repo: it is a Go rule.
+$goWire = Join-Path $tmp 'gowire'
+Copy-Item (Join-Path $PSScriptRoot 'testdata\go-fixture') $goWire -Recurse
+git -C $goWire init -q 2>$null
+& pwsh -NoProfile -File $installer -Target $goWire -NoHook -NoCI *> $null
+$ga = Join-Path $goWire '.gitattributes'
+Check 'wire writes the gofmt eol rule' ((Test-Path $ga) -and ((Get-Content $ga -Raw) -match '\*\.go text eol=lf')) `
+    "$(if (Test-Path $ga) { Get-Content $ga -Raw })"
+
+# 15. The version report is advisory. It must never fail a run -- offline, rate
 # limited or with a registry that answers garbage, the exit code stays 0.
 $outdated = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\outdated.ps1') -Root $go 2>&1 | Out-String)
 Check 'outdated never fails the run' ($LASTEXITCODE -eq 0) $outdated

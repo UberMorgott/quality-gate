@@ -1,9 +1,15 @@
 # Quality gate on every push and pull request. Installed by `qgate wire`.
+#
+# The gate is pinned to a TAG, never to main: on a branch the same commit can
+# pass today and fail tomorrow with no change to this repo.
 name: quality-gate
 
 on:
   push:
   pull_request:
+
+env:
+  QG_REF: v1
 
 jobs:
   gate:
@@ -13,17 +19,51 @@ jobs:
         with:
           fetch-depth: 0 # -Baseline needs history
 
+      - name: detect stacks
+        id: stacks
+        shell: pwsh
+        run: |
+          $go = [bool](Get-ChildItem -Recurse -Depth 3 -Filter go.mod -File -EA SilentlyContinue)
+          $web = [bool](Get-ChildItem -Recurse -Depth 3 -Filter package.json -File -EA SilentlyContinue |
+                        Where-Object { $_.FullName -notmatch '\\node_modules\\' })
+          $rust = [bool](Get-ChildItem -Recurse -Depth 3 -Filter Cargo.toml -File -EA SilentlyContinue)
+          "go=$($go.ToString().ToLower())"     | Add-Content $env:GITHUB_OUTPUT
+          "web=$($web.ToString().ToLower())"   | Add-Content $env:GITHUB_OUTPUT
+          "rust=$($rust.ToString().ToLower())" | Add-Content $env:GITHUB_OUTPUT
+
       - uses: actions/setup-go@v5
+        if: steps.stacks.outputs.go == 'true'
         with:
           go-version-file: go.mod
-        continue-on-error: true # repos without Go
+
+      # The full level requires golangci-lint; without it the gate fails closed.
+      - name: install golangci-lint
+        if: steps.stacks.outputs.go == 'true'
+        shell: pwsh
+        run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
+
+      - name: install govulncheck
+        if: steps.stacks.outputs.go == 'true'
+        shell: pwsh
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+
+      - uses: actions/setup-node@v4
+        if: steps.stacks.outputs.web == 'true'
+        with:
+          node-version: lts/*
+
+      - name: npm ci
+        if: steps.stacks.outputs.web == 'true'
+        shell: pwsh
+        run: npm ci
+
+      - uses: dtolnay/rust-toolchain@stable
+        if: steps.stacks.outputs.rust == 'true'
+        with:
+          components: clippy, rustfmt
 
       - name: install quality-gate
         shell: pwsh
-        env:
-          # Pin to a tag, not a branch: on main the same commit can pass today and
-          # fail tomorrow with no change to this repo.
-          QG_REF: v1
         run: |
           git clone --depth 1 --branch $env:QG_REF https://github.com/UberMorgott/quality-gate.git $env:RUNNER_TEMP\quality-gate
           # bootstrap.ps1 is for developer machines; CI only needs it on PATH.

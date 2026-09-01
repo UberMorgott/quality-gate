@@ -21,15 +21,19 @@ if (-not $Root) { $Root = Get-RepoRoot (Get-Location).Path }
 if (-not (Test-Path $Root)) { Write-Output "[FAIL] root not found: $Root"; exit 0 }
 $Root = (Resolve-Path $Root).Path
 
-$key = [BitConverter]::ToString(
-    [Security.Cryptography.MD5]::HashData(
-        [Text.Encoding]::UTF8.GetBytes($Root.ToLowerInvariant()))).Replace('-', '')
-$cacheFile = Join-Path ([IO.Path]::GetTempPath()) "quality-gate-outdated-$key.txt"
+$cacheFile = Join-Path ([IO.Path]::GetTempPath()) "quality-gate-outdated-$(Get-PathKey $Root).txt"
+
+# A manifest edited after the cache was written invalidates it: otherwise adding a
+# dependency leaves yesterday's answer standing for another day.
+$newestManifest = Get-ChildItem $Root -Recurse -Depth 3 -File -Force -ErrorAction SilentlyContinue |
+    Where-Object { $_.Name -in 'go.mod', 'go.sum', 'package.json', 'package-lock.json', 'Cargo.toml' } |
+    Sort-Object LastWriteTime -Descending | Select-Object -First 1
 
 # The summary is the only caller allowed to answer from cache: an explicit
 # `qgate outdated` must always go and look.
 if ($Summary -and (Test-Path $cacheFile) -and
-    ((Get-Date) - (Get-Item $cacheFile).LastWriteTime).TotalHours -lt 24) {
+    ((Get-Date) - (Get-Item $cacheFile).LastWriteTime).TotalHours -lt 24 -and
+    (-not $newestManifest -or $newestManifest.LastWriteTime -lt (Get-Item $cacheFile).LastWriteTime)) {
     $cached = @(Get-Content $cacheFile | Where-Object { $_ })
     if ($cached.Count) { Write-Output "[INFO] $($cached.Count) update(s) available -- qgate outdated" }
     exit 0
@@ -44,6 +48,9 @@ function Get-Latest([string]$Url, [string]$Property) {
 }
 
 $found = @()
+# Everything that could not be answered. Reporting "current" when the registry
+# never replied is worse than saying nothing.
+$unknown = @()
 
 foreach ($s in @(Get-Stacks $Root)) {
     if (-not $s.Implemented) { continue }
@@ -54,9 +61,9 @@ foreach ($s in @(Get-Stacks $Root)) {
             # Direct requirements only: an indirect module is the business of the
             # dependency that pulls it in.
             $tmpl = '{{if and (not .Indirect) .Update}}{{.Path}} {{.Version}} -> {{.Update.Version}}{{end}}'
-            foreach ($line in (& go list -m -u -f $tmpl all 2>$null)) {
-                if ($line) { $found += "[OUTDATED] go   $where $line" }
-            }
+            $lines = & go list -m -u -f $tmpl all 2>$null
+            if ($LASTEXITCODE -ne 0) { $unknown += "go modules at $where" }
+            else { foreach ($line in $lines) { if ($line) { $found += "[OUTDATED] go   $where $line" } } }
         } elseif ($s.Stack -eq 'web') {
             if (-not (Test-Path (Join-Path $s.Dir 'node_modules'))) {
                 $found += "[SKIP] npm  $where node_modules missing, run npm ci"
@@ -64,14 +71,14 @@ foreach ($s in @(Get-Stacks $Root)) {
                 # npm outdated exits 1 when it finds something -- that is data, not failure.
                 $json = (& npm outdated --json 2>$null | Out-String).Trim()
                 $global:LASTEXITCODE = 0
-                if ($json) {
-                    $pkgs = $json | ConvertFrom-Json
+                try {
+                    $pkgs = if ($json) { $json | ConvertFrom-Json } else { $null }
                     foreach ($p in $pkgs.PSObject.Properties) {
                         if ($p.Value.current -and $p.Value.latest -and $p.Value.current -ne $p.Value.latest) {
                             $found += "[OUTDATED] npm  $where $($p.Name) $($p.Value.current) -> $($p.Value.latest)"
                         }
                     }
-                }
+                } catch { $unknown += "npm packages at $where" }
             }
         }
     } finally { Pop-Location }
@@ -82,21 +89,34 @@ foreach ($s in @(Get-Stacks $Root)) {
 if (Get-Command go -ErrorAction SilentlyContinue) {
     $cur = if ((& go version) -match 'go(\d+\.\d+(\.\d+)?)') { $Matches[1] } else { $null }
     $latest = Get-Latest 'https://go.dev/VERSION?m=text' $null
-    if ($cur -and $latest -and "go$cur" -ne $latest) { $found += "[OUTDATED] tool go $cur -> $($latest -replace '^go', '')" }
+    if (-not $latest) { $unknown += 'go toolchain' }
+    elseif ($cur -and "go$cur" -ne $latest) { $found += "[OUTDATED] tool go $cur -> $($latest -replace '^go', '')" }
 }
 if (Get-Command golangci-lint -ErrorAction SilentlyContinue) {
     $cur = if ((& golangci-lint --version) -match 'version (\S+)') { $Matches[1].TrimStart('v') } else { $null }
     $latest = (Get-Latest 'https://api.github.com/repos/golangci/golangci-lint/releases/latest' 'tag_name')
-    if ($latest) { $latest = $latest.TrimStart('v') }
-    if ($cur -and $latest -and $cur -ne $latest) { $found += "[OUTDATED] tool golangci-lint $cur -> $latest" }
+    if (-not $latest) { $unknown += 'golangci-lint' }
+    elseif ($cur -and $cur -ne $latest.TrimStart('v')) { $found += "[OUTDATED] tool golangci-lint $cur -> $($latest.TrimStart('v'))" }
+}
+if (Get-Command cargo -ErrorAction SilentlyContinue) {
+    $cur = if ((& cargo --version) -match 'cargo (\S+)') { $Matches[1] } else { $null }
+    $latest = Get-Latest 'https://api.github.com/repos/rust-lang/rust/releases/latest' 'tag_name'
+    if (-not $latest) { $unknown += 'rust toolchain' }
+    elseif ($cur -and $cur -ne $latest) { $found += "[OUTDATED] tool rust/cargo $cur -> $latest" }
 }
 
-Set-Content -Path $cacheFile -Value ($found -join "`n")
+# Only a complete answer is worth caching: a run that could not reach the network
+# must not freeze "nothing to report" in for a day.
+if (-not $unknown.Count) { Set-Content -Path $cacheFile -Value ($found -join "`n") }
 
 if ($Summary) {
     if ($found.Count) { Write-Output "[INFO] $($found.Count) update(s) available -- qgate outdated" }
     exit 0
 }
 if ($found.Count) { $found | ForEach-Object { Write-Output $_ } }
-else { Write-Output '[OK] every direct dependency and toolchain is current' }
+if ($unknown.Count) {
+    Write-Output "[UNKNOWN] could not check: $($unknown -join ', ') -- offline, rate limited or the tool failed"
+} elseif (-not $found.Count) {
+    Write-Output '[OK] every direct dependency and toolchain is current'
+}
 exit 0

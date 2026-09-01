@@ -33,6 +33,14 @@ function Find-Marker([string]$Root, [string[]]$Names, [int]$Depth = 3) {
         }
 }
 
+# Stable short key for a path: names per-repo temp files and build directories so
+# two repos (or two agents in different worktrees) never share one.
+function Get-PathKey([string]$Text) {
+    [BitConverter]::ToString(
+        [Security.Cryptography.MD5]::HashData(
+            [Text.Encoding]::UTF8.GetBytes($Text.ToLowerInvariant()))).Replace('-', '')
+}
+
 function Test-AnyFile([string]$Dir, [string[]]$Patterns) {
     foreach ($p in $Patterns) {
         if (Get-ChildItem -Path $Dir -Filter $p -File -Force -ErrorAction SilentlyContinue) { return $true }
@@ -76,9 +84,21 @@ function Get-Stacks([string]$Root) {
         $stacks += [pscustomobject]@{ Stack = 'web'; Dir = $dir; Rel = (& $rel $dir); Marker = "package.json + $bundler"; Implemented = $true; Warn = $warn }
     }
 
+    foreach ($m in Find-Marker $Root @('Cargo.toml')) {
+        $dir = $m.DirectoryName
+        # A workspace member has no [package] of its own to build; the workspace
+        # root already covers it.
+        if ((Get-Content $m.FullName -Raw) -notmatch '(?m)^\s*\[package\]') { continue }
+        $warn = ''
+        if (-not (Get-Command cargo -ErrorAction SilentlyContinue)) {
+            $warn = 'cargo not on PATH -- the gate cannot verify this stack until it is'
+        }
+        $stacks += [pscustomobject]@{ Stack = 'rust'; Dir = $dir; Rel = (& $rel $dir); Marker = 'Cargo.toml'; Implemented = $true; Warn = $warn }
+    }
+
     # Declared, detected, NOT checked. Reported so nobody mistakes silence for a
     # passing stack. Implement one only after it has been run for real.
-    $todo = @{ 'project.godot' = 'godot'; 'buf.yaml' = 'proto'; 'pyproject.toml' = 'python'; 'requirements.txt' = 'python'; 'Cargo.toml' = 'rust' }
+    $todo = @{ 'project.godot' = 'godot'; 'buf.yaml' = 'proto'; 'pyproject.toml' = 'python'; 'requirements.txt' = 'python' }
     foreach ($m in Find-Marker $Root ($todo.Keys)) {
         $dir = $m.DirectoryName
         $name = $todo[$m.Name]
