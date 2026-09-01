@@ -12,7 +12,9 @@ $ErrorActionPreference = 'Continue'
 $MaxBlocks = 3
 
 . (Join-Path $PSScriptRoot 'detect.ps1')
-$root = if ($env:CLAUDE_PROJECT_DIR) { $env:CLAUDE_PROJECT_DIR } else { Get-RepoRoot (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)) }
+# The gate lives outside the repo it checks, so $PSScriptRoot says nothing about
+# which repo this is: the project directory comes from Claude Code, cwd otherwise.
+$root = if ($env:CLAUDE_PROJECT_DIR) { $env:CLAUDE_PROJECT_DIR } else { Get-RepoRoot (Get-Location).Path }
 
 # The counter is keyed by session as well as repo: several sessions can share one
 # working tree, and a counter left behind by one of them must not eat another

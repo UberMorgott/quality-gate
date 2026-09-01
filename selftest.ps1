@@ -104,6 +104,30 @@ Copy-Item (Join-Path $PSScriptRoot 'testdata\web-fixture') $web -Recurse
 $r = Invoke-Gate $web
 Check 'web without node_modules fails loudly' (($r.Code -ne 0) -and ($r.Out -match 'node_modules missing')) $r.Out
 
+# 10. The agent contract: `qgate stop-hook` must reach Claude Code as exit code 2
+# with the reason on stderr, through the .cmd shim it is actually invoked by.
+# Anything less and a failing gate silently lets the agent declare victory.
+$hookRepo = Join-Path $tmp 'hook'
+Copy-Item (Join-Path $PSScriptRoot 'testdata\go-fixture') $hookRepo -Recurse
+git -C $hookRepo init -q 2>$null
+git -C $hookRepo add -A 2>$null   # silences the CRLF-conversion warnings
+git -C $hookRepo -c user.email=selftest@local -c user.name=selftest commit -qm init 2>$null
+# -Fast only looks at changed files, so the violation has to be uncommitted.
+Set-GoFile (Join-Path $hookRepo 'bad.go') "package main`nfunc  Bad() {}"
+Push-Location $hookRepo
+try {
+    $stderrFile = Join-Path $tmp 'hook.err'
+    $env:CLAUDE_PROJECT_DIR = $hookRepo
+    $hookOut = '{"session_id":"selftest"}' |
+        & cmd /c "`"$(Join-Path $PSScriptRoot 'bin\qgate.cmd')`" stop-hook" 2>$stderrFile
+    $hookCode = $LASTEXITCODE
+    $env:CLAUDE_PROJECT_DIR = $null
+} finally { Pop-Location }
+$hookErr = if (Test-Path $stderrFile) { Get-Content $stderrFile -Raw } else { '' }
+Check 'stop-hook blocks the turn with exit 2' ($hookCode -eq 2) "code=$hookCode"
+Check 'stop-hook puts the reason on stderr' ($hookErr -match 'Quality gate failed') $hookErr
+Check 'stop-hook keeps stdout clean' ([string]::IsNullOrWhiteSpace(($hookOut | Out-String))) ($hookOut | Out-String)
+
 Remove-Item $tmp -Recurse -Force
 if ($script:Fails) { Write-Output "`n$($script:Fails) check(s) failed"; exit 1 }
 Write-Output "`nall checks passed"

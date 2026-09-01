@@ -1,0 +1,34 @@
+# Quality gate on every push and pull request. Installed by `qgate wire`.
+name: quality-gate
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  gate:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # -Baseline needs history
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+        continue-on-error: true # repos without Go
+
+      - name: install quality-gate
+        shell: pwsh
+        env:
+          # Pin to a tag, not a branch: on main the same commit can pass today and
+          # fail tomorrow with no change to this repo.
+          QG_REF: v1
+        run: |
+          git clone --depth 1 --branch $env:QG_REF https://github.com/UberMorgott/quality-gate.git $env:RUNNER_TEMP\quality-gate
+          # bootstrap.ps1 is for developer machines; CI only needs it on PATH.
+          "$env:RUNNER_TEMP\quality-gate\bin" | Add-Content -Path $env:GITHUB_PATH
+
+      - name: qgate
+        shell: pwsh
+        run: qgate -All -Full
