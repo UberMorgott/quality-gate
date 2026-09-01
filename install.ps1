@@ -27,6 +27,27 @@ if (-not (Get-Command qgate -ErrorAction SilentlyContinue)) {
     Write-Output "  warn:   'qgate' is not on PATH. Run bootstrap.ps1, then restart this terminal."
 }
 
+function Install-WebConfigs([string]$dir, [string]$where) {
+    $need = @()
+    if (Test-AnyFile $dir @('eslint.config.*', '.eslintrc*')) {
+        Write-Output "web       $where -- kept existing eslint config"
+    } else {
+        Copy-Item (Join-Path $PSScriptRoot 'templates\eslint.config.js') $dir
+        Write-Output "web       $where -- installed eslint.config.js"
+        $need += 'eslint @eslint/js typescript-eslint eslint-plugin-vue'
+    }
+    if (Test-AnyFile $dir @('stylelint.config.*', '.stylelintrc*')) {
+        Write-Output "web       $where -- kept existing stylelint config"
+    } else {
+        Copy-Item (Join-Path $PSScriptRoot 'templates\.stylelintrc.json') $dir
+        Write-Output "web       $where -- installed .stylelintrc.json"
+        $need += 'stylelint stylelint-config-standard-scss stylelint-config-recommended-vue'
+    }
+    # Config without packages fails the phase loudly, which is the point: before
+    # this, a web repo with no linter config was waved through in silence.
+    if ($need) { Write-Output "  next:   npm i -D $($need -join ' ')" }
+}
+
 foreach ($s in @(Get-Stacks $root)) {
     $where = if ($s.Rel) { $s.Rel + '/' } else { './' }
     if (-not $s.Implemented) {
@@ -46,6 +67,9 @@ foreach ($s in @(Get-Stacks $root)) {
         if (-not (Test-Path $ga) -or ((Get-Content $ga -Raw) -notmatch '\*\.go')) {
             Write-Output '  warn:   add "*.go text eol=lf" to .gitattributes -- gofmt reports a CRLF checkout as unformatted'
         }
+    } elseif ($s.Stack -eq 'web') {
+        Write-Output "web       $where -- enabled"
+        Install-WebConfigs $s.Dir $where
     } else {
         Write-Output "$($s.Stack.PadRight(9)) $where -- enabled"
     }
@@ -93,6 +117,15 @@ you ran and its pass/fail result in your final response.
 
 If `qgate` is unavailable, report that as a blocker, do not skip it. It installs with
 `irm https://raw.githubusercontent.com/UberMorgott/quality-gate/main/bootstrap.ps1 | iex`
+
+If the gate itself is wrong -- it crashes, blames code that is provably correct,
+misses a whole stack, or cannot be satisfied at all -- do not work around it and do
+not disable it. Open an issue against the gate and say so in your final response:
+
+```powershell
+qgate where   # install path + commit, paste this into the issue
+gh issue create --repo UberMorgott/quality-gate --title "<what broke>" --body "<qgate output, the command you ran, the file it blamed, `qgate where` output>"
+```
 <!-- /quality-gate -->
 '@ -replace "`r`n", "`n"
 

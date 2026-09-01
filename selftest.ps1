@@ -104,7 +104,22 @@ Copy-Item (Join-Path $PSScriptRoot 'testdata\web-fixture') $web -Recurse
 $r = Invoke-Gate $web
 Check 'web without node_modules fails loudly' (($r.Code -ne 0) -and ($r.Out -match 'node_modules missing')) $r.Out
 
-# 10. The agent contract: `qgate stop-hook` must reach Claude Code as exit code 2
+# 10. Wiring fills the frontend gap: a phase whose config is absent is skipped, so
+# before this a web repo with no eslint/stylelint config passed in silence. A config
+# the project already has must survive a re-run untouched.
+$wire = Join-Path $tmp 'wire'
+Copy-Item (Join-Path $PSScriptRoot 'testdata\web-fixture') $wire -Recurse
+git -C $wire init -q 2>$null
+$installer = Join-Path $PSScriptRoot 'install.ps1'
+& pwsh -NoProfile -File $installer -Target $wire -NoHook -NoCI *> $null
+$eslintCfg = Join-Path $wire 'eslint.config.js'
+Check 'wire installs the frontend linter configs' `
+    ((Test-Path $eslintCfg) -and (Test-Path (Join-Path $wire '.stylelintrc.json')))
+Set-Content $eslintCfg 'mine' -NoNewline
+& pwsh -NoProfile -File $installer -Target $wire -NoHook -NoCI *> $null
+Check 'wire keeps a config the project already had' ((Get-Content $eslintCfg -Raw) -eq 'mine')
+
+# 11. The agent contract: `qgate stop-hook` must reach Claude Code as exit code 2
 # with the reason on stderr, through the .cmd shim it is actually invoked by.
 # Anything less and a failing gate silently lets the agent declare victory.
 $hookRepo = Join-Path $tmp 'hook'
@@ -118,7 +133,10 @@ Push-Location $hookRepo
 try {
     $stderrFile = Join-Path $tmp 'hook.err'
     $env:CLAUDE_PROJECT_DIR = $hookRepo
-    $hookOut = '{"session_id":"selftest"}' |
+    # A fresh session id every run: the block counter lives in TEMP keyed by
+    # (repo, session) and a leftover from an earlier run would make the gate give
+    # up on the first block instead of blocking.
+    $hookOut = "{`"session_id`":`"$([guid]::NewGuid())`"}" |
         & cmd /c "`"$(Join-Path $PSScriptRoot 'bin\qgate.cmd')`" stop-hook" 2>$stderrFile
     $hookCode = $LASTEXITCODE
     $env:CLAUDE_PROJECT_DIR = $null

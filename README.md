@@ -65,13 +65,20 @@ qgate wire -NoCI              # без CI-воркфлоу
 Скрипты в целевой репозиторий **не копируются**. `qgate wire` записывает только конфигурацию:
 
 - `.golangci.yml` рядом с каждым `go.mod`, у которого конфига нет (существующий не трогает);
+- `templates/eslint.config.js` и `templates/.stylelintrc.json` рядом с `package.json`, если своих
+  нет (существующий не трогает — `kept existing eslint config`). Печатает строку установки:
+  `npm i -D eslint @eslint/js typescript-eslint eslint-plugin-vue stylelint stylelint-config-standard-scss stylelint-config-recommended-vue`.
+  Пакеты не поставлены — бинарь линтера отсутствует — фаза падает громко, молчаливого пропуска нет;
 - `lefthook.yml` + `lefthook install`, если lefthook в PATH; иначе `.git/hooks/pre-commit`,
   запускающий `exec qgate -All -Full`;
 - `.claude/settings.json` — **мержится**, не заменяется — с Stop-хуком, вызывающим
   `qgate stop-hook`;
 - маркированный блок `<!-- quality-gate --> ... <!-- /quality-gate -->` в начале `AGENTS.md` и
   `CLAUDE.md`, инструктирующий агентов (включая Codex/ChatGPT) запускать `qgate` перед
-  завершением, сообщать о его отсутствии как о блокере и включать команду с результатом в ответ;
+  завершением, сообщать о его отсутствии как о блокере и включать команду с результатом в ответ.
+  Если гейт сам неправ (падает, обвиняет корректный код, пропускает стек) — не обходить, а
+  завести issue: `qgate where` даёт путь и коммит для воспроизведения,
+  `gh issue create --repo UberMorgott/quality-gate` (шаблон `.github/ISSUE_TEMPLATE/gate-bug.md`);
 - `.github/workflows/quality-gate.yml` из `templates/ci.yml` (windows-latest, клонирует гейт по
   тегу `$QG_REF`, по умолчанию `v1`, добавляет `bin` в `$env:GITHUB_PATH`, запускает
   `qgate -All -Full`).
@@ -126,8 +133,10 @@ qgate where       # каталог установки + короткий ком�
    которого на Windows-машине обычно нет — это отдельная job в CI.
 
 **web** (в каталоге `package.json`): `stylelint` -> `eslint` -> `type-check` -> `build`.
-Бинарники берутся из `node_modules\.bin` напрямую, мимо npm-обёртки; фазы, для которых нет
-конфига, пропускаются.
+Бинарники берутся из `node_modules\.bin` напрямую, мимо npm-обёртки. `qgate wire` кладёт
+конфиги ESLint (flat, ESLint 10, typescript-eslint + pluginVue `flat/recommended`) и stylelint
+(`stylelint-config-standard-scss` + `stylelint-config-recommended-vue/scss` последним — он ставит
+`customSyntax` для `.vue`), если в проекте их нет; фаза без конфига и без бинаря падает громко.
 **eslint** запускается **без** `--fix` намеренно: гейт обязан сообщать о проблемах, а не молча
 переписывать файлы, которые правит другая сессия, и не делать диффы агента непредсказуемыми.
 
@@ -253,7 +262,7 @@ qgate selftest
 недостающем `.golangci.yml` ровно один раз, ошибка `go vet`, ошибка `errcheck` (доказывает, что
 фаза линтера живая, а не просто присутствует), fail-closed на нерабочем корне, фронтенд без
 `node_modules`, который обязан упасть, и три проверки агентского контракта через .cmd shim
-(exit code ровно 2, причина на stderr, stdout чист). 18 проверок. Гейт, который никто не видел
+(exit code ровно 2, причина на stderr, stdout чист). 20 проверок. Гейт, который никто не видел
 красным, не считается работающим.
 
 ## CI
@@ -271,7 +280,7 @@ gate/check.ps1           выбор стеков, фазы, отчёт
 gate/detect.ps1          определение стеков по файлам-признакам
 gate/stop-hook.ps1       обёртка для Stop-хука агента
 install.ps1              qgate wire: конфигурация целевого репозитория
-selftest.ps1             red-then-green проверка самого гейта (18 checks)
+selftest.ps1             red-then-green проверка самого гейта (20 checks)
 templates/.golangci.yml  конфиг линтера с обоснованием каждого выбора
 templates/lefthook.yml   git-хуки через lefthook + замеренные ловушки Windows
 templates/ci.yml         GitHub Actions воркфлоу
