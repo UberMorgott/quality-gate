@@ -1,0 +1,75 @@
+# Stack detection by file presence. Dot-sourced by check.ps1 and install.ps1.
+#
+# A stack with no marker file DOES NOT EXIST: it costs nothing and is never
+# mentioned. A stack whose marker is present but whose linter config is missing
+# is reported once, clearly, and the run continues.
+
+# Directories that never hold a project we own.
+$script:SkipDirs = @('node_modules', '.git', 'vendor', 'dist', 'build', '.cache', '.venv', 'target', 'bin', 'obj')
+
+function Get-RepoRoot([string]$StartDir) {
+    $top = (& git -C $StartDir rev-parse --show-toplevel 2>$null)
+    if ($LASTEXITCODE -eq 0 -and $top) { return (Resolve-Path ($top -replace '/', '\')).Path }
+    return (Resolve-Path $StartDir).Path
+}
+
+function Find-Marker([string]$Root, [string[]]$Names, [int]$Depth = 3) {
+    Get-ChildItem -Path $Root -Recurse -Depth $Depth -File -Force -ErrorAction SilentlyContinue |
+        Where-Object {
+            $Names -contains $_.Name -and
+            ($_.FullName.Substring($Root.Length) -split '[\\/]' | Where-Object { $script:SkipDirs -contains $_ }).Count -eq 0
+        }
+}
+
+function Test-AnyFile([string]$Dir, [string[]]$Patterns) {
+    foreach ($p in $Patterns) {
+        if (Get-ChildItem -Path $Dir -Filter $p -File -Force -ErrorAction SilentlyContinue) { return $true }
+    }
+    return $false
+}
+
+# Returns one object per detected stack:
+#   Stack       go | web | godot | proto | python | rust
+#   Dir         absolute directory holding the marker
+#   Rel         path relative to the repo root, forward slashes, '' for the root
+#   Implemented $true only for stacks this gate actually checks
+#   Warn        one-line message about missing tooling/config, or ''
+function Get-Stacks([string]$Root) {
+    $stacks = @()
+    $rel = {
+        param($d)
+        $r = $d.Substring($Root.Length).Trim('\').Replace('\', '/')
+        $r
+    }
+
+    foreach ($m in Find-Marker $Root @('go.mod')) {
+        $dir = $m.DirectoryName
+        $warn = ''
+        if (-not (Test-Path (Join-Path $dir '.golangci.yml')) -and -not (Test-Path (Join-Path $dir '.golangci.yaml'))) {
+            $warn = 'no .golangci.yml -- running golangci-lint on its defaults; copy templates/.golangci.yml'
+        }
+        $stacks += [pscustomobject]@{ Stack = 'go'; Dir = $dir; Rel = (& $rel $dir); Implemented = $true; Warn = $warn }
+    }
+
+    foreach ($m in Find-Marker $Root @('package.json')) {
+        $dir = $m.DirectoryName
+        if (-not (Test-AnyFile $dir @('vite.config.*', 'next.config.*', 'webpack.config.*', 'rollup.config.*'))) { continue }
+        $warn = ''
+        if (-not (Test-Path (Join-Path $dir 'node_modules'))) {
+            $warn = 'node_modules missing -- run npm ci; the gate cannot verify this stack until then'
+        }
+        $stacks += [pscustomobject]@{ Stack = 'web'; Dir = $dir; Rel = (& $rel $dir); Implemented = $true; Warn = $warn }
+    }
+
+    # Declared, detected, NOT checked. Reported so nobody mistakes silence for a
+    # passing stack. Implement one only after it has been run for real.
+    $todo = @{ 'project.godot' = 'godot'; 'buf.yaml' = 'proto'; 'pyproject.toml' = 'python'; 'requirements.txt' = 'python'; 'Cargo.toml' = 'rust' }
+    foreach ($m in Find-Marker $Root ($todo.Keys)) {
+        $dir = $m.DirectoryName
+        $name = $todo[$m.Name]
+        if ($stacks | Where-Object { $_.Stack -eq $name -and $_.Dir -eq $dir }) { continue }
+        $stacks += [pscustomobject]@{ Stack = $name; Dir = $dir; Rel = (& $rel $dir); Implemented = $false; Warn = 'not implemented -- nothing is checked here' }
+    }
+
+    $stacks
+}
