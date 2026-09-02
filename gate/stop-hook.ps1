@@ -28,6 +28,12 @@ $stateFile = Join-Path ([IO.Path]::GetTempPath()) "quality-gate-stop-$(Get-PathK
 
 # Counters from sessions that ended days ago would otherwise sit in TEMP forever,
 # and a reused session id would inherit their attempts.
+#
+# The mask also matches the green mark below, deliberately: a repo nobody has
+# touched for a day loses its mark and pays one -All on the next turn. That is the
+# safe direction -- the mark is a claim that a green run has seen this commit, and
+# an old claim about a repo that may have been rebased, pulled or edited by another
+# tool is worth less than one extra fast run.
 Get-ChildItem ([IO.Path]::GetTempPath()) -Filter 'quality-gate-stop-*.txt' -ErrorAction SilentlyContinue |
     Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-1) } |
     Remove-Item -ErrorAction SilentlyContinue
@@ -41,11 +47,21 @@ Get-ChildItem ([IO.Path]::GetTempPath()) -Filter 'quality-gate-stop-*.txt' -Erro
 # So the hook tracks the commit the gate was last green on. HEAD past it means work
 # landed that no green run has seen, and the turn is checked in full instead of not
 # at all. Keyed by repo only, not by session: the commit history is shared.
-# ponytail: -All rechecks every stack on any new commit. If that gets slow on a big
-# monorepo, scope it with `git diff --name-only <lastGreen> HEAD` instead.
+#
+# This checks committed work at the FAST level. A defect only the full level catches
+# (`go test -race`, govulncheck, the Godot import/headless/smoke phases) still rides
+# in on a commit as far as this hook is concerned; pre-commit and CI are what cover
+# it. That boundary is deliberate -- a per-turn hook cannot pay for the full level.
+#
+# ponytail: -All rechecks every stack on any new commit. Measured on a three-stack
+# monorepo: clean-tree turn 1.0s, new-commit -All turn 3.3s, full level 30.6s. A new
+# commit costs ~+2.3s, so the blunt version is worth keeping. If that stops being
+# true, scope it with `git diff --name-only <lastGreen> HEAD` instead.
 $greenFile = Join-Path ([IO.Path]::GetTempPath()) "quality-gate-stop-green-$(Get-PathKey $root).txt"
 $head = (& git -C $root rev-parse HEAD 2>$null)
 if ($LASTEXITCODE -ne 0) { $head = $null }
+# No mark means no green run has vouched for this commit -- from a fresh TEMP, a
+# swept mark, or a first run. Unknown is treated as moved, on purpose.
 $lastGreen = if (Test-Path $greenFile) { (Get-Content $greenFile -Raw).Trim() } else { '' }
 
 $argv = @('-Root', $root, '-Fast', '-Quiet')
