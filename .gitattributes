@@ -3,3 +3,7 @@
 *.go text eol=lf
 *.proto text eol=lf
 *.gd text eol=lf
+# A shell script with CRLF gives "/bin/sh^M: bad interpreter" when git runs it as
+# a hook. install.ps1 normalises what it writes, but the self-test executes this
+# file directly, so a CRLF checkout would fail on a fresh Windows clone.
+templates/pre-commit text eol=lf
