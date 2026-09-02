@@ -147,19 +147,9 @@ if ($Only) {
         exit 1
     }
     $stacks = @($stacks | Where-Object { $Only -contains $_.Stack })
-    # The same green-on-zero-checks lie as `-Only nonsense` above, through a different
-    # door: a detected stack the gate does not implement printed [SKIP] and exited 0,
-    # so `qgate -Only python` was a passing pipeline that ran no check at all. Only
-    # under -Only, where the named stack is the whole run -- under -All it is a note
-    # among stacks that really did run, and failing there would block work the gate
-    # never promised to check.
-    $unimplemented = @($stacks | Where-Object { -not $_.Implemented })
-    if ($unimplemented) {
-        foreach ($u in $unimplemented) {
-            Write-Output "[FAIL] -Only $($u.Stack) -- detected here ($($u.Marker)) but not implemented, so this run would check nothing"
-        }
-        exit 1
-    }
+    # `-Only <a stack the gate does not implement>` used to be its own special case
+    # right here. It no longer needs one: the zero-phase invariant at the bottom of
+    # this file catches it, and every other door into the same room, once.
 } elseif (-not $All) {
     $changed = Get-ChangedPaths $Root
     if ($null -eq $changed) {
@@ -213,10 +203,14 @@ if ($Baseline) {
 
 $script:Failed = $false
 $script:Lines = @()
+# How many check phases actually executed. The one number the green verdict at the
+# bottom of this file is not allowed to ignore.
+$script:Phases = 0
 
 function Phase {
     param([string]$Name, [scriptblock]$Body, [switch]$FailIfOutput)
     if ($script:Failed) { return }
+    $script:Phases++
     $sw = [Diagnostics.Stopwatch]::StartNew()
     $global:LASTEXITCODE = 0
     $out = (& $Body 2>&1 | Out-String).TrimEnd()
@@ -574,6 +568,7 @@ foreach ($s in $stacks) {
     if ($script:Failed) { break }
     if ($s.Warn) { $report += "[WARN] $label -- $($s.Warn)" }
     $script:Lines = @()
+    $before = $script:Phases
     try {
         switch ($s.Stack) {
             'go' { Invoke-GoStack $s }
@@ -599,8 +594,30 @@ foreach ($s in $stacks) {
         # SKIP belongs in the summary too: a phase that did not run is exactly what
         # a reader of a [PASS] stack line needs to be told about.
         $timings = ($script:Lines | Where-Object { $_ -match '^\[(PASS|WARN|SKIP)\]' }) -join ' '
-        $report += "[PASS] $label ($($s.Marker)) $timings"
+        # Same rule one level down from the invariant below. Every web phase is
+        # conditional on a config file or a package script, so a project with none of
+        # them ran nothing and was still reported [PASS]. A stack that verified
+        # nothing is flagged, never passed -- beside a stack that did real work the
+        # run as a whole still stands, exactly as it does for an unimplemented stack.
+        $ran = $script:Phases -gt $before
+        $report += "$(if ($ran) { '[PASS]' } else { '[SKIP]' }) $label ($($s.Marker))$(if (-not $ran) { ' -- no check phase applies here' }) $timings"
     }
+}
+
+# THE INVARIANT: a run that executed zero check phases is not a green run.
+# Every false green this gate has shipped was a different door into this one room --
+# a stack detected but not implemented, a web stack whose every phase is conditional
+# on a config file, an -Only naming a stack that is not here. Patching the doors one
+# at a time left the next one open, so the rule lives here, once, and reads the only
+# fact that decides it: how many phases ran, not which stacks were detected. Beside a
+# stack that did real work a flagged one is only a note -- the count is the run's.
+# The two runs that legitimately verify nothing say so and exit long before this
+# point: `[SKIP] no changes` on a clean fast lane, and `[SKIP] no known stack found`
+# in a repo the gate was never given a marker file for.
+if (-not $script:Failed -and $script:Phases -eq 0) {
+    $names = @($stacks | ForEach-Object { $_.Stack }) -join ', '
+    $report += "[FAIL] no check phase ran -- nothing was verified$(if ($names) { " ($names)" }), so this run is not green"
+    $script:Failed = $true
 }
 
 # Only on the full level, only when everything passed: a note about newer releases,

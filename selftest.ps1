@@ -532,7 +532,8 @@ Check 'a malformed deferral is not treated as an applied deferral' ($out -notmat
 
 # 28. Issue #3 again, through a different door: `-Only <stack the gate does not
 # implement>` printed [SKIP] not implemented and exited 0 -- a green pipeline over
-# zero checks, which is the exact thing `-Only nonsense` was made fatal for.
+# zero checks, which is the exact thing `-Only nonsense` was made fatal for. It has
+# no branch of its own any more; the zero-phase invariant below is what fails it.
 $py = Join-Path $PSScriptRoot 'testdata\python-fixture'
 $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $py -Only 'python' 2>&1 | Out-String)
 $pyCode = $LASTEXITCODE
@@ -541,11 +542,44 @@ Check '-Only python gives the reason that applied' ($out -match 'python .*not im
 # The other -Only failure mode prints a different reason; if that one fired, the
 # right exit code would be standing on the wrong explanation.
 Check '-Only python is not blamed on an undetected stack' ($out -notmatch 'no such stack detected here') $out
-# ...and -All must NOT become fatal over the same stack: there it is a note among
-# stacks that really ran, and failing would block work the gate never covered.
+
+# 29. THE INVARIANT: a run that executed zero check phases is not green. The rule is
+# about phases that actually ran, never about which stacks were detected -- and both
+# halves have to be stated or it collapses into "python never fails" (the old check
+# here) or into "python always fails".
+# Alone, an unimplemented stack IS the whole run and nothing was checked:
 $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $py -All 2>&1 | Out-String)
-Check '-All only flags an unimplemented stack, never fails on it' `
-    (($LASTEXITCODE -eq 0) -and ($out -match '\[SKIP\] python .*not implemented')) $out
+$pyAllCode = $LASTEXITCODE
+Check '-All over an unimplemented stack alone fails: nothing was checked' `
+    (($pyAllCode -ne 0) -and ($out -match '\[FAIL\] no check phase ran') -and ($out -match '\[SKIP\] python .*not implemented')) `
+    "code=$pyAllCode $out"
+# ...and the reason is the empty run, not the -Only rule, which was never invoked.
+Check '-All over an unimplemented stack is not blamed on -Only' ($out -notmatch '\-Only') $out
+# Beside a stack that did real work the same python marker is only a note: phases
+# ran, so the run stands. Failing here would block work the gate never promised.
+$mixed = Join-Path $tmp 'mixed'
+Copy-Item (Join-Path $PSScriptRoot 'testdata\go-fixture') $mixed -Recurse
+Copy-Item (Join-Path $py 'pyproject.toml') $mixed
+$out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $mixed -All 2>&1 | Out-String)
+$mixCode = $LASTEXITCODE
+Check '-All passes when a real stack ran and only flags the unimplemented one' `
+    (($mixCode -eq 0) -and ($out -match '\[PASS\] go') -and ($out -match '\[SKIP\] python .*not implemented')) "code=$mixCode $out"
+Check 'a run that did check something is not called empty' ($out -notmatch 'no check phase ran') $out
+# The web stack is the same hole with no unimplemented stack in sight: every phase
+# of it is conditional on a config file or a package script, so a project with a
+# node_modules but no eslint/stylelint config, no tsconfig, no build script and no
+# lockfile ran nothing at all and was reported [PASS], exit 0.
+$wz = Join-Path $tmp 'webzero'
+Copy-Item (Join-Path $PSScriptRoot 'testdata\web-fixture') $wz -Recurse
+New-Item -ItemType Directory -Path (Join-Path $wz 'node_modules\.bin') -Force | Out-Null
+[IO.File]::WriteAllText((Join-Path $wz 'package.json'), '{"name":"webzero","private":true,"type":"module"}')
+$out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $wz -Only 'web' -Full 2>&1 | Out-String)
+$wzCode = $LASTEXITCODE
+Check 'a web stack whose every phase is conditional cannot report a green run' `
+    (($wzCode -ne 0) -and ($out -match '\[FAIL\] no check phase ran')) "code=$wzCode $out"
+Check 'a stack that ran no phase is not called [PASS]' ($out -notmatch '\[PASS\] web') $out
+# The legitimate empty run must survive all of this: a clean tree on the fast lane
+# says so and exits 0, and section 20 above proves it still does.
 
 Remove-Item $tmp -Recurse -Force
 if ($script:Fails) { Write-Output "`n$($script:Fails) of $($script:Total) check(s) failed"; exit 1 }
