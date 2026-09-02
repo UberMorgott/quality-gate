@@ -607,6 +607,25 @@ Check '-Only takes a comma-separated list as one value' `
     (($listCode -eq 0) -and ($out -match '\[PASS\] go') -and ($out -match '\[SKIP\] python')) "code=$listCode $out"
 Check '-Only does not read the whole list as one stack name' ($out -notmatch 'no such stack detected here') $out
 
+# 31. Order of the two early returns. `[SKIP] no known stack found` sat above the
+# -Only validation, so in a repo with no marker file at all `-Only go` never reached
+# it: exit 0, nothing checked, and a message about the repo rather than about the
+# flag -- the same green-over-zero-checks lie as `-Only nonsense`, one line earlier.
+$bare = Join-Path $tmp 'nostack'
+New-Item -ItemType Directory -Path $bare | Out-Null
+git -C $bare init -q 2>$null
+$out = (& pwsh -NoProfile -File $gate -Root $bare -Only 'go' -Full 2>&1 | Out-String)
+$bareCode = $LASTEXITCODE
+Check '-Only in a repo with no stack at all fails' `
+    (($bareCode -ne 0) -and ($out -match '\[FAIL\] -Only go -- no such stack detected here')) "code=$bareCode $out"
+Check '-Only is not waved through as a repo the gate knows nothing about' `
+    ($out -notmatch 'no known stack found') $out
+# ...and the free pass itself stays: no marker file and no -Only is still a silent,
+# green, zero-cost run, which is the documented behaviour for a repo with no stack.
+$out = (& pwsh -NoProfile -File $gate -Root $bare -Full 2>&1 | Out-String)
+Check 'a repo with no marker file is still skipped, not failed' `
+    (($LASTEXITCODE -eq 0) -and ($out -match '\[SKIP\] no known stack found')) $out
+
 Remove-Item $tmp -Recurse -Force
 if ($script:Fails) { Write-Output "`n$($script:Fails) of $($script:Total) check(s) failed"; exit 1 }
 Write-Output "`nall checks passed ($($script:Total)/$($script:Total))"

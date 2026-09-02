@@ -120,7 +120,11 @@ if ($Why) {
         if (-not ($stacks | Where-Object { $_.Stack -eq $k })) { Write-Output "[WHY] $k -- absent, no $($script:KnownMarkers[$k])" }
     }
 }
-if ($stacks.Count -eq 0) {
+# A repo with no marker file is a repo the gate was never given anything to check:
+# it costs nothing and it says so. But NOT when -Only named a stack -- this return
+# fired BEFORE -Only was validated below, so `qgate -Only go` in a repo with no
+# go.mod exited 0 over zero checks. The user named a stack and got a green run.
+if ($stacks.Count -eq 0 -and -not $onlyGiven) {
     if (-not $Quiet) { Write-Output '[SKIP] no known stack found' }
     exit 0
 }
