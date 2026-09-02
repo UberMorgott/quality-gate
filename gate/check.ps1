@@ -102,7 +102,12 @@ function Get-ChangedPaths([string]$Repo) {
         if ($e[0] -eq 'R' -or $e[0] -eq 'C' -or $e[1] -eq 'R' -or $e[1] -eq 'C') { $i++ }
     }
     $paths += @((& git -C $Repo diff --name-only -z HEAD 2>$null | Out-String) -split "`0")
-    @($paths | Where-Object { $_ } | ForEach-Object { $_.Trim("`n", "`r") -replace '\\', '/' } | Sort-Object -Unique)
+    # The leading comma is the whole contract: PowerShell enumerates a collection on
+    # return, so a bare `@(...)` hands an EMPTY result back as $null and the caller
+    # reads "no changes" as "not a git repository". That made the [SKIP] no changes
+    # branch dead code, checked every stack on every clean-tree agent turn, and said
+    # "not a git repository" inside an obvious git work tree.
+    , @($paths | Where-Object { $_ } | ForEach-Object { $_.Trim("`n", "`r") -replace '\\', '/' } | Sort-Object -Unique)
 }
 
 # --- select which stacks to run -------------------------------------------
@@ -131,6 +136,7 @@ if ($Only) {
         exit 0
     } else {
         $selected = @()
+        $widenedBy = $null
         foreach ($p in $changed) {
             # Longest match wins: with nested modules a/go.mod and a/b/go.mod, a
             # file under a/b belongs to a/b alone.
@@ -138,14 +144,22 @@ if ($Only) {
                 Sort-Object { $_.Rel.Length } -Descending | Select-Object -First 1
             # A path outside every stack directory (CI config, build scripts, root
             # files) can affect any of them -> run everything.
-            if (-not $owner) { $selected = $stacks; break }
+            if (-not $owner) { $selected = $stacks; $widenedBy = $p; break }
             $selected += $owner
         }
         $stacks = @($selected | Sort-Object Stack, Rel -Unique)
         # Generated code crosses stack boundaries: a .proto edit produces Go and
         # GDScript that nobody touched, so narrowing to the schema directory would
         # report green on a break. Conservative and cheap: re-check everything.
-        if ($stacks | Where-Object { $_.Stack -eq 'proto' }) {
+        #
+        # Read from $selected BEFORE the widening above, never from the widened
+        # $stacks: a root file pulls every stack in, proto with it, and the gate then
+        # announced "proto changed" with no .proto in the change set -- a wrong reason
+        # on the output whose only job is explaining the selection, and it hid the
+        # rule that actually fired.
+        if ($widenedBy) {
+            if (-not $Quiet) { Write-Output "[WHY] $widenedBy belongs to no stack -- checking all of them" }
+        } elseif ($selected | Where-Object { $_.Stack -eq 'proto' }) {
             if (-not $Quiet) { Write-Output '[WHY] proto changed -- generated code crosses stacks, checking all of them' }
             $stacks = $allStacks
         }

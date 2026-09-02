@@ -308,6 +308,36 @@ if (Get-Command gdformat -ErrorAction SilentlyContinue) {
 }
 Remove-Item (Join-Path $go 'qgate.json')
 
+# 20. Which stacks were selected, and the reason the gate gives for it. Both bugs
+# here were invisible to a suite that asserts on stacks and phases: the run still
+# checked something and still exited 0, it just said something untrue about why.
+$sel = Join-Path $tmp 'select'
+New-Item -ItemType Directory -Path $sel | Out-Null
+Copy-Item (Join-Path $PSScriptRoot 'testdata\proto-fixture') (Join-Path $sel 'schema') -Recurse
+git -C $sel init -q 2>$null
+git -C $sel add -A 2>$null
+git -C $sel -c user.email=selftest@local -c user.name=selftest commit -qm init 2>$null
+# Get-ChangedPaths documents $null as "not a git repository" and an empty list as
+# "no changes". PowerShell enumerates a collection on return, so the empty list came
+# back as $null: the [SKIP] no changes branch was unreachable, every clean-tree fast
+# lane checked every stack, and it blamed git for it.
+$out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $sel 2>&1 | Out-String)
+$selCode = $LASTEXITCODE
+Check 'a clean tree reports no changes' (($selCode -eq 0) -and ($out -match 'no changes')) "code=$selCode $out"
+Check 'a clean git tree is not called a non-git directory' ($out -notmatch 'not a git repository') $out
+# A root-level file belongs to no stack, so everything runs -- but the reason the
+# gate printed was 'proto changed', with no .proto in the change set.
+[IO.File]::WriteAllText((Join-Path $sel 'README.md'), "a root file, owned by no stack`n")
+$out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $sel 2>&1 | Out-String)
+Check 'a path outside every stack gives the reason that applied' ($out -match 'README\.md belongs to no stack') $out
+Check 'a path outside every stack is not blamed on proto' ($out -notmatch 'proto changed') $out
+# ...and the proto rule itself must still fire when a .proto really did change.
+Remove-Item (Join-Path $sel 'README.md')
+$pf = Join-Path $sel 'schema\example\v1\greeting.proto'
+[IO.File]::WriteAllText($pf, ([IO.File]::ReadAllText($pf) -replace '(?m)^(syntax)', "// touched by the self-test`n`$1"))
+$out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $sel 2>&1 | Out-String)
+Check 'a real .proto change still widens with the proto reason' ($out -match 'proto changed') $out
+
 Remove-Item $tmp -Recurse -Force
 if ($script:Fails) { Write-Output "`n$($script:Fails) check(s) failed"; exit 1 }
 Write-Output "`nall checks passed"
