@@ -3,7 +3,13 @@
 *.go text eol=lf
 *.proto text eol=lf
 *.gd text eol=lf
-# A shell script with CRLF gives "/bin/sh^M: bad interpreter" when git runs it as
-# a hook. install.ps1 normalises what it writes, but the self-test executes this
-# file directly, so a CRLF checkout would fail on a fresh Windows clone.
+# Defensive, NOT load-bearing -- and the first version of this comment claimed a
+# failure that does not happen. Measured twice on two machines: a CRLF copy of the
+# hook (31 CR bytes) is run by Git for Windows without complaint, through git's own
+# shebang path, and the commit succeeds. There is no "/bin/sh^M: bad interpreter"
+# here, because Windows has no kernel shebang handling and sh parses it itself.
+#
+# Kept anyway, for the smaller true reasons: the working-tree file then matches
+# byte for byte what install.ps1 writes, and a stricter sh (dash, busybox, WSL)
+# reading this file directly is not something this repo can measure.
 templates/pre-commit text eol=lf
