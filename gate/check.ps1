@@ -40,6 +40,7 @@ $allStacks = $stacks
 $pinFile = Join-Path $Root 'qgate.json'
 if (Test-Path $pinFile) {
     try { $pins = (Get-Content $pinFile -Raw | ConvertFrom-Json).tools } catch { $pins = $null }
+    $pinMismatch = @()
     foreach ($p in $pins.PSObject.Properties) {
         $known = $true
         $have = switch ($p.Name) {
@@ -66,8 +67,23 @@ if (Test-Path $pinFile) {
             # A typo'd key used to be a silent no-op that read as enforcement.
             Write-Output "[WARN] qgate.json pins unknown tool '$($p.Name)' -- known: go, golangci-lint, cargo, node, buf, gdformat/gdlint/gdtoolkit, godot"
         } elseif ($have -and $have -ne ([string]$p.Value).TrimStart('v')) {
-            Write-Output "[WARN] $($p.Name) $have on PATH, qgate.json pins $($p.Value) -- this run may not match CI"
+            $pinMismatch += "$($p.Name) $have on PATH, qgate.json pins $($p.Value)"
         }
+    }
+    # A pin exists to make a run reproducible. At the full level -- the one that
+    # guards a commit and CI -- a warning does not do that: the run passes, on a
+    # different compiler or linter than the repository declared, and the result
+    # says nothing about the pinned version. Same rule the missing golangci-lint
+    # and gdtoolkit already follow: warn in the fast lane, fail at the full level.
+    # Fixing it is a choice between two honest actions, so the message names both.
+    if ($pinMismatch) {
+        if ($Full) {
+            foreach ($m in $pinMismatch) { Write-Output "[FAIL] $m -- install the pinned version or update qgate.json" }
+            # $script:Failed and Fail are defined below, so exiting here is the
+            # only way to make this verdict stick.
+            exit 1
+        }
+        foreach ($m in $pinMismatch) { Write-Output "[WARN] $m -- this run may not match CI" }
     }
 }
 

@@ -445,6 +445,51 @@ git -C $genRepo -c user.email=selftest@local -c user.name=selftest commit -qm 'v
 $refuseCode = $LASTEXITCODE
 Check 'a real git commit is refused when the gate fails' ($refuseCode -ne 0) "code=$refuseCode"
 
+# 24. A pin exists to make a run reproducible, so at the full level a mismatch is
+# a failure, not a note: a green -Full run on a different compiler than the repo
+# declared says nothing about the pinned version. Fast lane still only warns.
+$pin = Join-Path $tmp 'pin'
+Copy-Item (Join-Path $PSScriptRoot 'testdata\go-fixture') $pin -Recurse
+[IO.File]::WriteAllText((Join-Path $pin 'qgate.json'), '{"tools":{"go":"0.0.1"}}')
+$out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $pin -All 2>&1 | Out-String)
+Check 'a pin mismatch only warns in the fast lane' (($LASTEXITCODE -eq 0) -and ($out -match '\[WARN\] go .*pins 0\.0\.1')) $out
+$out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $pin -All -Full 2>&1 | Out-String)
+Check 'a pin mismatch fails the full level' (($LASTEXITCODE -ne 0) -and ($out -match '\[FAIL\] go .*pins 0\.0\.1')) $out
+# ...and a pin that matches must not fail, or the check would be unfalsifiable.
+$goVer = if ((& go version) -match 'go(\d+\.\d+(\.\d+)?)') { $Matches[1] } else { $null }
+if ($goVer) {
+    [IO.File]::WriteAllText((Join-Path $pin 'qgate.json'), "{`"tools`":{`"go`":`"$goVer`"}}")
+    $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $pin -All -Full 2>&1 | Out-String)
+    Check 'a matching pin does not fail the full level' (($LASTEXITCODE -eq 0) -and ($out -notmatch 'pins')) $out
+}
+
+# 25. Deferred updates. Without them the only way to stop an accepted-and-known
+# update being reported every session is to stop reading the report -- and a
+# deferral with no expiry is just a silence, so `until` is mandatory and an
+# expired one comes back louder than it left.
+$def = Join-Path $tmp 'defer'
+New-Item -ItemType Directory -Path $def | Out-Null
+$future = (Get-Date).AddDays(30).ToString('yyyy-MM-dd')
+$past = (Get-Date).AddDays(-5).ToString('yyyy-MM-dd')
+[IO.File]::WriteAllText((Join-Path $def 'qgate.deferrals.json'), @"
+{"dependencies":[
+ {"name":"go","until":"$future","reason":"linter cannot parse the new syntax"},
+ {"name":"rust/cargo","until":"$past","reason":"was waiting on the edition bump"},
+ {"name":"nodate","reason":"missing until"}
+]}
+"@)
+$out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\outdated.ps1') -Root $def 2>&1 | Out-String)
+Check 'a live deferral hides its finding but stays visible' `
+    (($out -match '\[DEFERRED\] go until') -and ($out -notmatch '\[OUTDATED\] tool go ')) $out
+Check 'an expired deferral is reported and its finding comes back' `
+    (($out -match '\[DEFERRAL EXPIRED\] rust/cargo') -and ($out -match '\[OUTDATED\] tool rust/cargo')) $out
+Check 'a deferral without until is a warning, not a silent skip' ($out -match "entry for 'nodate' needs 'until'") $out
+# The run above wrote the cache; the summary answers from it and must still see
+# the expiry, or an expired deferral would go unmentioned for the cache's life.
+$out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\outdated.ps1') -Root $def -Summary 2>&1 | Out-String)
+Check 'the cached summary still reports an expired deferral' ($out -match 'deferral\(s\).*have expired') $out
+Check 'qgate outdated never fails, deferrals included' ($LASTEXITCODE -eq 0) $out
+
 Remove-Item $tmp -Recurse -Force
 if ($script:Fails) { Write-Output "`n$($script:Fails) check(s) failed"; exit 1 }
 Write-Output "`nall checks passed"
