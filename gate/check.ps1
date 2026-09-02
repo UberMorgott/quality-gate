@@ -107,7 +107,13 @@ function Get-ChangedPaths([string]$Repo) {
     # reads "no changes" as "not a git repository". That made the [SKIP] no changes
     # branch dead code, checked every stack on every clean-tree agent turn, and said
     # "not a git repository" inside an obvious git work tree.
-    , @($paths | Where-Object { $_ } | ForEach-Object { $_.Trim("`n", "`r") -replace '\\', '/' } | Sort-Object -Unique)
+    # Trim BEFORE filtering. Out-String appends a trailing newline, so the last
+    # element of the split is "`r`n" -- non-empty, therefore truthy, therefore it
+    # survived a filter placed first and only then trimmed down to ''. That empty
+    # string sorts to the front, matches no stack prefix, and widened the run to
+    # every stack on the FIRST iteration: the fast lane never narrowed for a tracked
+    # edit at all, and blamed proto for it.
+    , @($paths | ForEach-Object { $_.Trim("`n", "`r") -replace '\\', '/' } | Where-Object { $_ } | Sort-Object -Unique)
 }
 
 # --- select which stacks to run -------------------------------------------
@@ -157,7 +163,10 @@ if ($Only) {
         # announced "proto changed" with no .proto in the change set -- a wrong reason
         # on the output whose only job is explaining the selection, and it hid the
         # rule that actually fired.
-        if ($widenedBy) {
+        # -ne $null, not a truthy test: an empty path is exactly what used to get
+        # here, and a truthy test read it as "never widened" and fell through to the
+        # proto branch. Same falsy trap as the unary comma one function up.
+        if ($null -ne $widenedBy) {
             if (-not $Quiet) { Write-Output "[WHY] $widenedBy belongs to no stack -- checking all of them" }
         } elseif ($selected | Where-Object { $_.Stack -eq 'proto' }) {
             if (-not $Quiet) { Write-Output '[WHY] proto changed -- generated code crosses stacks, checking all of them' }

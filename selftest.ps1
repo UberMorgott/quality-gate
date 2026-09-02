@@ -269,6 +269,39 @@ Check 'stop-hook blocks the turn with exit 2' ($hookCode -eq 2) "code=$hookCode"
 Check 'stop-hook puts the reason on stderr' ($hookErr -match 'Quality gate failed') $hookErr
 Check 'stop-hook keeps stdout clean' ([string]::IsNullOrWhiteSpace(($hookOut | Out-String))) ($hookOut | Out-String)
 
+# 22. The hook's blind spot: the fast level only ever looks at UNCOMMITTED work, so
+# a turn that edits and commits leaves a clean tree and the hook waved it through --
+# and every later turn too, because the commit never becomes uncommitted again. The
+# hook now remembers the commit it was last green on. Two runs, because the first
+# one is what records the mark; a single run would pass on the first-run rule and
+# prove nothing about the case that matters.
+$hook2 = Join-Path $tmp 'hook2'
+Copy-Item (Join-Path $PSScriptRoot 'testdata\go-fixture') $hook2 -Recurse
+git -C $hook2 init -q 2>$null
+git -C $hook2 add -A 2>$null
+git -C $hook2 -c user.email=selftest@local -c user.name=selftest commit -qm init 2>$null
+function Invoke-StopHook([string]$Repo, [string]$Session) {
+    $err = Join-Path $tmp "hook-$([guid]::NewGuid()).err"
+    Push-Location $Repo
+    try {
+        $env:CLAUDE_PROJECT_DIR = $Repo
+        "{`"session_id`":`"$Session`"}" | & cmd /c "`"$(Join-Path $PSScriptRoot 'bin\qgate.cmd')`" stop-hook" 2>$err | Out-Null
+        $code = $LASTEXITCODE
+        $env:CLAUDE_PROJECT_DIR = $null
+    } finally { Pop-Location }
+    $text = if (Test-Path $err) { Get-Content $err -Raw } else { '' }
+    [pscustomobject]@{ Code = $code; Err = $text }
+}
+$sid = [guid]::NewGuid()
+$h = Invoke-StopHook $hook2 $sid
+Check 'stop-hook passes a clean repo and records it' ($h.Code -eq 0) "code=$($h.Code) $($h.Err)"
+# Commit the violation, leave the tree clean: the state the old hook could not see.
+Set-GoFile (Join-Path $hook2 'bad.go') "package main`nfunc  Bad() {}"
+git -C $hook2 add -A 2>$null
+git -C $hook2 -c user.email=selftest@local -c user.name=selftest commit -qm violation 2>$null
+$h = Invoke-StopHook $hook2 $sid
+Check 'stop-hook blocks a violation that was committed on a clean tree' ($h.Code -eq 2) "code=$($h.Code) $($h.Err)"
+
 # 18. `-All` is documented as "every detected stack, ignore git status", but the
 # .gd list was still narrowed by git status under it: a tree whose dirty files are
 # not .gd dropped gdformat and gdlint from the run and still printed [PASS] godot,
@@ -337,6 +370,25 @@ $pf = Join-Path $sel 'schema\example\v1\greeting.proto'
 [IO.File]::WriteAllText($pf, ([IO.File]::ReadAllText($pf) -replace '(?m)^(syntax)', "// touched by the self-test`n`$1"))
 $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $sel 2>&1 | Out-String)
 Check 'a real .proto change still widens with the proto reason' ($out -match 'proto changed') $out
+
+# 21. Narrowing for a TRACKED edit. `git diff --name-only -z HEAD` goes through
+# Out-String, which appends a trailing newline, so the split produced one "`r`n"
+# element; it is non-empty and survived a filter placed before the trim, then the
+# trim made it ''. That empty path sorted first, matched no stack, and widened the
+# run on the first iteration -- so the fast lane had never narrowed for a tracked
+# edit, and blamed proto for it. Every earlier check here used untracked fixtures,
+# which is exactly why none of them saw it.
+git -C $sel checkout -- . 2>$null
+$track = Join-Path $tmp 'tracked'
+New-Item -ItemType Directory -Path $track | Out-Null
+Copy-Item (Join-Path $PSScriptRoot 'testdata\go-fixture') (Join-Path $track 'server') -Recurse
+Copy-Item (Join-Path $PSScriptRoot 'testdata\proto-fixture') (Join-Path $track 'schema') -Recurse
+git -C $track init -q 2>$null
+git -C $track add -A 2>$null
+git -C $track -c user.email=selftest@local -c user.name=selftest commit -qm init 2>$null
+Set-GoFile (Join-Path $track 'server\main.go') ((Get-Content (Join-Path $track 'server\main.go') -Raw) + "`n// a tracked edit`n")
+$out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $track 2>&1 | Out-String)
+Check 'a tracked edit narrows to its own stack' (($out -match '\[PASS\] go server/') -and ($out -notmatch 'proto')) $out
 
 Remove-Item $tmp -Recurse -Force
 if ($script:Fails) { Write-Output "`n$($script:Fails) check(s) failed"; exit 1 }

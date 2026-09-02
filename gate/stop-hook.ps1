@@ -32,9 +32,31 @@ Get-ChildItem ([IO.Path]::GetTempPath()) -Filter 'quality-gate-stop-*.txt' -Erro
     Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-1) } |
     Remove-Item -ErrorAction SilentlyContinue
 
-$out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'check.ps1') -Root $root -Fast -Quiet 2>&1 | Out-String).TrimEnd()
+# The fast level scopes itself to UNCOMMITTED work (`git status` + `git diff HEAD`),
+# so a turn that edits and then commits hands the hook a clean tree and the gate has
+# nothing left to look at -- and committing as soon as a change verifies is this
+# project's own rule, so that is the normal case, not a corner one. Worse, it stays
+# blind on every later turn too: the commit is never uncommitted again.
+#
+# So the hook tracks the commit the gate was last green on. HEAD past it means work
+# landed that no green run has seen, and the turn is checked in full instead of not
+# at all. Keyed by repo only, not by session: the commit history is shared.
+# ponytail: -All rechecks every stack on any new commit. If that gets slow on a big
+# monorepo, scope it with `git diff --name-only <lastGreen> HEAD` instead.
+$greenFile = Join-Path ([IO.Path]::GetTempPath()) "quality-gate-stop-green-$(Get-PathKey $root).txt"
+$head = (& git -C $root rev-parse HEAD 2>$null)
+if ($LASTEXITCODE -ne 0) { $head = $null }
+$lastGreen = if (Test-Path $greenFile) { (Get-Content $greenFile -Raw).Trim() } else { '' }
+
+$argv = @('-Root', $root, '-Fast', '-Quiet')
+if ($head -and $head -ne $lastGreen) { $argv += '-All' }
+
+$out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'check.ps1') @argv 2>&1 | Out-String).TrimEnd()
 if ($LASTEXITCODE -eq 0) {
     Remove-Item $stateFile -ErrorAction SilentlyContinue
+    # Only a green run may move this mark, or a failing run would excuse itself from
+    # the next turn's check.
+    if ($head) { Set-Content -Path $greenFile -Value $head -NoNewline }
     exit 0
 }
 
