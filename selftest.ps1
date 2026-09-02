@@ -503,6 +503,21 @@ Check 'an unreadable deferrals file is reported, and the run still passes' `
 Check 'an unreadable deferrals file is not also blamed on a missing name/reason' `
     ($out -notmatch "needs both 'name' and 'reason'") $out
 
+# 27. The same warning has to reach the -Full gate run. It was emitted only after
+# the -Summary early return, and -Summary is the path -Full calls -- so a malformed
+# qgate.deferrals.json was silently ignored exactly where it guards a commit, while
+# README claimed a [WARN] and not a silent skip.
+$defFull = Join-Path $tmp 'defer-full'
+Copy-Item (Join-Path $PSScriptRoot 'testdata\go-fixture') $defFull -Recurse
+[IO.File]::WriteAllText((Join-Path $defFull 'qgate.deferrals.json'), '{"dependencies":[{"name":"go"}]}')
+$out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $defFull -All -Full 2>&1 | Out-String)
+$defCode = $LASTEXITCODE
+Check 'a malformed deferral is warned about on a -Full run' `
+    (($defCode -eq 0) -and ($out -match "\[WARN\] qgate\.deferrals\.json entry 1 needs both 'name' and 'reason'")) "code=$defCode $out"
+# ...and is not silently honoured: an entry the gate could not read must never hide
+# a finding, or the warning would be cosmetic.
+Check 'a malformed deferral is not treated as an applied deferral' ($out -notmatch '\[DEFERRED\]') $out
+
 Remove-Item $tmp -Recurse -Force
 if ($script:Fails) { Write-Output "`n$($script:Fails) check(s) failed"; exit 1 }
 Write-Output "`nall checks passed"

@@ -68,6 +68,11 @@ if (Test-Path $deferFile) {
     }
 }
 $badDeferrals = @($deferrals | Where-Object { $_.Bad } | ForEach-Object { "[WARN] $($_.Bad)" })
+# Printed here rather than with the report at the bottom, because both the cache
+# branch and -Summary return before that report -- and -Summary is the path the
+# -Full gate run uses. A malformed file was therefore ignored in silence exactly
+# where it guards a commit, while the docs promised a [WARN] and not a silent skip.
+if ($badDeferrals.Count) { $badDeferrals | ForEach-Object { Write-Output $_ } }
 
 # Splits a findings list into what is still reported, what a live deferral hides,
 # and which deferrals have run out. A deferral matches the report line for its
@@ -191,7 +196,6 @@ if ($Summary) {
     if ($expired.Count) { Write-Output "[INFO] $($expired.Count) deferral(s) in qgate.deferrals.json have expired -- run 'qgate outdated'" }
     exit 0
 }
-if ($badDeferrals.Count) { $badDeferrals | ForEach-Object { Write-Output $_ } }
 if ($expired.Count) { $expired | ForEach-Object { Write-Output $_ } }
 if ($found.Count) { $found | ForEach-Object { Write-Output $_ } }
 # Printed after the findings, not instead of them: a deferral is a decision the
