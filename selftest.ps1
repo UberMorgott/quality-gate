@@ -41,7 +41,12 @@ Check 'detects web stack'  ([bool]($stacks | Where-Object { $_.Stack -eq 'web' -
 Check 'detects rust stack'  ([bool]($stacks | Where-Object { $_.Stack -eq 'rust' -and $_.Implemented }))
 Check 'detects proto stack' ([bool]($stacks | Where-Object { $_.Stack -eq 'proto' -and $_.Implemented }))
 Check 'detects godot stack' ([bool]($stacks | Where-Object { $_.Stack -eq 'godot' -and $_.Implemented }))
-Check 'no phantom python stack' (-not ($stacks | Where-Object { $_.Stack -eq 'python' }))
+Check 'detects python stack as not implemented' ([bool]($stacks | Where-Object { $_.Stack -eq 'python' -and -not $_.Implemented }))
+# A stack with no marker file does not exist at all. testdata/ now holds a python
+# fixture (check 28 needs one), so this has to be asked of a tree that has no python
+# marker, or it would only be proving that Copy-Item works.
+Check 'no phantom python stack where there is no marker' `
+    (-not (@(Get-Stacks (Join-Path $PSScriptRoot 'testdata\go-fixture')) | Where-Object { $_.Stack -eq 'python' }))
 
 # 2. Clean Go fixture, no linter config -> passes, warns exactly once.
 $go = Join-Path $tmp 'go'
@@ -517,6 +522,23 @@ Check 'a malformed deferral is warned about on a -Full run' `
 # ...and is not silently honoured: an entry the gate could not read must never hide
 # a finding, or the warning would be cosmetic.
 Check 'a malformed deferral is not treated as an applied deferral' ($out -notmatch '\[DEFERRED\]') $out
+
+# 28. Issue #3 again, through a different door: `-Only <stack the gate does not
+# implement>` printed [SKIP] not implemented and exited 0 -- a green pipeline over
+# zero checks, which is the exact thing `-Only nonsense` was made fatal for.
+$py = Join-Path $PSScriptRoot 'testdata\python-fixture'
+$out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $py -Only 'python' 2>&1 | Out-String)
+$pyCode = $LASTEXITCODE
+Check '-Only on a detected but unimplemented stack fails the run' ($pyCode -ne 0) "code=$pyCode $out"
+Check '-Only python gives the reason that applied' ($out -match 'python .*not implemented') $out
+# The other -Only failure mode prints a different reason; if that one fired, the
+# right exit code would be standing on the wrong explanation.
+Check '-Only python is not blamed on an undetected stack' ($out -notmatch 'no such stack detected here') $out
+# ...and -All must NOT become fatal over the same stack: there it is a note among
+# stacks that really ran, and failing would block work the gate never covered.
+$out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $py -All 2>&1 | Out-String)
+Check '-All only flags an unimplemented stack, never fails on it' `
+    (($LASTEXITCODE -eq 0) -and ($out -match '\[SKIP\] python .*not implemented')) $out
 
 Remove-Item $tmp -Recurse -Force
 if ($script:Fails) { Write-Output "`n$($script:Fails) check(s) failed"; exit 1 }

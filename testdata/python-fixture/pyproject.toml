@@ -1,0 +1,5 @@
+# Marker only. Python is detected and NOT checked, and the point of this fixture is
+# that `qgate -Only python` must refuse to report a green run over zero checks.
+[project]
+name = "python-fixture"
+version = "0.0.0"

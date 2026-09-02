@@ -147,6 +147,19 @@ if ($Only) {
         exit 1
     }
     $stacks = @($stacks | Where-Object { $Only -contains $_.Stack })
+    # The same green-on-zero-checks lie as `-Only nonsense` above, through a different
+    # door: a detected stack the gate does not implement printed [SKIP] and exited 0,
+    # so `qgate -Only python` was a passing pipeline that ran no check at all. Only
+    # under -Only, where the named stack is the whole run -- under -All it is a note
+    # among stacks that really did run, and failing there would block work the gate
+    # never promised to check.
+    $unimplemented = @($stacks | Where-Object { -not $_.Implemented })
+    if ($unimplemented) {
+        foreach ($u in $unimplemented) {
+            Write-Output "[FAIL] -Only $($u.Stack) -- detected here ($($u.Marker)) but not implemented, so this run would check nothing"
+        }
+        exit 1
+    }
 } elseif (-not $All) {
     $changed = Get-ChangedPaths $Root
     if ($null -eq $changed) {

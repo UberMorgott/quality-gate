@@ -31,7 +31,9 @@ qgate -- one quality gate for every stack in the repository
   qgate where           install path, commit and the tool versions in use
 
 Gate flags: -All  -Fast  -Full  -Only <stack>  -Why  -Baseline <rev>  -Root <path>
-  -Only takes one or more of: go web rust proto godot  (python is detected, not checked)
+  -Only takes one or more of: go web rust proto godot
+       python is detected but not checked, so -Only python FAILS rather than
+       reporting a green run over zero checks (-All still only flags it)
 Exit codes: 0 pass, 1 fail, 2 from `stop-hook` blocks the agent's turn.
 '@
 
