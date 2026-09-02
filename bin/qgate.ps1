@@ -31,12 +31,14 @@ qgate -- one quality gate for every stack in the repository
   qgate selftest        the gate's own red-then-green self-test
   qgate where           install path, commit and the tool versions in use
 
-Gate flags: -All  -Fast  -Full  -Only <stack>  -Quiet  -Why  -Baseline <rev>  -Root <path>
+Gate flags: -All  -Fast  -Full  -Only <stack[,stack]>  -Quiet  -Why  -Baseline <rev>  -Root <path>
   -Quiet prints nothing on a green run and the whole report on a red one
-       (what the generated pre-commit hook uses; CI wants the [PASS] lines)
-  -Only takes one or more of: go web rust proto godot
-       python is detected but not checked, so -Only python FAILS rather than
-       reporting a green run over zero checks (-All still only flags it)
+       (what the generated pre-commit hook uses; CI wants the [PASS] lines).
+       A [WARN] about the gate's own unreadable config is not silenced.
+  -Only takes go web rust proto godot as ONE value: -Only go,web
+       python is detected but not checked, so a run that names it alone checks
+       nothing and FAILS (-All flags it only when a real stack ran too)
+A run that executed zero check phases is never green.
 Exit codes: 0 pass, 1 fail, 2 from `stop-hook` blocks the agent's turn.
 '@
 
