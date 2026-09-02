@@ -46,19 +46,24 @@ $deferFile = Join-Path $Root 'qgate.deferrals.json'
 if (Test-Path $deferFile) {
     $parsed = $null
     try { $parsed = (Get-Content $deferFile -Raw | ConvertFrom-Json).dependencies } catch { $parsed = $null }
+    # The else is load-bearing: `@($null)` iterates ONE null element, so an
+    # unparseable file printed its own "not readable" warning and then a second,
+    # untrue one about "entry 1" that no entry ever produced -- the exact
+    # right-outcome-wrong-reason shape PLAYBOOK.md 0.1 is about.
     if ($null -eq $parsed) {
         $deferrals += , @{ Bad = 'qgate.deferrals.json is not readable as {"dependencies": [...]}' }
-    }
-    $n = 0
-    foreach ($d in @($parsed)) {
-        $n++
-        $due = [datetime]::MinValue
-        if (-not $d.name -or -not $d.reason) {
-            $deferrals += , @{ Bad = "qgate.deferrals.json entry $n needs both 'name' and 'reason'" }
-        } elseif (-not [datetime]::TryParseExact([string]$d.until, 'yyyy-MM-dd', [cultureinfo]::InvariantCulture, 'None', [ref]$due)) {
-            $deferrals += , @{ Bad = "qgate.deferrals.json entry for '$($d.name)' needs 'until' as yyyy-MM-dd" }
-        } else {
-            $deferrals += , @{ Name = [string]$d.name; Until = $due; Reason = [string]$d.reason }
+    } else {
+        $n = 0
+        foreach ($d in @($parsed)) {
+            $n++
+            $due = [datetime]::MinValue
+            if (-not $d.name -or -not $d.reason) {
+                $deferrals += , @{ Bad = "qgate.deferrals.json entry $n needs both 'name' and 'reason'" }
+            } elseif (-not [datetime]::TryParseExact([string]$d.until, 'yyyy-MM-dd', [cultureinfo]::InvariantCulture, 'None', [ref]$due)) {
+                $deferrals += , @{ Bad = "qgate.deferrals.json entry for '$($d.name)' needs 'until' as yyyy-MM-dd" }
+            } else {
+                $deferrals += , @{ Name = [string]$d.name; Until = $due; Reason = [string]$d.reason }
+            }
         }
     }
 }

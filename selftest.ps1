@@ -490,6 +490,19 @@ $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\outdated.ps1') -R
 Check 'the cached summary still reports an expired deferral' ($out -match 'deferral\(s\).*have expired') $out
 Check 'qgate outdated never fails, deferrals included' ($LASTEXITCODE -eq 0) $out
 
+# 26. An unreadable qgate.deferrals.json must say so ONCE. `@($null)` iterates one
+# null element, so the correct "not readable" line was followed by a second warning
+# about "entry 1" that no entry ever produced -- a right outcome with an invented
+# reason, the shape PLAYBOOK.md 0.1 is about.
+$defBad = Join-Path $tmp 'defer-bad'
+New-Item -ItemType Directory -Path $defBad | Out-Null
+[IO.File]::WriteAllText((Join-Path $defBad 'qgate.deferrals.json'), '{ this is not json')
+$out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\outdated.ps1') -Root $defBad 2>&1 | Out-String)
+Check 'an unreadable deferrals file is reported, and the run still passes' `
+    (($LASTEXITCODE -eq 0) -and ($out -match 'qgate\.deferrals\.json is not readable')) $out
+Check 'an unreadable deferrals file is not also blamed on a missing name/reason' `
+    ($out -notmatch "needs both 'name' and 'reason'") $out
+
 Remove-Item $tmp -Recurse -Force
 if ($script:Fails) { Write-Output "`n$($script:Fails) check(s) failed"; exit 1 }
 Write-Output "`nall checks passed"
