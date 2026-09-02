@@ -581,6 +581,32 @@ Check 'a stack that ran no phase is not called [PASS]' ($out -notmatch '\[PASS\]
 # The legitimate empty run must survive all of this: a clean tree on the fast lane
 # says so and exits 0, and section 20 above proves it still does.
 
+# 30. What -Only was actually handed. Both of these ended in a defensible-looking
+# outcome standing on a reason about something else entirely.
+$gate = Join-Path $PSScriptRoot 'gate\check.ps1'
+# An empty value is the PowerShell absence trap: `if ($Only)` read `-Only ''` as
+# "no filter given" and quietly widened the run to every stack.
+$out = (& pwsh -NoProfile -File $gate -Root $mixed -Only '' -Full 2>&1 | Out-String)
+$emptyCode = $LASTEXITCODE
+Check 'an empty -Only is refused, not read as no filter' `
+    (($emptyCode -ne 0) -and ($out -match '\[FAIL\] -Only was given an empty value')) "code=$emptyCode $out"
+Check 'an empty -Only does not silently widen the run' ($out -notmatch 'checking (every stack|all of them)') $out
+# A second value used to bind to -Baseline positionally, so the user asking for two
+# stacks was told the baseline revision did not exist.
+$out = (& pwsh -NoProfile -File $gate -Root $mixed -Only 'go' 'python' -Full 2>&1 | Out-String)
+$strayCode = $LASTEXITCODE
+Check 'a stray value after -Only is refused' `
+    (($strayCode -ne 0) -and ($out -match 'unexpected argument\(s\): python')) "code=$strayCode $out"
+Check 'a stray value after -Only is not reported as a missing baseline' `
+    ($out -notmatch 'baseline revision not found') $out
+# ...and the spelling that works has to keep working, or the validation would be
+# worse than the bug: one value, comma separated, is a list of stacks.
+$out = (& pwsh -NoProfile -File $gate -Root $mixed -Only 'go,python' 2>&1 | Out-String)
+$listCode = $LASTEXITCODE
+Check '-Only takes a comma-separated list as one value' `
+    (($listCode -eq 0) -and ($out -match '\[PASS\] go') -and ($out -match '\[SKIP\] python')) "code=$listCode $out"
+Check '-Only does not read the whole list as one stack name' ($out -notmatch 'no such stack detected here') $out
+
 Remove-Item $tmp -Recurse -Force
 if ($script:Fails) { Write-Output "`n$($script:Fails) of $($script:Total) check(s) failed"; exit 1 }
 Write-Output "`nall checks passed ($($script:Total)/$($script:Total))"

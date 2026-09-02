@@ -9,20 +9,47 @@
 # pre-commit hook and CI run.
 #
 # With no stack switch the changed side is auto-detected from git status.
-[CmdletBinding()]
+[CmdletBinding(PositionalBinding = $false)]
 param(
-    [string[]]$Only,      # go | web | rust | proto | godot -- restrict to these stacks
+    [string[]]$Only,      # go | web | rust | proto | godot -- restrict to these stacks (one value: -Only go,web)
     [switch]$All,         # every detected stack, ignore git status
     [switch]$Fast,
     [switch]$Full,
     [switch]$Quiet,
     [switch]$Why,         # provenance: which marker file created (or did not create) each phase
     [string]$Baseline,    # git rev: report only issues newer than it (adoption on a dirty codebase)
-    [string]$Root         # repo root; defaults to the git root of the cwd
+    [string]$Root,        # repo root; defaults to the git root of the cwd
+    # Nothing binds here on a correct call. Positional binding used to swallow the
+    # second word of `-Only go python` into -Baseline, and the run then died with
+    # "baseline revision not found: python" -- a verdict about a feature the user
+    # never touched. PositionalBinding=$false plus this catch-all turns a stray value
+    # into a reason about the argument that was actually wrong.
+    [Parameter(ValueFromRemainingArguments = $true)][string[]]$Extra
 )
 
 $ErrorActionPreference = 'Continue'
 . (Join-Path $PSScriptRoot 'detect.ps1')
+
+# --- the command line ------------------------------------------------------
+if ($Extra) {
+    Write-Output "[FAIL] unexpected argument(s): $($Extra -join ' ') -- several stacks are ONE value: -Only go,web"
+    exit 1
+}
+# `if ($Only)` was a truthiness test, and PowerShell reads an empty value as absence
+# (PLAYBOOK.md 0.1): `-Only ''` bound an empty string, tested false, and silently
+# degraded to "no filter at all" -- the run widened to every stack and explained
+# itself with a rule about paths instead of with the flag it had been handed. An
+# explicitly passed -Only is now asked of $PSBoundParameters, never of the value.
+$onlyGiven = $PSBoundParameters.ContainsKey('Only')
+if ($onlyGiven) {
+    # `-Only go,web` arrives as one string through the .cmd shim and as two elements
+    # from PowerShell; splitting here makes both spellings mean the same thing.
+    $Only = @($Only | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+    if ($Only.Count -eq 0) {
+        Write-Output "[FAIL] -Only was given an empty value -- name at least one stack (known: $(($script:KnownMarkers.Keys) -join ', '))"
+        exit 1
+    }
+}
 
 $MaxChars = 6000
 if (-not $Root) { $Root = Get-RepoRoot (Get-Location).Path }
@@ -133,7 +160,7 @@ function Get-ChangedPaths([string]$Repo) {
 }
 
 # --- select which stacks to run -------------------------------------------
-if ($Only) {
+if ($onlyGiven) {
     # `-Only nonsense` checked nothing and exited 0, which reads exactly like a clean
     # run: a typo'd `-Only godo` in a CI or lefthook invocation was a green pipeline.
     # A warning was not enough -- nobody reads a warning in a passing log. This exits
