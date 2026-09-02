@@ -22,6 +22,7 @@ $usage = @'
 qgate -- one quality gate for every stack in the repository
 
   qgate                 run the gate on the current repo (fast level: changed files)
+  qgate run             the same thing, spelled out (any gate flag works after it)
   qgate -All -Full      any flag of the gate, passed straight through
   qgate wire            wire the current repo (configs, agent hooks; -CI adds a workflow)
   qgate outdated        dependencies and toolchains with a newer release
@@ -30,7 +31,9 @@ qgate -- one quality gate for every stack in the repository
   qgate selftest        the gate's own red-then-green self-test
   qgate where           install path, commit and the tool versions in use
 
-Gate flags: -All  -Fast  -Full  -Only <stack>  -Why  -Baseline <rev>  -Root <path>
+Gate flags: -All  -Fast  -Full  -Only <stack>  -Quiet  -Why  -Baseline <rev>  -Root <path>
+  -Quiet prints nothing on a green run and the whole report on a red one
+       (what the generated pre-commit hook uses; CI wants the [PASS] lines)
   -Only takes one or more of: go web rust proto godot
        python is detected but not checked, so -Only python FAILS rather than
        reporting a green run over zero checks (-All still only flags it)
