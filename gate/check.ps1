@@ -653,10 +653,18 @@ if (-not $script:Failed -and $script:Phases -eq 0) {
 
 # Only on the full level, only when everything passed: a note about newer releases,
 # never a verdict. It cannot fail the run, and the Stop hook (-Fast) never sees it.
-if ($Full -and -not $script:Failed -and -not $Quiet) {
+if ($Full -and -not $script:Failed) {
     $note = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'outdated.ps1') -Root $Root -Summary 2>$null)
     if ($note) { $report += $note }
 }
 
-if ($report -and -not ($Quiet -and -not $script:Failed)) { $report | ForEach-Object { Write-Output $_ } }
+# -Quiet keeps a PASSING run silent -- that is its whole documented job, and the
+# generated pre-commit hook runs in it because the hook's stdout is context the
+# model pays for. A [WARN] about the gate's own config file being unreadable is not
+# a passing condition though: it is the gate saying its input is broken, and
+# swallowing it here hid it exactly where it guards a commit. Same rule the
+# qgate.json unknown-key warning already follows; the advisory [INFO] about newer
+# releases and the per-stack notes stay silent on green.
+if ($Quiet -and -not $script:Failed) { $report = @($report | Where-Object { $_ -match '^\[WARN\] qgate\.' }) }
+if ($report) { $report | ForEach-Object { Write-Output $_ } }
 exit ($(if ($script:Failed) { 1 } else { 0 }))

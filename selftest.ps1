@@ -526,9 +526,28 @@ $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root
 $defCode = $LASTEXITCODE
 Check 'a malformed deferral is warned about on a -Full run' `
     (($defCode -eq 0) -and ($out -match "\[WARN\] qgate\.deferrals\.json entry 1 needs both 'name' and 'reason'")) "code=$defCode $out"
-# ...and is not silently honoured: an entry the gate could not read must never hide
-# a finding, or the warning would be cosmetic.
-Check 'a malformed deferral is not treated as an applied deferral' ($out -notmatch '\[DEFERRED\]') $out
+# A check that asserted `-notmatch '[DEFERRED]'` stood here and was deleted: a
+# malformed entry is stored with no Name, and Split-Deferred iterates only entries
+# that have one, so it could not emit [DEFERRED] for one either before or after the
+# fix. An assertion that cannot fail is decoration, not the 0.1 absence check.
+# What it should have been guarding is below: the warning has to reach the mode the
+# hook actually runs in.
+#
+# -Quiet is what the generated pre-commit hook uses, and the warning was gated on
+# `-not $Quiet` -- so a repo whose qgate.deferrals.json the gate cannot read got
+# NOTHING at all (output length 0, exit 0) precisely where the gate guards a commit.
+$outQ = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $defFull -All -Full -Quiet 2>&1 | Out-String)
+$qCode = $LASTEXITCODE
+Check 'a malformed deferral still reaches the -Quiet run the hook uses' `
+    (($qCode -eq 0) -and ($outQ -match "\[WARN\] qgate\.deferrals\.json entry 1 needs both 'name' and 'reason'")) "code=$qCode $outQ"
+# ...without -Quiet becoming chatty: a passing run stays silent about everything
+# that is not the gate's own config being broken.
+Check '-Quiet on a green run still says nothing else' `
+    (($outQ -notmatch '\[PASS\]') -and ($outQ -notmatch '\[INFO\]') -and ($outQ -notmatch 'golangci\.yml')) $outQ
+Remove-Item (Join-Path $defFull 'qgate.deferrals.json')
+$outQ = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $defFull -All -Full -Quiet 2>&1 | Out-String)
+Check '-Quiet prints nothing at all on a clean pass' `
+    (($LASTEXITCODE -eq 0) -and [string]::IsNullOrWhiteSpace($outQ)) $outQ
 
 # 28. Issue #3 again, through a different door: `-Only <stack the gate does not
 # implement>` printed [SKIP] not implemented and exited 0 -- a green pipeline over
