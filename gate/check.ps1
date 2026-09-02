@@ -11,7 +11,7 @@
 # With no stack switch the changed side is auto-detected from git status.
 [CmdletBinding()]
 param(
-    [string[]]$Only,      # 'go' / 'web' -- restrict to these stacks
+    [string[]]$Only,      # go | web | rust | proto | godot -- restrict to these stacks
     [switch]$All,         # every detected stack, ignore git status
     [switch]$Fast,
     [switch]$Full,
@@ -41,14 +41,31 @@ $pinFile = Join-Path $Root 'qgate.json'
 if (Test-Path $pinFile) {
     try { $pins = (Get-Content $pinFile -Raw | ConvertFrom-Json).tools } catch { $pins = $null }
     foreach ($p in $pins.PSObject.Properties) {
+        $known = $true
         $have = switch ($p.Name) {
             'go' { if ((& go version 2>$null) -match 'go(\d+\.\d+(\.\d+)?)') { $Matches[1] } }
             'golangci-lint' { if ((& golangci-lint --version 2>$null) -match 'version (\S+)') { $Matches[1].TrimStart('v') } }
             'cargo' { if ((& cargo --version 2>$null) -match 'cargo (\S+)') { $Matches[1] } }
             'node' { ((& node --version 2>$null) -as [string]) -replace '^v', '' }
-            default { $null }
+            'buf' { if ((& buf --version 2>$null) -match '(\d+\.\d+\.\d+\S*)') { $Matches[1] } }
+            # gdformat and gdlint ship from one pip package at one version, so
+            # either name (or the package name) pins both.
+            { $_ -in 'gdformat', 'gdlint', 'gdtoolkit' } {
+                if ((& gdformat --version 2>$null) -match '(\d+\.\d+(\.\d+)?)') { $Matches[1] }
+            }
+            # gdlint rule sets change between gdtoolkit releases and Godot's error
+            # output changes between 4.x minors, so a green run against a different
+            # Godot than CI's predicts nothing.
+            'godot' {
+                $g = Get-GodotBin
+                if ($g -and ((& $g --version 2>$null) -match '(\d+\.\d+(\.\d+)?)')) { $Matches[1] }
+            }
+            default { $known = $false; $null }
         }
-        if ($have -and $have -ne ([string]$p.Value).TrimStart('v')) {
+        if (-not $known) {
+            # A typo'd key used to be a silent no-op that read as enforcement.
+            Write-Output "[WARN] qgate.json pins unknown tool '$($p.Name)' -- known: go, golangci-lint, cargo, node, buf, gdformat/gdlint/gdtoolkit, godot"
+        } elseif ($have -and $have -ne ([string]$p.Value).TrimStart('v')) {
             Write-Output "[WARN] $($p.Name) $have on PATH, qgate.json pins $($p.Value) -- this run may not match CI"
         }
     }
@@ -90,6 +107,13 @@ function Get-ChangedPaths([string]$Repo) {
 
 # --- select which stacks to run -------------------------------------------
 if ($Only) {
+    # `-Only nonsense` used to check nothing and exit 0, which reads exactly like a
+    # clean run. Naming a stack that is not here is a mistake either way.
+    foreach ($o in $Only) {
+        if (-not ($allStacks | Where-Object { $_.Stack -eq $o })) {
+            Write-Output "[WARN] -Only $o -- no such stack detected here (known: $(($script:KnownMarkers.Keys) -join ', '))"
+        }
+    }
     $stacks = @($stacks | Where-Object { $Only -contains $_.Stack })
 } elseif (-not $All) {
     $changed = Get-ChangedPaths $Root
@@ -361,7 +385,10 @@ function Invoke-GodotStack($s) {
     $noGodotDir = '[\\/](\.godot|addons)[\\/]'
     $gd = @(Get-ChildItem $s.Dir -Recurse -File -Filter '*.gd' -ErrorAction SilentlyContinue |
         Where-Object { $_.FullName -notmatch $noGodotDir })
-    if (-not $Full) {
+    # -All means "every detected stack, ignore git status", so it must ignore it
+    # here too -- narrowing under -All left both lint phases out of the output
+    # entirely while the stack line still said [PASS].
+    if (-not $Full -and -not $All) {
         # The fast lane runs on every agent turn: lint only what git says changed.
         $changed = Get-ChangedPaths $Root
         if ($null -ne $changed) {
@@ -369,16 +396,23 @@ function Invoke-GodotStack($s) {
             $gd = @($gd | Where-Object { $want -contains $_.FullName })
         }
     }
-    if ($gd.Count -gt 0) {
-        if ((Have 'gdformat') -and (Have 'gdlint')) {
+    if ((Have 'gdformat') -and (Have 'gdlint')) {
+        if ($gd.Count -gt 0) {
             $paths = @($gd.FullName)
             Phase 'gdformat' { gdformat --check @paths }
             Phase 'gdlint' { gdlint @paths }
         } else {
-            # gdtoolkit is a pip package, a toolchain of its own -- its absence says
-            # nothing about whether the Godot binary is there.
-            $script:Lines += '[WARN] gdformat/gdlint not on PATH -- phases skipped (pip install gdtoolkit)'
+            # A phase that did not run must never be indistinguishable from a phase
+            # that passed.
+            $script:Lines += '[SKIP] gdformat/gdlint -- no changed .gd files'
         }
+    } elseif ($Full) {
+        # Same rule as golangci-lint: unverifiable is not clean, and the full level
+        # is what guards a commit and CI. `-Only` is the escape hatch for a repo
+        # that genuinely does not want gdtoolkit.
+        Fail 'gdformat/gdlint not on PATH -- required at the full level (pip install gdtoolkit), or exclude this stack with -Only'
+    } else {
+        $script:Lines += '[WARN] gdformat/gdlint not on PATH -- phases skipped (pip install gdtoolkit)'
     }
 
     # Godot resolves res:// case-sensitively on Linux. A reference whose case is
@@ -498,7 +532,9 @@ foreach ($s in $stacks) {
         $report += "[FAIL] $label"
         $report += $out
     } elseif (-not $Quiet) {
-        $timings = ($script:Lines | Where-Object { $_ -match '^\[(PASS|WARN)\]' }) -join ' '
+        # SKIP belongs in the summary too: a phase that did not run is exactly what
+        # a reader of a [PASS] stack line needs to be told about.
+        $timings = ($script:Lines | Where-Object { $_ -match '^\[(PASS|WARN|SKIP)\]' }) -join ' '
         $report += "[PASS] $label ($($s.Marker)) $timings"
     }
 }

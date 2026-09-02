@@ -251,6 +251,39 @@ Check 'stop-hook blocks the turn with exit 2' ($hookCode -eq 2) "code=$hookCode"
 Check 'stop-hook puts the reason on stderr' ($hookErr -match 'Quality gate failed') $hookErr
 Check 'stop-hook keeps stdout clean' ([string]::IsNullOrWhiteSpace(($hookOut | Out-String))) ($hookOut | Out-String)
 
+# 18. `-All` is documented as "every detected stack, ignore git status", but the
+# .gd list was still narrowed by git status under it: a tree whose dirty files are
+# not .gd dropped gdformat and gdlint from the run and still printed [PASS] godot,
+# with no SKIP and no WARN to say so. A phase that did not run must never be
+# indistinguishable from a phase that passed.
+if ((Get-Command gdformat -ErrorAction SilentlyContinue) -and (Get-Command gdlint -ErrorAction SilentlyContinue)) {
+    git -C $gdt init -q 2>$null
+    git -C $gdt add -A 2>$null
+    git -C $gdt -c user.email=selftest@local -c user.name=selftest commit -qm init 2>$null
+    [IO.File]::WriteAllText((Join-Path $gdt 'notes.txt'), "dirty, and not a .gd file`n")
+    $r = Invoke-Gate $gdt
+    Check '-All lints .gd even when git reports no .gd change' ($r.Out -match 'gdformat') $r.Out
+    # The fast lane still narrows -- but says so out loud.
+    $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $gdt 2>&1 | Out-String)
+    Check 'a skipped gd lint phase is visible, not silent' ($out -match '\[SKIP\] gdformat/gdlint') $out
+} else {
+    Write-Output '[skip] gdtoolkit not on PATH'
+}
+
+# 19. Discoverability: a flag value nobody validates and a config key nobody reads
+# are both silent no-ops that look exactly like enforcement.
+$out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $go -Only 'nonsense' 2>&1 | Out-String)
+Check '-Only naming an undetected stack warns' ($out -match '\[WARN\] -Only nonsense') $out
+[IO.File]::WriteAllText((Join-Path $go 'qgate.json'), '{"tools": {"nosuchtool": "1.0.0"}}')
+$r = Invoke-Gate $go
+Check 'qgate.json pinning an unknown tool warns' ($r.Out -match "pins unknown tool 'nosuchtool'") $r.Out
+if (Get-Command gdformat -ErrorAction SilentlyContinue) {
+    [IO.File]::WriteAllText((Join-Path $go 'qgate.json'), '{"tools": {"gdtoolkit": "0.0.1"}}')
+    $r = Invoke-Gate $go
+    Check 'qgate.json can pin gdtoolkit' ($r.Out -match 'gdtoolkit .* qgate\.json pins 0\.0\.1') $r.Out
+}
+Remove-Item (Join-Path $go 'qgate.json')
+
 Remove-Item $tmp -Recurse -Force
 if ($script:Fails) { Write-Output "`n$($script:Fails) check(s) failed"; exit 1 }
 Write-Output "`nall checks passed"
