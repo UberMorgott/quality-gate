@@ -107,12 +107,17 @@ function Get-ChangedPaths([string]$Repo) {
 
 # --- select which stacks to run -------------------------------------------
 if ($Only) {
-    # `-Only nonsense` used to check nothing and exit 0, which reads exactly like a
-    # clean run. Naming a stack that is not here is a mistake either way.
-    foreach ($o in $Only) {
-        if (-not ($allStacks | Where-Object { $_.Stack -eq $o })) {
-            Write-Output "[WARN] -Only $o -- no such stack detected here (known: $(($script:KnownMarkers.Keys) -join ', '))"
+    # `-Only nonsense` checked nothing and exited 0, which reads exactly like a clean
+    # run: a typo'd `-Only godo` in a CI or lefthook invocation was a green pipeline.
+    # A warning was not enough -- nobody reads a warning in a passing log. This exits
+    # here rather than calling Fail because $script:Failed and Fail are both defined
+    # below, so setting the flag from here would be overwritten a moment later.
+    $missing = @($Only | Where-Object { $o = $_; -not ($allStacks | Where-Object { $_.Stack -eq $o }) })
+    if ($missing) {
+        foreach ($m in $missing) {
+            Write-Output "[FAIL] -Only $m -- no such stack detected here (known: $(($script:KnownMarkers.Keys) -join ', '))"
         }
+        exit 1
     }
     $stacks = @($stacks | Where-Object { $Only -contains $_.Stack })
 } elseif (-not $All) {
@@ -459,13 +464,20 @@ function Invoke-GodotStack($s) {
         }
     } -FailIfOutput
 
+    # Every phase below needs the Godot binary, and every one of them is full-level
+    # only -- so this return comes FIRST. The "unverifiable is not clean" rule that
+    # makes a missing cargo or buf fatal applies because those tools run fast-lane
+    # phases (`cargo fmt`, `buf lint`); the Godot binary has no fast-lane work, and
+    # failing every agent turn over a binary the turn was never going to invoke is
+    # not the same thing. Fast lane: the detection [WARN] says it is missing.
+    if (-not $Full) { return }
     $godot = Get-GodotBin
     if (-not $godot) {
-        # Same rule as cargo and node_modules: unverifiable is not the same as clean.
+        # Full level guards commits and CI, and there the binary is the whole stack.
+        # Symmetric with gdtoolkit above: both warn in the fast lane, both fail here.
         Fail 'godot: set GODOT_BIN to the Godot executable (cannot verify this stack)'
         return
     }
-    if (-not $Full) { return }
 
     # THE Godot trap: it writes script errors to STDOUT and still exits 0 for a
     # large class of them, so an exit-code-only check reports false green. Every

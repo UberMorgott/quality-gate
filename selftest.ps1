@@ -189,8 +189,26 @@ Check 'res:// scan clean once the reference is fixed' (($r.Out -notmatch 'does n
 if (Get-GodotBin) {
     Check 'godot fixture passes with a real binary' ($r.Code -eq 0) $r.Out
 } else {
-    Check 'godot without a binary fails loudly' (($r.Code -ne 0) -and ($r.Out -match 'set GODOT_BIN')) $r.Out
     Write-Output '[skip] GODOT_BIN unset -- import/test/smoke phases not exercised'
+}
+# The missing binary is fatal at the full level and a warning in the fast lane:
+# every phase that needs it is full-level only, so failing the fast lane over it
+# blocked every agent turn on a binary the turn was never going to invoke. Run
+# both levels with GODOT_BIN cleared, whether or not this machine has one.
+if (-not (Get-Command godot -ErrorAction SilentlyContinue)) {
+    $priorGodot = $env:GODOT_BIN
+    $env:GODOT_BIN = $null
+    try {
+        $fastOut = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $gdt -All 2>&1 | Out-String)
+        $fastCode = $LASTEXITCODE
+        $fullOut = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $gdt -All -Full 2>&1 | Out-String)
+        $fullCode = $LASTEXITCODE
+    } finally { $env:GODOT_BIN = $priorGodot }
+    Check 'no GODOT_BIN does not fail the fast lane' ($fastCode -eq 0) $fastOut
+    Check 'no GODOT_BIN is still said out loud in the fast lane' ($fastOut -match 'GODOT_BIN') $fastOut
+    Check 'no GODOT_BIN fails the full level' (($fullCode -ne 0) -and ($fullOut -match 'set GODOT_BIN')) $fullOut
+} else {
+    Write-Output '[skip] godot is on PATH -- the missing-binary levels cannot be exercised'
 }
 
 # 12. A directory that is not a git repository must not pass by way of "no
@@ -273,7 +291,13 @@ if ((Get-Command gdformat -ErrorAction SilentlyContinue) -and (Get-Command gdlin
 # 19. Discoverability: a flag value nobody validates and a config key nobody reads
 # are both silent no-ops that look exactly like enforcement.
 $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $go -Only 'nonsense' 2>&1 | Out-String)
-Check '-Only naming an undetected stack warns' ($out -match '\[WARN\] -Only nonsense') $out
+$onlyCode = $LASTEXITCODE
+Check '-Only naming an undetected stack is reported' ($out -match '\[FAIL\] -Only nonsense') $out
+# The half that was missing: a warning in a run that exits 0 is a green pipeline.
+Check '-Only naming an undetected stack fails the run' ($onlyCode -ne 0) "code=$onlyCode $out"
+# A real stack name must still work, or the validation would be worse than the bug.
+$out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $go -Only 'go' 2>&1 | Out-String)
+Check '-Only naming a detected stack still runs it' (($LASTEXITCODE -eq 0) -and ($out -match '\[PASS\] go')) $out
 [IO.File]::WriteAllText((Join-Path $go 'qgate.json'), '{"tools": {"nosuchtool": "1.0.0"}}')
 $r = Invoke-Gate $go
 Check 'qgate.json pinning an unknown tool warns' ($r.Out -match "pins unknown tool 'nosuchtool'") $r.Out

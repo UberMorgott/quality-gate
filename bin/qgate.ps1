@@ -77,6 +77,9 @@ switch ($cmd) {
                 'cargo' { (& cargo --version) }
                 # Prints a bare version number, which alone in the list reads as nothing.
                 'lefthook' { "lefthook $(& lefthook version)" }
+                # Prints a multi-line report; the scanner's own version is the line
+                # that matters, and it was the only tool here showing no version.
+                'govulncheck' { "govulncheck $(((& govulncheck -version 2>&1) -match 'govulncheck@') -replace '.*govulncheck@', '')" }
                 'buf' { "buf $(& buf --version)" }
                 # gdformat/gdlint already print their own name.
                 'gdformat' { (& gdformat --version) }
