@@ -165,7 +165,10 @@ function Install-Lefthook {
         if ((Get-Content $cfg -Raw) -notmatch 'qgate') {
             Write-Output '  warn:   it has no quality-gate job -- add this under pre-commit.jobs yourself:'
             Write-Output '            - name: quality-gate'
-            Write-Output '              run: qgate -All -Full'
+            # Same two rules as templates/lefthook.yml: qgate.cmd because lefthook
+            # runs jobs through Git Bash, which does not apply PATHEXT, and -Quiet
+            # because an agent pays for a hook's stdout as context on every commit.
+            Write-Output "            run: 'if command -v qgate.cmd >/dev/null 2>&1; then qgate.cmd -All -Full -Quiet; else qgate -All -Full -Quiet; fi'"
         }
     } else {
         Copy-Item (Join-Path $PSScriptRoot 'templates\lefthook.yml') $cfg
@@ -176,10 +179,13 @@ function Install-Lefthook {
     Write-Output "lefthook  -- $($out -replace "`r?`n", '; ')"
 }
 
+# -Quiet: a commit in an agent workflow is a tool call, and the hook's stdout is
+# read back into the model's context and billed. Silent on green, loud on red --
+# check.ps1 suppresses only a passing run.
 $hookBody = @'
 #!/bin/sh
 # Quality gate. Installed by quality-gate -- do not edit here.
-exec qgate -All -Full
+exec qgate -All -Full -Quiet
 '@ -replace "`r`n", "`n"
 
 # Ask git where the hooks live: in a worktree or a submodule `.git` is a FILE and
@@ -199,7 +205,7 @@ if ($NoHook) {
     # Never clobber someone else's hook; core.hooksPath is deliberately not
     # touched either -- redirecting it would disable other hooks in .git/hooks.
     Write-Output 'pre-commit-- EXISTS and is not ours, left alone. Add this line to it yourself:'
-    Write-Output '  exec qgate -All -Full'
+    Write-Output '  exec qgate -All -Full -Quiet'
 } else {
     New-Item -ItemType Directory -Path (Split-Path $hook) -Force | Out-Null
     Set-Content -Path $hook -Value $hookBody -Encoding utf8 -NoNewline

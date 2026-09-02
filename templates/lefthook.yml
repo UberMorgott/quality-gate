@@ -15,10 +15,17 @@
 # gate's path is machine-specific and cannot be committed. qgate.cmd is a bare
 # executable, so it satisfies the exit-code rule above as well; the `command -v`
 # fallback keeps this same committed file working on a POSIX runner.
+#
+# -Quiet because in an agent workflow a commit is a tool call, and a hook's stdout
+# is read back into the model's context and paid for. Measured on a three-stack
+# monorepo: 342 characters of [PASS] lines per commit, on a project whose rule is
+# to commit every change. -Quiet suppresses output only on a GREEN run -- a failure
+# still prints everything (check.ps1). CI keeps its output: that is where the
+# [PASS] lines earn their keep, which is why this is not a global default.
 pre-commit:
   jobs:
     - name: quality-gate
-      run: 'if command -v qgate.cmd >/dev/null 2>&1; then qgate.cmd -All -Full; else qgate -All -Full; fi'
+      run: 'if command -v qgate.cmd >/dev/null 2>&1; then qgate.cmd -All -Full -Quiet; else qgate -All -Full -Quiet; fi'
 
 # The agent Stop hook is deliberately NOT generated through lefthook's `ai:`
 # key. Measured on 2.1.12: the generated command is `lefthook run <hook>`, which

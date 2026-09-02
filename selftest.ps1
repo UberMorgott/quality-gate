@@ -235,6 +235,16 @@ Check 'non-git directory is checked, not skipped' (($LASTEXITCODE -ne 0) -and ($
 # where PATHEXT does not apply and a bare `qgate` exits 127, command not found.
 $lh = Get-Content (Join-Path $PSScriptRoot 'templates\lefthook.yml') -Raw
 Check 'lefthook template calls qgate.cmd' (($lh -match 'run:.*qgate\.cmd ') -and ($lh -notmatch 'tools/quality-gate')) $lh
+# A commit in an agent workflow is a tool call, so the hook's stdout is context the
+# model pays for -- measured at 342 chars of [PASS] lines per commit on a
+# three-stack monorepo. Silent on green, loud on red. CI keeps its output, which is
+# why this is a property of the generated hooks and not a global default.
+$inst = Get-Content $installer -Raw
+$gen = @([regex]::Matches($inst, '(?m)^.*qgate(\.cmd)? -All -Full.*$') | ForEach-Object { $_.Value })
+$noisy = @($gen | Where-Object { $_ -notmatch '-Quiet' })
+Check 'every generated pre-commit invocation is quiet on green' `
+    (($gen.Count -ge 3) -and ($noisy.Count -eq 0) -and ($lh -match '-All -Full -Quiet')) `
+    "found $($gen.Count), noisy: $($noisy -join ' | ')"
 
 # 14. gofmt reads a CRLF checkout as unformatted, so the .gitattributes line is a
 # prerequisite, not advice -- wire has to write it. Go repo: it is a Go rule.

@@ -92,14 +92,20 @@ qgate wire -CI                # с CI-воркфлоу (по умолчанию 
   `npm i -D eslint @eslint/js typescript-eslint eslint-plugin-vue stylelint stylelint-config-standard-scss stylelint-config-recommended-vue`.
   Пакеты не поставлены — бинарь линтера отсутствует — фаза падает громко, молчаливого пропуска нет;
 - `lefthook.yml` + `lefthook install`, если lefthook в PATH;
-  иначе git-хук `pre-commit`, запускающий `exec qgate -All -Full`. В worktree и подмодулях
+  иначе git-хук `pre-commit`, запускающий `exec qgate -All -Full -Quiet`. В worktree и подмодулях
   путь к хукам берётся у git (`git rev-parse --git-path hooks`). Если в репозитории уже лежит
   чужой `lefthook.yml` без задания quality-gate — громкое предупреждение с точными строками,
   которые надо вставить. Шаблон:
-  `run: 'if command -v qgate.cmd >/dev/null 2>&1; then qgate.cmd -All -Full; else qgate -All -Full; fi'`
+  `run: 'if command -v qgate.cmd >/dev/null 2>&1; then qgate.cmd -All -Full -Quiet; else qgate -All -Full -Quiet; fi'`
   — lefthook на Windows гоняет задания через Git Bash, где PATHEXT не применяется и голый `qgate`
   даёт «command not found» (в `bin/` лежат `qgate.cmd` и `qgate.ps1`, файла без расширения нет);
-  фолбэк на `qgate` оставляет тот же файл рабочим на POSIX-раннере;
+  фолбэк на `qgate` оставляет тот же файл рабочим на POSIX-раннере.
+  `-Quiet` — потому что в агентском потоке коммит делается тул-коллом, и stdout хука возвращается
+  в контекст модели, где за него платят: замер на трёхстековом монорепо — 342 символа `[PASS]`
+  на каждый коммит, при правиле «коммит на каждое изменение». Подавляется **только зелёный**
+  прогон, провал печатается целиком (замер: green 0 символов, red 142 с полным диагнозом).
+  В CI `-Quiet` не ставится — там строки `[PASS]` как раз и нужны, поэтому это свойство
+  генерируемых хуков, а не глобальный дефолт;
 - `.claude/settings.json` — **мержится**, не заменяется — с Stop-хуком, вызывающим
   `qgate stop-hook`;
 - маркированный блок `<!-- quality-gate --> ... <!-- /quality-gate -->` в начале `AGENTS.md` и
@@ -448,7 +454,7 @@ godot без бинаря, сканер `res://` на битой ссылке и
 свою причину и не сваливает её на proto, настоящая правка `.proto` по-прежнему расширяет прогон,
 правка tracked-файла сужается до своего стека, и Stop-хук блокирует нарушение, закоммиченное
 при чистом дереве.
-55 проверок (часть уходит в `[skip]`, когда нет `GODOT_BIN` или gdtoolkit). Временный каталог самопроверки уникален
+56 проверок (часть уходит в `[skip]`, когда нет `GODOT_BIN` или gdtoolkit). Временный каталог самопроверки уникален
 на прогон (два параллельных прогона не удаляют фикстуры друг друга). Гейт, который никто не
 видел красным, не считается работающим.
 
