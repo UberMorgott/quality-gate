@@ -2,6 +2,15 @@
 # fixed. A gate nobody has seen fail is not known to work.
 #
 #   pwsh -NoProfile -File selftest.ps1
+#
+# Adding a check: assert the REASON, not only the outcome. Five defects in a row
+# here were the gate doing something defensible and printing a reason that was not
+# the reason -- right exit code, right stacks, wrong explanation -- and every one of
+# them satisfied a suite that asserted only pass/fail. So a negative check states
+# three things: the outcome, that the reason which applied was printed (-match), and
+# that the reason which did NOT apply is absent (-notmatch). The third is the cheap
+# one and the one that was missing. Assert absence too: "narrowed to the right
+# stack" is proved by the other stacks NOT running. See PLAYBOOK.md 0.1.
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'gate\detect.ps1')
 
