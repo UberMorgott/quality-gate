@@ -156,6 +156,12 @@ function Set-AgentDoc([string]$name) {
     Write-Output "$($name.PadRight(9)) -> $file"
 }
 
+# One source of truth per generated artifact: the templates. Anything the
+# installer prints as advice is quoted from the file it would have written.
+$script:LefthookTemplate = Join-Path $PSScriptRoot 'templates\lefthook.yml'
+$script:LefthookRun = (Select-String -Path $script:LefthookTemplate -Pattern '^\s*run:' |
+    Select-Object -First 1).Line.Trim()
+
 function Install-Lefthook {
     $cfg = Join-Path $root 'lefthook.yml'
     if (Test-Path $cfg) {
@@ -165,10 +171,10 @@ function Install-Lefthook {
         if ((Get-Content $cfg -Raw) -notmatch 'qgate') {
             Write-Output '  warn:   it has no quality-gate job -- add this under pre-commit.jobs yourself:'
             Write-Output '            - name: quality-gate'
-            # Same two rules as templates/lefthook.yml: qgate.cmd because lefthook
-            # runs jobs through Git Bash, which does not apply PATHEXT, and -Quiet
-            # because an agent pays for a hook's stdout as context on every commit.
-            Write-Output "            run: 'if command -v qgate.cmd >/dev/null 2>&1; then qgate.cmd -All -Full -Quiet; else qgate -All -Full -Quiet; fi'"
+            # Quoted from the template, never retyped: the advice and the generated
+            # file drifted apart once already, and the pasted copy was the broken
+            # one -- it said bare `qgate`, which exits 127 under a Git shell.
+            Write-Output "            $($script:LefthookRun)"
         }
     } else {
         Copy-Item (Join-Path $PSScriptRoot 'templates\lefthook.yml') $cfg
@@ -179,14 +185,10 @@ function Install-Lefthook {
     Write-Output "lefthook  -- $($out -replace "`r?`n", '; ')"
 }
 
-# -Quiet: a commit in an agent workflow is a tool call, and the hook's stdout is
-# read back into the model's context and billed. Silent on green, loud on red --
-# check.ps1 suppresses only a passing run.
-$hookBody = @'
-#!/bin/sh
-# Quality gate. Installed by quality-gate -- do not edit here.
-exec qgate -All -Full -Quiet
-'@ -replace "`r`n", "`n"
+# The hook body lives in templates/pre-commit rather than in a here-string, so the
+# self-test can execute the real thing through sh. It was a string in this file for
+# as long as it was wrong, and a string in this file is exactly what no test runs.
+$hookBody = ([IO.File]::ReadAllText((Join-Path $PSScriptRoot 'templates\pre-commit'))) -replace "`r`n", "`n"
 
 # Ask git where the hooks live: in a worktree or a submodule `.git` is a FILE and
 # `<root>\.git\hooks` does not exist at all.
@@ -204,8 +206,10 @@ if ($NoHook) {
 } elseif ((Test-Path $hook) -and -not ((Get-Content $hook -Raw) -match 'quality-gate')) {
     # Never clobber someone else's hook; core.hooksPath is deliberately not
     # touched either -- redirecting it would disable other hooks in .git/hooks.
-    Write-Output 'pre-commit-- EXISTS and is not ours, left alone. Add this line to it yourself:'
-    Write-Output '  exec qgate -All -Full -Quiet'
+    Write-Output 'pre-commit-- EXISTS and is not ours, left alone. Add this to it yourself:'
+    # Quoted from templates/pre-commit for the same reason as the lefthook advice.
+    ($hookBody -split "`n" | Where-Object { $_ -and $_ -notmatch '^\s*#' }) |
+        ForEach-Object { Write-Output "  $_" }
 } else {
     New-Item -ItemType Directory -Path (Split-Path $hook) -Force | Out-Null
     Set-Content -Path $hook -Value $hookBody -Encoding utf8 -NoNewline

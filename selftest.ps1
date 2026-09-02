@@ -239,12 +239,13 @@ Check 'lefthook template calls qgate.cmd' (($lh -match 'run:.*qgate\.cmd ') -and
 # model pays for -- measured at 342 chars of [PASS] lines per commit on a
 # three-stack monorepo. Silent on green, loud on red. CI keeps its output, which is
 # why this is a property of the generated hooks and not a global default.
-$inst = Get-Content $installer -Raw
-$gen = @([regex]::Matches($inst, '(?m)^.*qgate(\.cmd)? -All -Full.*$') | ForEach-Object { $_.Value })
-$noisy = @($gen | Where-Object { $_ -notmatch '-Quiet' })
+$hookTpl = Get-Content (Join-Path $PSScriptRoot 'templates\pre-commit') -Raw
+$invocations = @([regex]::Matches("$lh`n$hookTpl", '(?m)^(?!\s*#).*qgate(\.cmd)? -All -Full.*$') |
+    ForEach-Object { $_.Value })
+$noisy = @($invocations | Where-Object { $_ -notmatch '-Quiet' })
 Check 'every generated pre-commit invocation is quiet on green' `
-    (($gen.Count -ge 3) -and ($noisy.Count -eq 0) -and ($lh -match '-All -Full -Quiet')) `
-    "found $($gen.Count), noisy: $($noisy -join ' | ')"
+    (($invocations.Count -ge 3) -and ($noisy.Count -eq 0)) `
+    "found $($invocations.Count), noisy: $($noisy -join ' | ')"
 
 # 14. gofmt reads a CRLF checkout as unformatted, so the .gitattributes line is a
 # prerequisite, not advice -- wire has to write it. Go repo: it is a Go rule.
@@ -408,6 +409,41 @@ git -C $track -c user.email=selftest@local -c user.name=selftest commit -qm init
 Set-GoFile (Join-Path $track 'server\main.go') ((Get-Content (Join-Path $track 'server\main.go') -Raw) + "`n// a tracked edit`n")
 $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $track 2>&1 | Out-String)
 Check 'a tracked edit narrows to its own stack' (($out -match '\[PASS\] go server/') -and ($out -notmatch 'proto')) $out
+
+# 23. The generated pre-commit hook, executed the way git executes it. Nothing in
+# this suite had ever run one: the checks above assert on the TEXT of the template,
+# and the shipped hook was text that read correctly and failed. It probed with
+# `command -v qgate.cmd`, which is false under sh.exe even though qgate.cmd runs
+# there, so the else branch took a bare `qgate`, exited 127 and BLOCKED the commit.
+# `lefthook run pre-commit` typed in a shell passed the whole time, because that
+# path goes through bash. Only a real `git commit` distinguishes them.
+$genRepo = Join-Path $tmp 'gencommit'
+New-Item -ItemType Directory -Path $genRepo | Out-Null
+Copy-Item (Join-Path $PSScriptRoot 'testdata\proto-fixture') (Join-Path $genRepo 'schema') -Recurse
+git -C $genRepo init -q 2>$null
+$shExe = (Get-Command sh.exe -ErrorAction SilentlyContinue).Source
+if ($shExe) {
+    Push-Location $genRepo
+    try {
+        & $shExe (Join-Path $PSScriptRoot 'templates\pre-commit') *> $null
+        $shCode = $LASTEXITCODE
+    } finally { Pop-Location }
+    Check 'the generated hook body runs under sh, the shell git uses' ($shCode -eq 0) "code=$shCode"
+} else {
+    Write-Output '[skip] no sh.exe -- the generated hook body cannot be run as git would'
+}
+& pwsh -NoProfile -File $installer -Target $genRepo *> $null
+git -C $genRepo add -A 2>$null
+git -C $genRepo -c user.email=selftest@local -c user.name=selftest commit -qm 'clean' *> $null
+$commitCode = $LASTEXITCODE
+Check 'a real git commit passes the generated hook on a clean tree' ($commitCode -eq 0) "code=$commitCode"
+# ...and is refused when the gate fails, which is the entire job of a pre-commit.
+$pfx = Join-Path $genRepo 'schema\example\v1\greeting.proto'
+[IO.File]::WriteAllText($pfx, ([IO.File]::ReadAllText($pfx).Replace('string text = 1;', 'string Text = 1;')))
+git -C $genRepo add -A 2>$null
+git -C $genRepo -c user.email=selftest@local -c user.name=selftest commit -qm 'violation' *> $null
+$refuseCode = $LASTEXITCODE
+Check 'a real git commit is refused when the gate fails' ($refuseCode -ne 0) "code=$refuseCode"
 
 Remove-Item $tmp -Recurse -Force
 if ($script:Fails) { Write-Output "`n$($script:Fails) check(s) failed"; exit 1 }

@@ -1,0 +1,31 @@
+#!/bin/sh
+# Quality gate. Installed by quality-gate -- do not edit here.
+#
+# git runs this through sh.exe on Windows, and `command -v qgate.cmd` is FALSE
+# there even though `qgate.cmd` runs fine -- command -v does not apply the
+# executable resolution that exec does. Measured, same machine, same PATH:
+#
+#   sh.exe   -c 'command -v qgate.cmd'  -> 1   (not found)
+#   sh.exe   -c 'qgate.cmd where'       -> 0   (runs)
+#   bash.exe -c 'command -v qgate.cmd'  -> 0   /e/DEV/quality-gate/bin/qgate.cmd
+#
+# So a command -v probe sends Windows down the POSIX branch, and a bare `qgate`
+# exits 127 there because bin/ holds qgate.cmd and qgate.ps1 and no extensionless
+# file. A non-zero pre-commit aborts the commit, so that is not a skipped gate --
+# it is a repository where every commit fails. Switch on the platform instead.
+#
+# `uname -o` rather than `uname -s`: it is one word, Msys, under both
+# Git\usr\bin\sh.exe and Git\bin\bash.exe, while `uname -s` differs between them
+# (MSYS_NT vs MINGW64_NT) and would need an alternation. The same line then works
+# verbatim in templates/lefthook.yml, which strips quotes out of its `run:` string
+# and so cannot carry a pattern list at all. On a POSIX box `uname -o` prints
+# something else or fails, and either way the else branch is the right one.
+#
+# -Quiet: a commit in an agent workflow is a tool call, so this output is read
+# back into the model's context and billed. Silent on a green run, and the full
+# report on a red one.
+if uname -o 2>/dev/null | grep -q Msys; then
+  exec qgate.cmd -All -Full -Quiet
+else
+  exec qgate -All -Full -Quiet
+fi
