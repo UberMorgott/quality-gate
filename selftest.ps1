@@ -20,7 +20,14 @@ $tmp = Join-Path ([IO.Path]::GetTempPath()) "quality-gate-selftest-$([guid]::New
 New-Item -ItemType Directory -Path $tmp | Out-Null
 
 $script:Fails = 0
+# Counted, because the last line claiming "all checks passed" is the only thing
+# anybody reads, and a suite that silently stopped running half of them would say
+# exactly the same words. The number also makes the one quoted in README verifiable
+# output rather than prose. It moves with the machine: checks whose tool is absent
+# report [skip] and are never counted.
+$script:Total = 0
 function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
+    $script:Total++
     if ($Ok) { Write-Output "[ok]   $Name" }
     else { Write-Output "[FAIL] $Name $Detail"; $script:Fails++ }
 }
@@ -541,5 +548,5 @@ Check '-All only flags an unimplemented stack, never fails on it' `
     (($LASTEXITCODE -eq 0) -and ($out -match '\[SKIP\] python .*not implemented')) $out
 
 Remove-Item $tmp -Recurse -Force
-if ($script:Fails) { Write-Output "`n$($script:Fails) check(s) failed"; exit 1 }
-Write-Output "`nall checks passed"
+if ($script:Fails) { Write-Output "`n$($script:Fails) of $($script:Total) check(s) failed"; exit 1 }
+Write-Output "`nall checks passed ($($script:Total)/$($script:Total))"
