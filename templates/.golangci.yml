@@ -107,8 +107,17 @@ linters:
     # Code that cannot be fixed (unfinished one-off tools, gitignored scratch
     # dirs) belongs out of the linter's scope EXPLICITLY, with the reason next to
     # it -- not silenced rule by rule. It stays in `go build ./...`.
-    # paths:
-    #   - '^cmd/scratch/'
+    paths:
+      # Third-party Go inside an npm tree. `flatted` (pulled in transitively by
+      # eslint) ships a Go implementation of itself, `golangci-lint run ./...`
+      # from the module root walks straight into it, and a go+web repo went red
+      # on code nobody here wrote and `npm i` rewrites at will. Not an edge case:
+      # a multi-stack repo is what this gate is for.
+      - 'node_modules/'
+      # Vendored dependencies are somebody else's code too, and re-vendoring
+      # would undo any fix.
+      - 'vendor/'
+      # - '^cmd/scratch/'
     rules:
       # ---------------------------------------------------------------------
       # ADOPTING THIS ON AN EXISTING CODEBASE

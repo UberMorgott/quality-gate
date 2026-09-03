@@ -1,7 +1,10 @@
 # Wires the quality gate into a repository. Idempotent -- re-run after `qgate update`.
 #
 #   qgate wire                       # current repo
-#   qgate wire -Target C:\path\repo
+#   qgate wire -Target C:\path\repo  # -Root is accepted too: the gate's own flag
+#                                    # for "which repository" is -Root everywhere
+#                                    # else, and `wire -Root <path>` used to die
+#                                    # with a raw PowerShell parameter error.
 #
 # Nothing is copied into the repo except configuration: the gate itself stays in
 # one place per machine and is reached through `qgate` on PATH. What lands in the
@@ -10,7 +13,7 @@
 # optionally a CI workflow. Existing files are never overwritten silently.
 [CmdletBinding()]
 param(
-    [string]$Target = (Get-Location).Path,
+    [Alias('Root')][string]$Target = (Get-Location).Path,
     [switch]$NoHook,
     [switch]$CI      # write .github/workflows/quality-gate.yml (opt-in)
 )

@@ -127,7 +127,7 @@ web-стек, у которого все фазы условны, `-Only` на �
 
 ```powershell
 qgate wire                    # текущий репозиторий
-qgate wire -Target C:\repo    # другой репозиторий
+qgate wire -Target C:\repo    # другой репозиторий (-Root -- синоним, как у остальных команд)
 qgate wire -NoHook            # без git-хука
 qgate wire -CI                # с CI-воркфлоу (по умолчанию не создаётся)
 ```
@@ -135,7 +135,14 @@ qgate wire -CI                # с CI-воркфлоу (по умолчанию 
 Скрипты в целевой репозиторий **не копируются**. `qgate wire` записывает только конфигурацию:
 
 - `*.go text eol=lf` в `.gitattributes` (дописывает сам, раньше только советовал);
-- `.golangci.yml` рядом с каждым `go.mod`, у которого конфига нет (существующий не трогает);
+- `.golangci.yml` рядом с каждым `go.mod`, у которого конфига нет (существующий не трогает).
+  В шаблоне из scope линтера исключены `node_modules/` и `vendor/`: npm-пакеты возят внутри себя
+  Go (`flatted`, который тянет за собой eslint, содержит реализацию на Go), `golangci-lint run
+  ./...` из корня модуля заходит туда, и go+web-репозиторий краснел на чужом коде, который
+  переписывает `npm i`. Для репозитория без конфига это не лечится — гейт на такой ровно и
+  предупреждает `no .golangci.yml -- running golangci-lint on its defaults`. Фазы `gofmt`,
+  `go build`/`vet`/`test` эти файлы по-прежнему видят: у go-тулчейна нет исключений по каталогам;
+
 - `templates/eslint.config.js` и `templates/.stylelintrc.json` рядом с `package.json`, если своих
   нет (существующий не трогает — `kept existing eslint config`). Печатает строку установки:
   `npm i -D eslint @eslint/js typescript-eslint eslint-plugin-vue stylelint stylelint-config-standard-scss stylelint-config-recommended-vue`.

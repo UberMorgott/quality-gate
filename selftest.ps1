@@ -679,6 +679,48 @@ $out = (& pwsh -NoProfile -File $gate -Root $bare -Full 2>&1 | Out-String)
 Check 'a repo with no marker file is still skipped, not failed' `
     (($LASTEXITCODE -eq 0) -and ($out -match '\[SKIP\] no known stack found')) $out
 
+# 32. Third-party Go inside an npm tree. `golangci-lint run ./...` from the module
+# root walks into web/node_modules -- npm packages ship .go files (eslint pulls in
+# `flatted`, which contains a Go implementation) -- and a go+web repo went red on
+# code nobody there wrote. The shipped .golangci.yml has to exclude it, and the
+# control below proves the fixture really does trip the linter.
+$nm = Join-Path $tmp 'nodemods'
+Copy-Item (Join-Path $PSScriptRoot 'testdata\go-fixture') $nm -Recurse
+Copy-Item (Join-Path $PSScriptRoot 'templates\.golangci.yml') $nm
+$thirdParty = @'
+package thirdparty
+
+// Has reports whether s contains v.
+func Has(s []string, v string) bool {
+	for _, x := range s {
+		if x == v {
+			return true
+		}
+	}
+	return false
+}
+'@
+New-Item -ItemType Directory -Path (Join-Path $nm 'own') | Out-Null
+Set-GoFile (Join-Path $nm 'own\has.go') $thirdParty
+$r = Invoke-Gate $nm
+Check 'the control file really is a linter finding' `
+    (($r.Code -ne 0) -and ($r.Out -match 'slicescontains')) $r.Out
+Remove-Item (Join-Path $nm 'own') -Recurse -Force
+$vendored = Join-Path $nm 'web\node_modules\flattish'
+New-Item -ItemType Directory -Path $vendored -Force | Out-Null
+Set-GoFile (Join-Path $vendored 'has.go') $thirdParty
+$r = Invoke-Gate $nm
+Check 'the shipped config keeps the linter out of node_modules' `
+    (($r.Code -eq 0) -and ($r.Out -notmatch 'slicescontains')) $r.Out
+
+# 33. `wire` takes the gate's own name for "which repository". -Root is documented
+# under the gate flags and wire took only -Target, so `qgate wire -Root <path>` died
+# with a raw "A parameter cannot be found that matches parameter name 'Root'".
+git -C $nm init -q 2>$null
+$wireRoot = (& pwsh -NoProfile -File $installer -Root $nm -NoHook 2>&1 | Out-String)
+Check 'wire accepts -Root as the repository to wire' `
+    (($LASTEXITCODE -eq 0) -and ($wireRoot -match [regex]::Escape($nm))) "code=$LASTEXITCODE $wireRoot"
+
 Remove-Item $tmp -Recurse -Force
 if ($script:Fails) { Write-Output "`n$($script:Fails) of $($script:Total) check(s) failed"; exit 1 }
 Write-Output "`nall checks passed ($($script:Total)/$($script:Total))"
