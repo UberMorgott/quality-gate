@@ -56,19 +56,32 @@ function Get-PathKey([string]$Text) {
 # Compared on major.minor, the Go LANGUAGE version and the same granularity
 # golangci-lint itself compares on: a tool built with go1.27.0 against a module
 # targeting go1.27.1 is fine and must not be reported.
-function Get-GoBuiltWith([string]$Exe, [string[]]$VersionArgs) {
-    # `golangci-lint --version` -> "... built with go1.26.2 from ..."
-    # `govulncheck -version`    -> first line "Go: go1.26.2"
-    $txt = (& $Exe @VersionArgs 2>&1 | Out-String)
-    if ($txt -match '(?:built with |Go: )go(\d+\.\d+)') { $Matches[1] }
+function Get-GoBuiltWith([string]$Exe) {
+    # `go version -m <exe>` -> first line "C:\...\govulncheck.exe: go1.27.1", read out
+    # of the binary's own build info. The tools' own --version output cannot be used
+    # for this: `govulncheck -version` prints a `Go:` line that is the toolchain
+    # ACTIVE IN THE CURRENT DIRECTORY, not the one that built the binary -- the same
+    # binary reports go1.26.2 from a plain directory and go1.27.1 inside a module
+    # whose go directive pulls a newer toolchain through GOTOOLCHAIN=auto. Reading it
+    # would have compared the module against itself and never fired.
+    $src = (Get-Command $Exe -ErrorAction SilentlyContinue).Source
+    if (-not $src) { return }
+    $first = (& go version -m $src 2>$null | Select-Object -First 1)
+    # Full version, patch included: `qgate where` exists to show exactly which binary
+    # is in use, and a pinned qgate.json is a patch-level statement. The comparison
+    # below truncates to major.minor itself.
+    if ($first -match ':\s+go(\d+\.\d+(?:\.\d+)?)') { $Matches[1] }
 }
 
-function Test-GoToolStale([string]$Exe, [string[]]$VersionArgs, [string]$ModuleGo, [string]$Install) {
+function Test-GoToolStale([string]$Exe, [string]$ModuleGo, [string]$Install) {
     if (-not $ModuleGo) { return }
-    $built = Get-GoBuiltWith $Exe $VersionArgs
-    # An unparsable --version is not evidence of anything; the phase runs as before.
+    $built = Get-GoBuiltWith $Exe
+    # Unreadable build info is not evidence of anything; the phase runs as before.
     if (-not $built) { return }
-    if ([version]$built -ge [version]$ModuleGo) { return }
+    # major.minor on both sides: a go1.27.0 binary against a `go 1.27.1` module is
+    # fine, and reporting it would be a false verdict on every patch release.
+    $lang = { param($v) (($v -split '\.')[0, 1] -join '.') }
+    if ([version](& $lang $built) -ge [version](& $lang $ModuleGo)) { return }
     "$Exe was built with go$built, this module targets go$ModuleGo -- rebuild it: $Install"
 }
 

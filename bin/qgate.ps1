@@ -89,11 +89,12 @@ switch ($cmd) {
                 # The Go it was BUILT with matters just as much: a binary older than
                 # the module's go directive fails with fifteen lines blaming the
                 # user's own files, and this is the command that has to make that
-                # visible. golangci-lint says "built with goX.Y" in its own line
-                # already; govulncheck hides it in a `Go:` line of its own.
+                # visible. NOT from its own `Go:` line -- that one reports the
+                # toolchain active in the current directory, so the same binary reads
+                # go1.26.2 here and go1.27.1 inside a module that pulls a newer one.
                 'govulncheck' {
                     $gv = (& govulncheck -version 2>&1)
-                    "govulncheck $(($gv -match 'govulncheck@') -replace '.*govulncheck@', '') built with $((($gv -match '^Go: ') -replace '^Go: ', '') | Select-Object -First 1)"
+                    "govulncheck $(($gv -match 'govulncheck@') -replace '.*govulncheck@', '') built with go$(Get-GoBuiltWith 'govulncheck')"
                 }
                 'buf' { "buf $(& buf --version)" }
                 # gdformat/gdlint already print their own name.

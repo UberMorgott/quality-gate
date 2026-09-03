@@ -687,15 +687,31 @@ Check 'a repo with no marker file is still skipped, not failed' `
 # either tool runs -- and the machine's own tool versions are not a fixed point.
 $installLine = 'go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest'
 Check 'the Go a tool was built with is readable' `
-    ((Get-GoBuiltWith 'golangci-lint' @('--version')) -match '^\d+\.\d+$')
-$stale = Test-GoToolStale 'golangci-lint' @('--version') '99.0' $installLine
+    ((Get-GoBuiltWith 'golangci-lint') -match '^\d+\.\d+(\.\d+)?$')
+# Build info, never the tool's own version output: `govulncheck -version` prints a
+# `Go:` line that is the toolchain active in the CURRENT DIRECTORY, so the same binary
+# reads go1.26.2 from a plain directory and go1.27.1 inside a module whose go
+# directive pulls a newer toolchain. Comparing THAT against the module's directive
+# compares the module with itself and can never fire. The number has to come out of
+# the binary, and this check reads it independently to say so -- from inside a module,
+# which is where every gate phase runs.
+$vulnExe = (Get-Command govulncheck -ErrorAction SilentlyContinue).Source
+if ($vulnExe) {
+    $truth = if (((& go version -m $vulnExe) | Select-Object -First 1) -match ':\s+go(\d+\.\d+(?:\.\d+)?)') { $Matches[1] }
+    Push-Location $go
+    $inModule = Get-GoBuiltWith 'govulncheck'
+    Pop-Location
+    Check 'built-with is read from the binary, not from its own version output' `
+        (($truth) -and ($inModule -eq $truth)) "binary=$truth read=$inModule"
+}
+$stale = Test-GoToolStale 'golangci-lint' '99.0' $installLine
 Check 'a tool older than the go directive is named, with its reinstall line' `
     (($stale -match 'built with go\d+\.\d+') -and ($stale -match 'targets go99\.0') -and ($stale -match [regex]::Escape($installLine))) $stale
 Check 'a tool newer than the go directive is not reported' `
-    ($null -eq (Test-GoToolStale 'golangci-lint' @('--version') '1.0' $installLine)) `
-    (Test-GoToolStale 'golangci-lint' @('--version') '1.0' $installLine)
+    ($null -eq (Test-GoToolStale 'golangci-lint' '1.0' $installLine)) `
+    (Test-GoToolStale 'golangci-lint' '1.0' $installLine)
 Check 'a module with no go directive is not a staleness verdict' `
-    ($null -eq (Test-GoToolStale 'golangci-lint' @('--version') '' $installLine))
+    ($null -eq (Test-GoToolStale 'golangci-lint' '' $installLine))
 
 # 33. Third-party Go inside an npm tree. `golangci-lint run ./...` from the module
 # root walks into web/node_modules -- npm packages ship .go files (eslint pulls in

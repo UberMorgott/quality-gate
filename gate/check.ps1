@@ -290,7 +290,7 @@ function Invoke-GoStack($s) {
     # version".
     $modGo = if ((Get-Content (Join-Path $s.Dir 'go.mod') -Raw) -match '(?m)^go\s+(\d+\.\d+)') { $Matches[1] }
     if (Have 'golangci-lint') {
-        $stale = Test-GoToolStale 'golangci-lint' @('--version') $modGo `
+        $stale = Test-GoToolStale 'golangci-lint' $modGo `
             'go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest'
         if ($stale) { Fail $stale }
         # No issue caps: a capped report lies about the totals, so fixing the
@@ -333,7 +333,7 @@ function Invoke-GoStack($s) {
     # turn should pay for that.
     if ($Full) {
         if (Have 'govulncheck') {
-            $stale = Test-GoToolStale 'govulncheck' @('-version') $modGo `
+            $stale = Test-GoToolStale 'govulncheck' $modGo `
                 'go install golang.org/x/vuln/cmd/govulncheck@latest'
             # Fail, not Phase: a stale binary here reports "package requires newer Go
             # version" once per package of the user's own code. Phase would print all
