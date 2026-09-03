@@ -86,7 +86,15 @@ switch ($cmd) {
                 'lefthook' { "lefthook $(& lefthook version)" }
                 # Prints a multi-line report; the scanner's own version is the line
                 # that matters, and it was the only tool here showing no version.
-                'govulncheck' { "govulncheck $(((& govulncheck -version 2>&1) -match 'govulncheck@') -replace '.*govulncheck@', '')" }
+                # The Go it was BUILT with matters just as much: a binary older than
+                # the module's go directive fails with fifteen lines blaming the
+                # user's own files, and this is the command that has to make that
+                # visible. golangci-lint says "built with goX.Y" in its own line
+                # already; govulncheck hides it in a `Go:` line of its own.
+                'govulncheck' {
+                    $gv = (& govulncheck -version 2>&1)
+                    "govulncheck $(($gv -match 'govulncheck@') -replace '.*govulncheck@', '') built with $((($gv -match '^Go: ') -replace '^Go: ', '') | Select-Object -First 1)"
+                }
                 'buf' { "buf $(& buf --version)" }
                 # gdformat/gdlint already print their own name.
                 'gdformat' { (& gdformat --version) }

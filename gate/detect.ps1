@@ -43,6 +43,35 @@ function Get-PathKey([string]$Text) {
 
 # The Godot editor binary is almost never on PATH on Windows (no installer, no
 # stable name), so GODOT_BIN is the primary answer and PATH the fallback.
+# A tool binary built by an older Go than the module targets fails, but never with
+# the one fact that explains it. golangci-lint refuses to load its own config
+# ("the Go language version used to build golangci-lint is lower than the targeted
+# Go version"), and govulncheck blames every file in the repo plus four lines inside
+# the standard library -- fifteen lines pointing at the user's own code when the whole
+# truth is "this binary is older than the toolchain". Both are one `go install` away
+# and neither says so. The gate's own full level is what pushes people to bump the go
+# directive in the first place (govulncheck reports stdlib CVEs), so the gate owes
+# them the reason for what the bump then breaks.
+#
+# Compared on major.minor, the Go LANGUAGE version and the same granularity
+# golangci-lint itself compares on: a tool built with go1.27.0 against a module
+# targeting go1.27.1 is fine and must not be reported.
+function Get-GoBuiltWith([string]$Exe, [string[]]$VersionArgs) {
+    # `golangci-lint --version` -> "... built with go1.26.2 from ..."
+    # `govulncheck -version`    -> first line "Go: go1.26.2"
+    $txt = (& $Exe @VersionArgs 2>&1 | Out-String)
+    if ($txt -match '(?:built with |Go: )go(\d+\.\d+)') { $Matches[1] }
+}
+
+function Test-GoToolStale([string]$Exe, [string[]]$VersionArgs, [string]$ModuleGo, [string]$Install) {
+    if (-not $ModuleGo) { return }
+    $built = Get-GoBuiltWith $Exe $VersionArgs
+    # An unparsable --version is not evidence of anything; the phase runs as before.
+    if (-not $built) { return }
+    if ([version]$built -ge [version]$ModuleGo) { return }
+    "$Exe was built with go$built, this module targets go$ModuleGo -- rebuild it: $Install"
+}
+
 function Get-GodotBin {
     if ($env:GODOT_BIN -and (Test-Path $env:GODOT_BIN)) { return $env:GODOT_BIN }
     $cmd = Get-Command godot -ErrorAction SilentlyContinue

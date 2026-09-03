@@ -679,7 +679,25 @@ $out = (& pwsh -NoProfile -File $gate -Root $bare -Full 2>&1 | Out-String)
 Check 'a repo with no marker file is still skipped, not failed' `
     (($LASTEXITCODE -eq 0) -and ($out -match '\[SKIP\] no known stack found')) $out
 
-# 32. Third-party Go inside an npm tree. `golangci-lint run ./...` from the module
+# 32. A tool binary older than the module's go directive. Both failures are opaque:
+# golangci-lint refuses to load its config, govulncheck names every file in the repo
+# and four more inside the standard library. The verdict has to name the binary and
+# the `go install` line instead. Driven through the helper rather than a fixture,
+# because a go.mod the local toolchain cannot build fails at `go build` long before
+# either tool runs -- and the machine's own tool versions are not a fixed point.
+$installLine = 'go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest'
+Check 'the Go a tool was built with is readable' `
+    ((Get-GoBuiltWith 'golangci-lint' @('--version')) -match '^\d+\.\d+$')
+$stale = Test-GoToolStale 'golangci-lint' @('--version') '99.0' $installLine
+Check 'a tool older than the go directive is named, with its reinstall line' `
+    (($stale -match 'built with go\d+\.\d+') -and ($stale -match 'targets go99\.0') -and ($stale -match [regex]::Escape($installLine))) $stale
+Check 'a tool newer than the go directive is not reported' `
+    ($null -eq (Test-GoToolStale 'golangci-lint' @('--version') '1.0' $installLine)) `
+    (Test-GoToolStale 'golangci-lint' @('--version') '1.0' $installLine)
+Check 'a module with no go directive is not a staleness verdict' `
+    ($null -eq (Test-GoToolStale 'golangci-lint' @('--version') '' $installLine))
+
+# 33. Third-party Go inside an npm tree. `golangci-lint run ./...` from the module
 # root walks into web/node_modules -- npm packages ship .go files (eslint pulls in
 # `flatted`, which contains a Go implementation) -- and a go+web repo went red on
 # code nobody there wrote. The shipped .golangci.yml has to exclude it, and the
@@ -713,7 +731,7 @@ $r = Invoke-Gate $nm
 Check 'the shipped config keeps the linter out of node_modules' `
     (($r.Code -eq 0) -and ($r.Out -notmatch 'slicescontains')) $r.Out
 
-# 33. `wire` takes the gate's own name for "which repository". -Root is documented
+# 34. `wire` takes the gate's own name for "which repository". -Root is documented
 # under the gate flags and wire took only -Target, so `qgate wire -Root <path>` died
 # with a raw "A parameter cannot be found that matches parameter name 'Root'".
 git -C $nm init -q 2>$null
