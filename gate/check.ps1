@@ -31,16 +31,25 @@ $ErrorActionPreference = 'Continue'
 . (Join-Path $PSScriptRoot 'detect.ps1')
 
 # --- the command line ------------------------------------------------------
-if ($Extra) {
-    Write-Output "[FAIL] unexpected argument(s): $($Extra -join ' ') -- several stacks are ONE value: -Only go,web"
-    exit 1
-}
 # `if ($Only)` was a truthiness test, and PowerShell reads an empty value as absence
 # (PLAYBOOK.md 0.1): `-Only ''` bound an empty string, tested false, and silently
 # degraded to "no filter at all" -- the run widened to every stack and explained
 # itself with a rule about paths instead of with the flag it had been handed. An
 # explicitly passed -Only is now asked of $PSBoundParameters, never of the value.
 $onlyGiven = $PSBoundParameters.ContainsKey('Only')
+# PowerShell parses a bare `-Only go,web` as an ARRAY, and the qgate shim flattens it
+# back onto the child command line as `-Only go web`: the help text's own example
+# landed here as a stray `web`, and the error then offered that same failing spelling
+# as the remedy. Stack names after -Only are its value, whatever the shell did to the
+# comma. Anything else is still the stray argument that used to bind to -Baseline.
+if ($Extra) {
+    $stray = @(if ($onlyGiven) { $Extra | Where-Object { $_ -notin $script:KnownMarkers.Keys } } else { $Extra })
+    if ($stray) {
+        Write-Output "[FAIL] unexpected argument(s): $($stray -join ' ') -- several stacks are ONE value: -Only `"go,web`""
+        exit 1
+    }
+    $Only = @($Only) + $Extra
+}
 if ($onlyGiven) {
     # `-Only go,web` arrives as one string through the .cmd shim and as two elements
     # from PowerShell; splitting here makes both spellings mean the same thing.
@@ -596,7 +605,11 @@ foreach ($s in $stacks) {
         $report += "[SKIP] $label ($($s.Marker)) -- $($s.Warn)"
         continue
     }
-    if ($script:Failed) { break }
+    # Fail-fast across stacks, but never in silence: `break` ended the loop and the
+    # report simply stopped, so a red go stack made the web stack indistinguishable
+    # from a web stack that does not exist -- the reader cannot tell "not run" from
+    # "nothing to check". The work is still skipped; the skipping is now on the record.
+    if ($script:Failed) { $report += "[SKIP] $label ($($s.Marker)) -- an earlier stack failed, not run"; continue }
     if ($s.Warn) { $report += "[WARN] $label -- $($s.Warn)" }
     $script:Lines = @()
     $before = $script:Phases

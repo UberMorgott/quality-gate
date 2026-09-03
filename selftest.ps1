@@ -612,12 +612,20 @@ Check 'an empty -Only is refused, not read as no filter' `
 Check 'an empty -Only does not silently widen the run' ($out -notmatch 'checking (every stack|all of them)') $out
 # A second value used to bind to -Baseline positionally, so the user asking for two
 # stacks was told the baseline revision did not exist.
-$out = (& pwsh -NoProfile -File $gate -Root $mixed -Only 'go' 'python' -Full 2>&1 | Out-String)
+$out = (& pwsh -NoProfile -File $gate -Root $mixed -Only 'go' 'banana' -Full 2>&1 | Out-String)
 $strayCode = $LASTEXITCODE
 Check 'a stray value after -Only is refused' `
-    (($strayCode -ne 0) -and ($out -match 'unexpected argument\(s\): python')) "code=$strayCode $out"
+    (($strayCode -ne 0) -and ($out -match 'unexpected argument\(s\): banana')) "code=$strayCode $out"
 Check 'a stray value after -Only is not reported as a missing baseline' `
     ($out -notmatch 'baseline revision not found') $out
+# ...but PowerShell parses the documented `-Only go,web` as an ARRAY and the shim
+# flattens it into two arguments, so the help text's own example was refused by the
+# error message that then quoted it back as the remedy. Stack names after -Only are
+# its value, however the shell split them.
+$out = (& pwsh -NoProfile -File $gate -Root $mixed -Only 'go' 'python' 2>&1 | Out-String)
+$splitCode = $LASTEXITCODE
+Check 'stack names split by the shell are read as the -Only list' `
+    (($splitCode -eq 0) -and ($out -match '\[PASS\] go') -and ($out -match '\[SKIP\] python')) "code=$splitCode $out"
 # ...and the spelling that works has to keep working, or the validation would be
 # worse than the bug: one value, comma separated, is a list of stacks.
 $out = (& pwsh -NoProfile -File $gate -Root $mixed -Only 'go,python' 2>&1 | Out-String)
@@ -625,6 +633,32 @@ $listCode = $LASTEXITCODE
 Check '-Only takes a comma-separated list as one value' `
     (($listCode -eq 0) -and ($out -match '\[PASS\] go') -and ($out -match '\[SKIP\] python')) "code=$listCode $out"
 Check '-Only does not read the whole list as one stack name' ($out -notmatch 'no such stack detected here') $out
+
+# 30a. Fail-fast across stacks used to `break` the loop, and the report simply ended:
+# a red go stack left the web stack with no line at all, indistinguishable from a repo
+# that has no web stack. The work is still skipped; the skipping has to be on the record.
+$twin = Join-Path $tmp 'twin'
+New-Item -ItemType Directory -Path $twin | Out-Null
+Copy-Item (Join-Path $PSScriptRoot 'testdata\go-fixture') (Join-Path $twin 'go') -Recurse
+Copy-Item (Join-Path $PSScriptRoot 'testdata\web-fixture') (Join-Path $twin 'web') -Recurse
+Set-GoFile (Join-Path $twin 'go\main.go') @'
+package main
+
+import "fmt"
+
+// Add returns the sum of a and b.
+func Add(a, b int) int { return a + b }
+
+func main() {
+	fmt.Printf("%d", "not an int")
+	_ = Add(1, 2)
+}
+'@
+$out = (& pwsh -NoProfile -File $gate -Root $twin -All 2>&1 | Out-String)
+$twinCode = $LASTEXITCODE
+Check 'a failing stack still fails the run' (($twinCode -ne 0) -and ($out -match '\[FAIL\] go go/')) "code=$twinCode $out"
+Check 'a stack skipped by an earlier failure says so' `
+    ($out -match '\[SKIP\] web web/.*earlier stack failed') $out
 
 # 31. Order of the two early returns. `[SKIP] no known stack found` sat above the
 # -Only validation, so in a repo with no marker file at all `-Only go` never reached

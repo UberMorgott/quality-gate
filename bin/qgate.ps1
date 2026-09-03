@@ -35,7 +35,7 @@ Gate flags: -All  -Fast  -Full  -Only <stack[,stack]>  -Quiet  -Why  -Baseline <
   -Quiet prints nothing on a green run and the whole report on a red one
        (what the generated pre-commit hook uses; CI wants the [PASS] lines).
        A [WARN] about the gate's own unreadable config is not silenced.
-  -Only takes go web rust proto godot as ONE value: -Only go,web
+  -Only takes go web rust proto godot: -Only go,web ("go,web" and `go web` are the same)
        python is detected but not checked, so a run that names it alone checks
        nothing and FAILS (-All flags it only when a real stack ran too)
 A run that executed zero check phases is never green.
