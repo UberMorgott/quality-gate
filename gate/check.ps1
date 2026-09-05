@@ -332,11 +332,23 @@ function Invoke-GoStack($s) {
     } -FailIfOutput
     # -o into a temp dir: a bare `go build ./...` drops the linked binary of every
     # main package into the working tree.
-    # Keyed by module directory: two agents, two worktrees or two modules must not
-    # write their binaries over each other.
-    $outDir = Join-Path ([IO.Path]::GetTempPath()) "quality-gate-build-$(Get-PathKey $s.Dir)"
+    #
+    # Keyed by module directory AND by this process. The module key alone was meant to
+    # keep two agents, two worktrees or two modules from writing binaries over each
+    # other, and it does -- but it still let two runs on the SAME module collide, which
+    # is exactly what a pre-commit hook and a hand-run `qgate` in one repo are. Linking
+    # two builds onto the same output paths at once is not something to leave to luck
+    # on Windows, where an executable being written cannot be replaced.
+    #
+    # Removed when the phase is done: these binaries are pure by-product, nothing reads
+    # them, and without this TEMP kept one directory per module ever gated on this
+    # machine, forever. Directories written by older versions do not have the process
+    # suffix and are left alone rather than swept up -- deleting files this run did not
+    # create is not the gate's business.
+    $outDir = Join-Path ([IO.Path]::GetTempPath()) "quality-gate-build-$(Get-PathKey $s.Dir)-$PID"
     New-Item -ItemType Directory -Path $outDir -Force | Out-Null
-    Phase 'go build' { go build -o $outDir ./... }
+    try { Phase 'go build' { go build -o $outDir ./... } }
+    finally { Remove-Item $outDir -Recurse -Force -ErrorAction SilentlyContinue }
     Phase 'go vet' { go vet ./... }
     # The `go` directive, not the `toolchain` one: it is what both tools compare
     # themselves against, and it is what the error messages call "the targeted Go
