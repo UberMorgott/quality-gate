@@ -676,7 +676,8 @@ gate/detect.ps1          определение стеков по файлам-�
 gate/outdated.ps1        отчёт об устаревших прямых зависимостях и тулчейнах
 gate/stop-hook.ps1       обёртка для Stop-хука агента
 install.ps1              qgate wire: конфигурация целевого репозитория
-selftest.ps1             red-then-green проверка самого гейта (121 checks)
+selftest.ps1             red-then-green проверка самого гейта (121 checks; без сети 115,
+                         остальные [skip] с причиной — govulncheck и живой реестр недоступны)
 templates/.golangci.yml  конфиг линтера с обоснованием каждого выбора
 templates/pre-commit     тело git-хука, когда lefthook недоступен
 templates/lefthook.yml   git-хуки через lefthook + замеренные ловушки Windows

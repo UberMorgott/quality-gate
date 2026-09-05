@@ -132,6 +132,14 @@ $r = Invoke-Gate $go
 Check 'template .golangci.yml passes' ($r.Code -eq 0) $r.Out
 Check 'no warning once config present' ($r.Out -notmatch 'WARN') $r.Out
 
+# 3b. Probe: is a -Full run green on a fixture already proven clean? govulncheck
+# needs a live vulnerability database, so with no network the full level fails --
+# correctly, because unverifiable is not clean. That makes every later check that
+# asserts a green -Full run an unmet precondition here, not a defect to report, so
+# they [skip] rather than fail, exactly like a check whose tool is off PATH.
+& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $go -All -Full *> $null
+$fullGreen = ($LASTEXITCODE -eq 0)
+
 # 4. RED: a go vet violation. 5. GREEN: the same file restored.
 $main = Join-Path $go 'main.go'
 $clean = Get-Content $main -Raw
@@ -728,8 +736,12 @@ Check 'a pin mismatch fails the full level' (($LASTEXITCODE -ne 0) -and ($out -m
 $goVer = if ((& go version) -match 'go(\d+\.\d+(\.\d+)?)') { $Matches[1] } else { $null }
 if ($goVer) {
     [IO.File]::WriteAllText((Join-Path $pin 'qgate.json'), "{`"tools`":{`"go`":`"$goVer`"}}")
-    $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $pin -All -Full 2>&1 | Out-String)
-    Check 'a matching pin does not fail the full level' (($LASTEXITCODE -eq 0) -and ($out -notmatch 'pins')) $out
+    if ($fullGreen) {
+        $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $pin -All -Full 2>&1 | Out-String)
+        Check 'a matching pin does not fail the full level' (($LASTEXITCODE -eq 0) -and ($out -notmatch 'pins')) $out
+    } else {
+        Write-Output '[skip] no green -Full run here -- a check asserting one cannot be judged'
+    }
 }
 
 # 25. Deferred updates. Without them the only way to stop an accepted-and-known
@@ -835,6 +847,7 @@ Check 'an unreadable deferrals file is not also blamed on a missing name/reason'
 $defFull = Join-Path $tmp 'defer-full'
 Copy-Item (Join-Path $PSScriptRoot 'testdata\go-fixture') $defFull -Recurse
 [IO.File]::WriteAllText((Join-Path $defFull 'qgate.deferrals.json'), '{"dependencies":[{"name":"go"}]}')
+if ($fullGreen) {
 $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $defFull -All -Full 2>&1 | Out-String)
 $defCode = $LASTEXITCODE
 Check 'a malformed deferral is warned about on a -Full run' `
@@ -861,6 +874,9 @@ Remove-Item (Join-Path $defFull 'qgate.deferrals.json')
 $outQ = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $defFull -All -Full -Quiet 2>&1 | Out-String)
 Check '-Quiet prints nothing at all on a clean pass' `
     (($LASTEXITCODE -eq 0) -and [string]::IsNullOrWhiteSpace($outQ)) $outQ
+} else {
+    Write-Output '[skip] no green -Full run here -- checks asserting one cannot be judged'
+}
 
 # 28. Issue #3 again, through a different door: `-Only <stack the gate does not
 # implement>` printed [SKIP] not implemented and exited 0 -- a green pipeline over
