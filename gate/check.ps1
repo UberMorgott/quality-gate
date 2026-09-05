@@ -276,7 +276,17 @@ function Have([string]$Exe) { [bool](Get-Command $Exe -ErrorAction SilentlyConti
 function Invoke-GoStack($s) {
     Set-Location $s.Dir
     # gofmt exits 0 even when it lists unformatted files -> failure is "any output".
-    Phase 'gofmt' { gofmt -l . } -FailIfOutput
+    # It is also the one Go phase with no notion of modules or ignore rules: `.` means
+    # the whole subtree. Claude Code checks agent worktrees out under
+    # .claude/worktrees/<agent>/, so a CRLF checkout of an older commit sitting there
+    # turned the ROOT repo's gate -- and its pre-commit hook -- red over files that are
+    # not in its index and not its business. Every other Go phase is module-scoped and
+    # already stops at the nested go.mod (measured: with a deliberately broken nested
+    # module, build, vet, test, golangci-lint and govulncheck all stay green), so the
+    # filter belongs here and nowhere else in this runner.
+    Phase 'gofmt' {
+        gofmt -l . | Where-Object { -not (Test-GitIgnored $s.Dir (Join-Path $s.Dir $_)) }
+    } -FailIfOutput
     # -o into a temp dir: a bare `go build ./...` drops the linked binary of every
     # main package into the working tree.
     # Keyed by module directory: two agents, two worktrees or two modules must not

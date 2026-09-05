@@ -34,10 +34,16 @@ function Get-RepoRoot([string]$StartDir) {
 # tracked file belongs to the repo even when a pattern matches it, and the default
 # already answers that way.
 function Test-GitIgnored([string]$Root, [string]$Path) {
+    $prev = $global:LASTEXITCODE
     & git -C $Root check-ignore -q -- $Path 2>$null
     # 0 = ignored. 1 = not ignored. 128 = no git, or $Root is not a repo -- which is
     # not evidence of anything, so the marker is kept and detection works as before.
-    return ($LASTEXITCODE -eq 0)
+    $ignored = ($LASTEXITCODE -eq 0)
+    # Put back what the caller had. `check-ignore` answering "not ignored" is exit 1,
+    # and check.ps1's Phase fails a phase on a non-zero $LASTEXITCODE -- so leaking it
+    # would fail the very phase this function is called to filter.
+    $global:LASTEXITCODE = $prev
+    return $ignored
 }
 
 function Find-Marker([string]$Root, [string[]]$Names, [int]$Depth = 3) {

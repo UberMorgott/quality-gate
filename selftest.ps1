@@ -71,6 +71,28 @@ Check 'a gitignored nested module is not a stack' `
     (($ignStacks.Count -eq 1) -and ($ignStacks[0].Rel -eq '')) `
     (($ignStacks | ForEach-Object { "go '$($_.Rel)'" }) -join ' | ')
 
+# Not walking in is only half of it: the PHASES must not walk in either. gofmt is the
+# one Go tool with no notion of modules or ignore rules -- `.` is the whole subtree --
+# so a CRLF checkout under .claude/worktrees/<agent>/ failed the ROOT repo's gate, and
+# its pre-commit hook, over files that are not in its index. Both directions are
+# asserted, because "ignore the ignored file" is also what gofmt switched off would do.
+$gign = Join-Path $tmp 'gofmt-ignored'
+Copy-Item (Join-Path $PSScriptRoot 'testdata\go-fixture') $gign -Recurse
+Set-Content (Join-Path $gign '.gitignore') '.claude/'
+git -C $gign init -q 2>$null
+git -C $gign add -A 2>$null
+git -C $gign -c user.email=selftest@local -c user.name=selftest commit -qm init 2>$null
+New-Item -ItemType Directory -Path (Join-Path $gign '.claude\worktrees\agent-x') -Force | Out-Null
+Set-Content (Join-Path $gign '.claude\worktrees\agent-x\go.mod') 'module example.com/nested'
+[IO.File]::WriteAllText((Join-Path $gign '.claude\worktrees\agent-x\bad.go'), "package nested`r`n`r`nfunc  Bad()  {}`r`n")
+$r = Invoke-Gate $gign
+Check 'an unformatted file in a gitignored worktree does not fail the gate' `
+    (($r.Code -eq 0) -and ($r.Out -notmatch 'bad\.go')) $r.Out
+[IO.File]::WriteAllText((Join-Path $gign 'ugly.go'), "package main`n`nfunc  Ugly()  {}`n")
+$r = Invoke-Gate $gign
+Check 'gofmt still fails on a real unformatted file' `
+    (($r.Code -ne 0) -and ($r.Out -match '\[FAIL\] gofmt') -and ($r.Out -match 'ugly\.go') -and ($r.Out -notmatch 'bad\.go')) $r.Out
+
 # 2. Clean Go fixture, no linter config -> passes, warns exactly once.
 $go = Join-Path $tmp 'go'
 Copy-Item (Join-Path $PSScriptRoot 'testdata\go-fixture') $go -Recurse
