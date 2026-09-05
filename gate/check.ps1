@@ -259,6 +259,24 @@ function Phase {
     if (($LASTEXITCODE -ne 0) -or ($FailIfOutput -and $out)) {
         $script:Lines += "[FAIL] $Name (${sec}s)"
         if ($out) { $script:Lines += $out }
+        # A phase killed because the HOST ran out of memory is not a finding about the
+        # code, and the raw dump does not say which of the two it is. Reported from the
+        # field: `go test -race` failed a commit twice under parallel load with
+        # `VirtualAlloc ... errno=1455` -- Windows for "the paging file is too small for
+        # this operation" -- then passed on the third run with nothing changed, and the
+        # only thing on screen was a runtime stack blaming a package. Same class as
+        # naming the stale tool binary instead of the repo: the outcome was defensible,
+        # the reason printed was not the reason.
+        #
+        # Here in Phase, not in the Go runner: cargo, npm and buf allocate too, and
+        # `out of memory` also covers node's "JavaScript heap out of memory".
+        #
+        # Advisory only. The phase still fails -- a run that could not finish is not a
+        # run that passed, and a note that flipped an exit code would be the gate
+        # deciding it knows better than the tool.
+        if ($out -match '(?i)out of memory|errno=1455') {
+            $script:Lines += '[NOTE] that is an allocation failure on this machine, not a verdict on the code -- retry with less running before believing it. -race is usually the first casualty.'
+        }
         $script:Failed = $true
     } else {
         $script:Lines += "[PASS] $Name (${sec}s)"

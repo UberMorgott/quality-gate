@@ -128,6 +128,47 @@ Set-GoFile $main $clean
 $r = Invoke-Gate $go
 Check 'gate green again after the fix' ($r.Code -eq 0) $r.Out
 
+# A phase killed because the HOST ran out of memory is not a finding about the code,
+# but the raw runtime dump reads exactly like one. Reported from the field: a
+# `go test -race` failed the same commit twice under parallel load with
+# `VirtualAlloc ... errno=1455`, then passed on the third run with nothing changed,
+# and all the developer had on screen was a stack blaming a package. Both halves, per
+# PLAYBOOK 0.1: the note appears when the output really is an allocation failure, and
+# is absent on an ordinary one -- a note printed on every red run is noise, and noise
+# is what teaches people to skip the line that mattered.
+$oom = Join-Path $tmp 'oom'
+Copy-Item (Join-Path $PSScriptRoot 'testdata\go-fixture') $oom -Recurse
+$oomTest = Join-Path $oom 'oom_test.go'
+# Tab-indented, body on its own line: gofmt expands a one-line func whose body is
+# this long, and a fixture that fails gofmt never reaches `go test` at all -- which is
+# how the absence half below passed for entirely the wrong reason the first time.
+Set-GoFile $oomTest @'
+package main
+
+import "testing"
+
+func TestAllocationFailure(t *testing.T) {
+	t.Fatal("runtime: VirtualAlloc of 1048576 bytes failed with errno=1455\nfatal error: out of memory")
+}
+'@
+$r = Invoke-Gate $oom
+Check 'an out-of-memory failure is named as the host, not the code' `
+    (($r.Code -ne 0) -and ($r.Out -match '\[NOTE\].*allocation failure on this machine')) $r.Out
+Set-GoFile $oomTest @'
+package main
+
+import "testing"
+
+func TestOrdinaryFailure(t *testing.T) {
+	t.Fatal("values differ")
+}
+'@
+$r = Invoke-Gate $oom
+# The reason has to be the right one: assert the phase that failed is `go test`, or
+# this passes on any red run that never got that far.
+Check 'an ordinary failure carries no memory note' `
+    (($r.Code -ne 0) -and ($r.Out -match '\[FAIL\] go test') -and ($r.Out -notmatch '\[NOTE\]')) $r.Out
+
 # 6. RED: an unchecked error -- only golangci-lint catches this one, so it
 #    proves the linter phase is live rather than merely present.
 if (Get-Command golangci-lint -ErrorAction SilentlyContinue) {
