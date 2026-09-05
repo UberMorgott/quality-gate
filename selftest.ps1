@@ -509,6 +509,60 @@ git -C $genRepo -c user.email=selftest@local -c user.name=selftest commit -qm 'v
 $refuseCode = $LASTEXITCODE
 Check 'a real git commit is refused when the gate fails' ($refuseCode -ne 0) "code=$refuseCode"
 
+# ...and the same for a MERGE, which git guards with a different hook entirely. A
+# merge that commits on its own runs pre-merge-commit and never pre-commit, so
+# wiring one name left `git merge --no-ff` completely unguarded: measured on git
+# 2.53, the merge commit lands and no hook runs at all. Two branches that are each
+# clean can merge into a tree that does not build, so the break reaches main and the
+# next ordinary commit is the one refused, for a failure it did not cause. Driven
+# through real git for the same reason as the block above: only real git picks the
+# hook name, and `lefthook run pre-commit` would pass either way.
+$mrg = Join-Path $tmp 'mergehook'
+New-Item -ItemType Directory -Path $mrg | Out-Null
+Copy-Item (Join-Path $PSScriptRoot 'testdata\proto-fixture') (Join-Path $mrg 'schema') -Recurse
+git -C $mrg init -q 2>$null
+# Pinned, not inherited: with core.autocrlf=true every checkout below writes the
+# fixture back as CRLF, buf format then reports the whole file as misformatted, and
+# this block fails for a reason that has nothing to do with which hook git ran.
+git -C $mrg config core.autocrlf false 2>$null
+& pwsh -NoProfile -File $installer -Target $mrg *> $null
+git -C $mrg add -A 2>$null
+git -C $mrg -c user.email=selftest@local -c user.name=selftest commit -qm 'clean' *> $null
+# Whatever `git init` called it: init.defaultBranch is a user setting, and assuming
+# "main" left every checkout below on the branch it started on, so the merge merged a
+# branch into itself and reported "Already up to date" -- green, for no reason.
+$mainBranch = (git -C $mrg rev-parse --abbrev-ref HEAD)
+$mpfx = Join-Path $mrg 'schema\example\v1\greeting.proto'
+git -C $mrg checkout -q -b bad-branch 2>$null
+[IO.File]::WriteAllText($mpfx, ([IO.File]::ReadAllText($mpfx).Replace('string text = 1;', 'string Text = 1;')))
+git -C $mrg add -A 2>$null
+# --no-verify, because that is how a red commit reaches a branch in the first place.
+git -C $mrg -c user.email=selftest@local -c user.name=selftest commit -qm 'violation' --no-verify *> $null
+git -C $mrg checkout -q $mainBranch 2>$null
+$beforeMerge = (git -C $mrg rev-parse HEAD)
+git -C $mrg -c user.email=selftest@local -c user.name=selftest merge --no-ff -m 'merge the violation' bad-branch *> $null
+$mergeCode = $LASTEXITCODE
+Check 'a merge commit is refused when the merged tree fails the gate' `
+    (($mergeCode -ne 0) -and ($beforeMerge -eq (git -C $mrg rev-parse HEAD))) `
+    "code=$mergeCode head moved: $($beforeMerge -ne (git -C $mrg rev-parse HEAD))"
+git -C $mrg merge --abort *> $null
+# ...and a clean merge still lands, or "merges are always broken" would pass the
+# check above for entirely the wrong reason.
+git -C $mrg checkout -q -b good-branch 2>$null
+Set-Content (Join-Path $mrg 'notes.txt') 'harmless'
+git -C $mrg add -A 2>$null
+git -C $mrg -c user.email=selftest@local -c user.name=selftest commit -qm 'clean branch work' *> $null
+git -C $mrg checkout -q $mainBranch 2>$null
+$beforeGood = (git -C $mrg rev-parse HEAD)
+git -C $mrg -c user.email=selftest@local -c user.name=selftest merge --no-ff -m 'merge the clean branch' good-branch *> $null
+$goodCode = $LASTEXITCODE
+# Three fields from `rev-list --parents`: the commit itself plus two parents. Two
+# fields would be an ordinary commit, i.e. no merge happened at all.
+$parents = @((git -C $mrg rev-list --parents -n 1 HEAD) -split ' ')
+Check 'a clean merge commit still lands' `
+    (($goodCode -eq 0) -and ((git -C $mrg rev-parse HEAD) -ne $beforeGood) -and ($parents.Count -eq 3)) `
+    "code=$goodCode fields=$($parents.Count)"
+
 # 24. A pin exists to make a run reproducible, so at the full level a mismatch is
 # a failure, not a note: a green -Full run on a different compiler than the repo
 # declared says nothing about the pinned version. Fast lane still only warns.

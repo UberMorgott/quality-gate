@@ -198,7 +198,10 @@ function Install-Lefthook {
         # Keeping a foreign config is right, but "kept" must not read as "wired":
         # `lefthook install` would then succeed with no gate job in it at all.
         if ((Get-Content $cfg -Raw) -notmatch 'qgate') {
-            Write-Output '  warn:   it has no quality-gate job -- add this under pre-commit.jobs yourself:'
+            # Both hook names: a job under pre-commit alone leaves `git merge --no-ff`
+            # unguarded, which is the whole point of the pre-merge-commit block in the
+            # template we are quoting from.
+            Write-Output '  warn:   it has no quality-gate job -- add this under BOTH pre-commit.jobs and pre-merge-commit.jobs yourself:'
             Write-Output '            - name: quality-gate'
             # Quoted from the template, never retyped: the advice and the generated
             # file drifted apart once already, and the pasted copy was the broken
@@ -223,26 +226,36 @@ $hookBody = ([IO.File]::ReadAllText((Join-Path $PSScriptRoot 'templates\pre-comm
 # `<root>\.git\hooks` does not exist at all.
 $hooksDir = (& git -C $root rev-parse --path-format=absolute --git-path hooks 2>$null)
 $isRepo = $LASTEXITCODE -eq 0 -and $hooksDir
-$hook = if ($isRepo) { Join-Path ($hooksDir -replace '/', '\') 'pre-commit' } else { $null }
+# Both, and the same body in each. A merge that commits on its own runs
+# pre-merge-commit, never pre-commit, so wiring one name left `git merge --no-ff`
+# completely unguarded: measured on git 2.53, the merge commit lands and no hook
+# runs. See templates/lefthook.yml for which other commit paths are covered and
+# which git gives nothing to cover them with.
+$hookNames = @('pre-commit', 'pre-merge-commit')
 if ($NoHook) {
-    Write-Output 'pre-commit-- skipped (-NoHook)'
+    Write-Output 'hooks     -- skipped (-NoHook)'
 } elseif (-not $isRepo) {
-    Write-Output 'pre-commit-- skipped: not a git repository'
+    Write-Output 'hooks     -- skipped: not a git repository'
 } elseif (Get-Command lefthook -ErrorAction SilentlyContinue) {
     # Lefthook owns the hook wiring where it is available; the fallback below is
     # for machines without it.
     Install-Lefthook
-} elseif ((Test-Path $hook) -and -not ((Get-Content $hook -Raw) -match 'quality-gate')) {
-    # Never clobber someone else's hook; core.hooksPath is deliberately not
-    # touched either -- redirecting it would disable other hooks in .git/hooks.
-    Write-Output 'pre-commit-- EXISTS and is not ours, left alone. Add this to it yourself:'
-    # Quoted from templates/pre-commit for the same reason as the lefthook advice.
-    ($hookBody -split "`n" | Where-Object { $_ -and $_ -notmatch '^\s*#' }) |
-        ForEach-Object { Write-Output "  $_" }
 } else {
-    New-Item -ItemType Directory -Path (Split-Path $hook) -Force | Out-Null
-    Set-Content -Path $hook -Value $hookBody -Encoding utf8 -NoNewline
-    Write-Output "pre-commit-> $hook"
+    foreach ($name in $hookNames) {
+        $hook = Join-Path ($hooksDir -replace '/', '\') $name
+        if ((Test-Path $hook) -and -not ((Get-Content $hook -Raw) -match 'quality-gate')) {
+            # Never clobber someone else's hook; core.hooksPath is deliberately not
+            # touched either -- redirecting it would disable other hooks in .git/hooks.
+            Write-Output "$($name.PadRight(10))-- EXISTS and is not ours, left alone. Add this to it yourself:"
+            # Quoted from templates/pre-commit for the same reason as the lefthook advice.
+            ($hookBody -split "`n" | Where-Object { $_ -and $_ -notmatch '^\s*#' }) |
+                ForEach-Object { Write-Output "  $_" }
+        } else {
+            New-Item -ItemType Directory -Path (Split-Path $hook) -Force | Out-Null
+            Set-Content -Path $hook -Value $hookBody -Encoding utf8 -NoNewline
+            Write-Output "$($name.PadRight(10))-> $hook"
+        }
+    }
 }
 
 Set-StopHook
