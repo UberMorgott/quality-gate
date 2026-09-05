@@ -247,6 +247,31 @@ $script:Lines = @()
 # bottom of this file is not allowed to ignore.
 $script:Phases = 0
 
+# Concurrent commits in one worktree. Git serialises the final write -- the second
+# `git commit` loses -- but it does NOT protect the INDEX while a hook runs, and this
+# hook runs for 40 seconds to five minutes, so the gate is what widens the window from
+# milliseconds to minutes.
+#
+# Measured on git 2.53: agent A staged a.txt and began committing; during A's hook,
+# agent B ran `git add b.txt`, which mutated the shared index; A's commit then
+# captured BOTH and shipped b.txt inside A's commit. B was told `nothing to commit,
+# working tree clean` -- a message shaped exactly like success, for work that had just
+# been swallowed. That is what makes the next agent delete a lock file or commit from
+# a stale index. `.git/index.lock` does not even exist while the hook runs, so there is
+# nothing to poll for.
+#
+# Only inside a commit: git sets GIT_INDEX_FILE for its hooks and nothing else does,
+# so a developer running `qgate` in a terminal while staging files is not this rule's
+# business. `git write-tree` is the hash of the staged content and is stable across the
+# whole hook window -- measured with unstaged modifications present and lefthook's
+# stash active, so lefthook's own bookkeeping does not trip it. Unmerged entries make
+# it fail, which is evidence of nothing, so the guard stays quiet.
+$script:StagedAtStart = $null
+if ($env:GIT_INDEX_FILE) {
+    $tree = (& git -C $Root write-tree 2>$null)
+    if ($LASTEXITCODE -eq 0) { $script:StagedAtStart = $tree }
+}
+
 function Phase {
     param([string]$Name, [scriptblock]$Body, [switch]$FailIfOutput)
     if ($script:Failed) { return }
@@ -710,6 +735,17 @@ if (-not $script:Failed -and $script:Phases -eq 0) {
     $names = @($stacks | ForEach-Object { $_.Stack }) -join ', '
     $report += "[FAIL] no check phase ran -- nothing was verified$(if ($names) { " ($names)" }), so this run is not green"
     $script:Failed = $true
+}
+
+# The other half of the concurrency guard above. Checked before the advisory below so
+# a run already lost to a race does not also go and ask a registry about it.
+if ($script:StagedAtStart) {
+    $stagedNow = (& git -C $Root write-tree 2>$null)
+    if ($LASTEXITCODE -eq 0 -and $stagedNow -ne $script:StagedAtStart) {
+        $report += '[FAIL] the staged files changed while the gate was running -- another commit is running in this worktree'
+        $report += '       Committing now would take the other one''s staged changes with it. Wait for it, re-read `git status`, then commit again.'
+        $script:Failed = $true
+    }
 }
 
 # Only on the full level, only when everything passed: a note about newer releases,

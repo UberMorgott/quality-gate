@@ -672,6 +672,48 @@ Check 'a clean merge commit still lands' `
     (($goodCode -eq 0) -and ((git -C $mrg rev-parse HEAD) -ne $beforeGood) -and ($parents.Count -eq 3)) `
     "code=$goodCode fields=$($parents.Count)"
 
+# Concurrent commits in one worktree. Git serialises the final write, but it does not
+# protect the INDEX while a hook runs, and this hook runs for 40 seconds to five
+# minutes -- the gate is what widens the window from milliseconds to minutes. Measured
+# on git 2.53: A staged a.txt and began committing, B ran `git add b.txt` during A's
+# hook, and A's commit shipped b.txt inside it while B was told `nothing to commit,
+# working tree clean` -- a message shaped like success for work just swallowed.
+# `.git/index.lock` does not exist during the hook, so there is nothing to poll.
+$cc = Join-Path $tmp 'concurrent'
+Copy-Item (Join-Path $PSScriptRoot 'testdata\go-fixture') $cc -Recurse
+Copy-Item (Join-Path $PSScriptRoot 'templates\.golangci.yml') $cc
+git -C $cc init -q 2>$null
+& pwsh -NoProfile -File $installer -Target $cc *> $null
+git -C $cc add -A 2>$null
+git -C $cc -c user.email=selftest@local -c user.name=selftest commit -qm base --no-verify *> $null
+Set-Content (Join-Path $cc 'a.txt') 'a'
+git -C $cc add a.txt 2>$null
+$ccBefore = (git -C $cc rev-parse HEAD)
+$ccJob = Start-Job -ScriptBlock { param($r)
+    git -C $r -c user.email=a@local -c user.name=a commit -m 'A' 2>&1 | Out-String
+} -ArgumentList $cc
+Start-Sleep -Milliseconds 1500
+# If the gate already finished there was no race to observe, and asserting anything
+# about one would be asserting nothing. Skipped out loud rather than counted.
+$ccRacing = ($ccJob.State -eq 'Running')
+if ($ccRacing) {
+    Set-Content (Join-Path $cc 'b.txt') 'b'
+    git -C $cc add b.txt 2>$null
+}
+$ccOut = (Receive-Job -Job $ccJob -Wait | Out-String)
+Remove-Job $ccJob
+if ($ccRacing) {
+    Check 'a commit whose staged files changed under it is refused' `
+        (((git -C $cc rev-parse HEAD) -eq $ccBefore) -and ($ccOut -match 'staged files changed while the gate was running')) $ccOut
+} else {
+    Write-Output '[skip] the gate finished before a second stage could race it'
+}
+# ...and it must be silent outside a commit: `qgate` in a terminal while the developer
+# stages files is not a race, and git sets GIT_INDEX_FILE only for its own hooks. This
+# is the half that keeps the guard from becoming a reason nobody can commit.
+$r = Invoke-Gate $cc
+Check 'the concurrency guard is silent outside a commit' ($r.Out -notmatch 'staged files changed') $r.Out
+
 # 24. A pin exists to make a run reproducible, so at the full level a mismatch is
 # a failure, not a note: a green -Full run on a different compiler than the repo
 # declared says nothing about the pinned version. Fast lane still only warns.
