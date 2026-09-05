@@ -54,6 +54,22 @@ Check 'detects python stack as not implemented' ([bool]($stacks | Where-Object {
 # marker, or it would only be proving that Copy-Item works.
 Check 'no phantom python stack where there is no marker' `
     (-not (@(Get-Stacks (Join-Path $PSScriptRoot 'testdata\go-fixture')) | Where-Object { $_.Stack -eq 'python' }))
+# What the repo ignores is not part of the repo. Claude Code checks agent worktrees
+# out under .claude/worktrees/<agent>/, and that nested go.mod -- an older commit of
+# the same repo -- was detected as a second Go stack, so `qgate outdated` reported
+# dependencies as behind that were only stale inside the worktree. Both halves are
+# asserted: the ignored module is gone AND the root one is still found, because
+# "detects nothing at all" would satisfy the first half on its own.
+$ign = Join-Path $tmp 'ignored'
+New-Item -ItemType Directory -Path (Join-Path $ign '.claude\worktrees\agent-x') -Force | Out-Null
+git -C $ign init -q 2>$null
+Set-Content (Join-Path $ign '.gitignore') '.claude/'
+Set-Content (Join-Path $ign 'go.mod') 'module example.com/root'
+Set-Content (Join-Path $ign '.claude\worktrees\agent-x\go.mod') 'module example.com/nested'
+$ignStacks = @(Get-Stacks $ign | Where-Object { $_.Stack -eq 'go' })
+Check 'a gitignored nested module is not a stack' `
+    (($ignStacks.Count -eq 1) -and ($ignStacks[0].Rel -eq '')) `
+    (($ignStacks | ForEach-Object { "go '$($_.Rel)'" }) -join ' | ')
 
 # 2. Clean Go fixture, no linter config -> passes, warns exactly once.
 $go = Join-Path $tmp 'go'

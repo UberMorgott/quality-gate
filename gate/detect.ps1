@@ -25,11 +25,29 @@ function Get-RepoRoot([string]$StartDir) {
     return (Resolve-Path $StartDir).Path
 }
 
+# What a repo ignores is not part of that repo. The list above cannot enumerate it:
+# Claude Code checks agent worktrees out under .claude/worktrees/<agent>/, and that
+# nested go.mod -- an older commit of this same repo -- was detected as a second Go
+# stack. `qgate outdated` then blamed the root module for dependencies that were only
+# stale inside the worktree, and a -All run would have built, linted and tested it.
+# So the repo's own ignore rules decide. Asked WITHOUT --no-index on purpose: a
+# tracked file belongs to the repo even when a pattern matches it, and the default
+# already answers that way.
+function Test-GitIgnored([string]$Root, [string]$Path) {
+    & git -C $Root check-ignore -q -- $Path 2>$null
+    # 0 = ignored. 1 = not ignored. 128 = no git, or $Root is not a repo -- which is
+    # not evidence of anything, so the marker is kept and detection works as before.
+    return ($LASTEXITCODE -eq 0)
+}
+
 function Find-Marker([string]$Root, [string[]]$Names, [int]$Depth = 3) {
     Get-ChildItem -Path $Root -Recurse -Depth $Depth -File -Force -ErrorAction SilentlyContinue |
         Where-Object {
             $Names -contains $_.Name -and
-            ($_.FullName.Substring($Root.Length) -split '[\\/]' | Where-Object { $script:SkipDirs -contains $_ }).Count -eq 0
+            ($_.FullName.Substring($Root.Length) -split '[\\/]' | Where-Object { $script:SkipDirs -contains $_ }).Count -eq 0 -and
+            # Last: it spawns a process, and the cheap tests above have already cut
+            # the candidates down to the handful of real marker files.
+            -not (Test-GitIgnored $Root $_.FullName)
         }
 }
 
