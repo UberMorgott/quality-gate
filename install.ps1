@@ -51,7 +51,8 @@ function Install-WebConfigs([string]$dir, [string]$where) {
     if ($need) { Write-Output "  next:   npm i -D $($need -join ' ')" }
 }
 
-foreach ($s in @(Get-Stacks $root)) {
+$stacks = @(Get-Stacks $root)
+foreach ($s in $stacks) {
     $where = if ($s.Rel) { $s.Rel + '/' } else { './' }
     if (-not $s.Implemented) {
         Write-Output "skipped   $($s.Stack) at $where -- not implemented, nothing will be checked there"
@@ -66,15 +67,6 @@ foreach ($s in @(Get-Stacks $root)) {
             Write-Output "go        $where -- installed .golangci.yml"
             $s.Warn = '' # the warning was about the file we just created
         }
-        # gofmt reports a CRLF checkout as unformatted, so the whole tree fails on a
-        # Windows clone. This is not advice, it is a prerequisite -- write it.
-        $ga = Join-Path $root '.gitattributes'
-        $gaBody = if (Test-Path $ga) { Get-Content $ga -Raw } else { '' }
-        if ($gaBody -notmatch '\*\.go') {
-            $line = '*.go text eol=lf'
-            Set-Content -Path $ga -Value (($gaBody.TrimEnd() + "`n" + $line).TrimStart() + "`n") -Encoding utf8 -NoNewline
-            Write-Output "  fixed:  added `"$line`" to .gitattributes"
-        }
     } elseif ($s.Stack -eq 'web') {
         Write-Output "web       $where -- enabled"
         Install-WebConfigs $s.Dir $where
@@ -82,6 +74,40 @@ foreach ($s in @(Get-Stacks $root)) {
         Write-Output "$($s.Stack.PadRight(9)) $where -- enabled"
     }
     if ($s.Warn) { Write-Output "  warn:   $($s.Warn)" }
+}
+
+# --- gofmt's prerequisite: LF in the working tree ----------------------------
+# gofmt reports a CRLF checkout as unformatted, so the whole tree fails on a Windows
+# clone. This is not advice, it is a prerequisite -- write it. Once, at the repo
+# root: it is a repo-wide rule, and a monorepo has one .gitattributes however many
+# modules it holds.
+if ($stacks | Where-Object { $_.Stack -eq 'go' -and $_.Implemented }) {
+    $ga = Join-Path $root '.gitattributes'
+    $gaBody = if (Test-Path $ga) { Get-Content $ga -Raw } else { '' }
+    if ($gaBody -notmatch '\*\.go') {
+        $line = '*.go text eol=lf'
+        Set-Content -Path $ga -Value (($gaBody.TrimEnd() + "`n" + $line).TrimStart() + "`n") -Encoding utf8 -NoNewline
+        Write-Output "  fixed:  added `"$line`" to .gitattributes"
+    }
+    # The rule only governs what git writes NEXT. Files already on disk stay CRLF, so
+    # the first `qgate` after wire fails gofmt on every one of them -- 57 files in one
+    # report -- with nothing on screen tying that to the line just written. The rule
+    # was added, the problem was not, and only one of those was ever said out loud.
+    #
+    # The command named here is gofmt, not git, because the obvious git answer does
+    # nothing. `git add --renormalize .` leaves the index stat cache matching the CRLF
+    # file on disk, so the `git checkout -- .` after it decides the file is up to date
+    # and skips it. Measured on git 2.53 with core.autocrlf both true and false, and
+    # the same no-op holds for `checkout -f`, `restore --worktree --source=:0`,
+    # `checkout-index -f -a` and a stash round-trip: only deleting the files first
+    # makes checkout rewrite them. gofmt -w needs no git surgery at all -- it is the
+    # tool doing the complaining, it always writes LF, and the next `git add`
+    # normalises the index through the rule written above.
+    $crlf = @(& git -C $root ls-files --eol -- '*.go' 2>$null | Where-Object { $_ -match '\sw/crlf\s' })
+    if ($crlf) {
+        Write-Output "  next:   $($crlf.Count) tracked .go file(s) are CRLF on disk -- gofmt fails on every one until you run, in each go module:"
+        Write-Output "            gofmt -w ."
+    }
 }
 
 # --- agent Stop hook ---------------------------------------------------------

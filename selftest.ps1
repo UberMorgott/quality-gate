@@ -284,6 +284,20 @@ git -C $goWire init -q 2>$null
 $ga = Join-Path $goWire '.gitattributes'
 Check 'wire writes the gofmt eol rule' ((Test-Path $ga) -and ((Get-Content $ga -Raw) -match '\*\.go text eol=lf')) `
     "$(if (Test-Path $ga) { Get-Content $ga -Raw })"
+# The rule governs only what git writes NEXT: files already on disk stay CRLF and
+# gofmt fails on every one of them. Wire printed "fixed" and said nothing about that,
+# so the first run after wire failed 57 files with no hint. Assert the count and the
+# command -- "printed something" is what let the silence through in the first place.
+# The command must be gofmt -w: `git add --renormalize . && git checkout -- .` is the
+# answer everyone reaches for and it is a no-op, because --renormalize leaves the
+# index stat cache matching the CRLF file and checkout then skips it. Asserting its
+# absence is what stops that from being "helpfully" restored later.
+[IO.File]::WriteAllText((Join-Path $goWire 'crlf.go'), "package main`r`n")
+git -C $goWire add -A 2>$null
+$wireOut = (& pwsh -NoProfile -File $installer -Target $goWire -NoHook 2>&1 | Out-String)
+Check 'wire names a command that really rewrites a CRLF working tree' `
+    (($wireOut -match '1 tracked \.go file\(s\) are CRLF') -and ($wireOut -match '(?m)^\s+gofmt -w \.\s*$')) $wireOut
+Check 'wire does not name the renormalise no-op' ($wireOut -notmatch 'renormalize') $wireOut
 
 # 15. The version report is advisory. It must never fail a run -- offline, rate
 # limited or with a registry that answers garbage, the exit code stays 0.
