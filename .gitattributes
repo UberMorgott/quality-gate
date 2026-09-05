@@ -13,3 +13,7 @@
 # byte for byte what install.ps1 writes, and a stricter sh (dash, busybox, WSL)
 # reading this file directly is not something this repo can measure.
 templates/pre-commit text eol=lf
+# `wire` copies this file byte for byte into the target repository. Under the
+# `* text=auto` above it is checked out CRLF wherever core.autocrlf=true, so without
+# this line the gate hands a CRLF file to repositories that enforce LF.
+templates/lefthook.yml text eol=lf

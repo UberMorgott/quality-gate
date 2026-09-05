@@ -321,6 +321,48 @@ Check 'wire names a command that really rewrites a CRLF working tree' `
     (($wireOut -match '1 tracked \.go file\(s\) are CRLF') -and ($wireOut -match '(?m)^\s+gofmt -w \.\s*$')) $wireOut
 Check 'wire does not name the renormalise no-op' ($wireOut -notmatch 'renormalize') $wireOut
 
+# `qgate wire` is run again every time the gate is upgraded, so a second run with
+# nothing to change must be a no-op. Set-Content appends its own newline on top of the
+# one the body already ends with, so every rewrite left one more blank line at the end
+# of the file than it found; and the comparison was made against raw bytes, so a file
+# git had checked out as CRLF -- which `* text=auto` does to every doc in a repo with
+# core.autocrlf=true -- never equalled the LF block and was rewritten every run.
+$agentsFile = Join-Path $goWire 'AGENTS.md'
+$agentsBefore = [IO.File]::ReadAllBytes($agentsFile)
+$wireAgain = (& pwsh -NoProfile -File $installer -Target $goWire -NoHook 2>&1 | Out-String)
+$agentsAfter = [IO.File]::ReadAllBytes($agentsFile)
+Check 'a second wire leaves AGENTS.md byte-identical' `
+    ((($agentsBefore -join ',') -eq ($agentsAfter -join ',')) -and ($wireAgain -match 'AGENTS\.md\s+-- unchanged')) `
+    "before=$($agentsBefore.Length) after=$($agentsAfter.Length)"
+# ...and it is not enough that the size stopped moving: the file must not carry the
+# blank line the old write left behind, or every wired repo keeps one forever.
+Check 'the wired doc ends with exactly one newline' `
+    (($agentsAfter[-1] -eq 10) -and ($agentsAfter[-2] -ne 10)) `
+    ("tail=" + [BitConverter]::ToString($agentsAfter[-4..-1]))
+
+# A lefthook.yml this installer wrote at an OLDER version is not a foreign file, but
+# "kept existing lefthook.yml" said the same thing about both. When pre-merge-commit
+# was added to the template, every already-wired repo kept its pre-commit-only config
+# and `qgate wire` reported success while the merge bypass stayed wide open -- the
+# upgrade was undeliverable by the very command that announces it.
+if (Get-Command lefthook -ErrorAction SilentlyContinue) {
+    $lhr = Join-Path $tmp 'lefthookver'
+    Copy-Item (Join-Path $PSScriptRoot 'testdata\go-fixture') $lhr -Recurse
+    git -C $lhr init -q 2>$null
+    & pwsh -NoProfile -File $installer -Target $lhr *> $null
+    $curOut = (& pwsh -NoProfile -File $installer -Target $lhr 2>&1 | Out-String)
+    # The absence half, and it is falsifiable here because this repo really was wired
+    # by this version a line ago: a check that fires on a current config would make the
+    # warning noise nobody reads.
+    Check 'a current lefthook.yml is not reported as stale' ($curOut -notmatch 'no pre-merge-commit hook') $curOut
+    Set-Content (Join-Path $lhr 'lefthook.yml') "pre-commit:`n  jobs:`n    - name: quality-gate`n      run: 'qgate.cmd -All -Full -Quiet'`n"
+    $staleOut = (& pwsh -NoProfile -File $installer -Target $lhr 2>&1 | Out-String)
+    Check 'wire names the hook a stale lefthook.yml is missing' `
+        (($staleOut -match 'no pre-merge-commit hook') -and ($staleOut -match 'lefthook install')) $staleOut
+} else {
+    Write-Output '[skip] lefthook not on PATH -- the stale-config path cannot run'
+}
+
 # 15. The version report is advisory. It must never fail a run -- offline, rate
 # limited or with a registry that answers garbage, the exit code stays 0.
 $outdated = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\outdated.ps1') -Root $go 2>&1 | Out-String)

@@ -174,14 +174,23 @@ gh issue create --repo UberMorgott/quality-gate --title "<what broke>" --body "<
 # long project guidance below must not bury it.
 function Set-AgentDoc([string]$name) {
     $file = Join-Path $root $name
-    $body = if (Test-Path $file) { Get-Content $file -Raw } else { '' }
+    # Compared with CRLF folded away. The block this writes is LF, so a file that git
+    # checked out as CRLF -- which `* text=auto` plus core.autocrlf=true does to every
+    # doc in the repo -- never equalled it, and wire rewrote a file it had nothing to
+    # change in.
+    $body = if (Test-Path $file) { (Get-Content $file -Raw) -replace "`r`n", "`n" } else { '' }
     $new = if ($body -match '(?s)<!-- quality-gate -->.*?<!-- /quality-gate -->') {
         $body -replace '(?s)<!-- quality-gate -->.*?<!-- /quality-gate -->', $agentDoc.Trim()
     } else {
-        ($agentDoc + "`n" + $body.TrimStart()).TrimEnd() + "`n"
+        $agentDoc + "`n" + $body.TrimStart()
     }
+    # Exactly one trailing newline, and -NoNewline so Set-Content does not add a
+    # second. Without both, every rewrite left one more blank line at the end of the
+    # file than it found -- the replace branch preserved the tail it matched around and
+    # Set-Content appended to it.
+    $new = $new.TrimEnd() + "`n"
     if ($new -eq $body) { Write-Output "$($name.PadRight(9)) -- unchanged"; return }
-    Set-Content -Path $file -Value $new -Encoding utf8
+    Set-Content -Path $file -Value $new -Encoding utf8 -NoNewline
     Write-Output "$($name.PadRight(9)) -> $file"
 }
 
@@ -190,14 +199,20 @@ function Set-AgentDoc([string]$name) {
 $script:LefthookTemplate = Join-Path $PSScriptRoot 'templates\lefthook.yml'
 $script:LefthookRun = (Select-String -Path $script:LefthookTemplate -Pattern '^\s*run:' |
     Select-Object -First 1).Line.Trim()
+# Read out of the template, not hardcoded here: the list has to grow by itself the
+# next time the template learns a hook, or this check goes stale exactly the way the
+# generated file it is meant to catch does.
+$script:LefthookHooks = @(Select-String -Path $script:LefthookTemplate -Pattern '^([a-z][a-z-]*):' |
+    ForEach-Object { $_.Matches[0].Groups[1].Value })
 
 function Install-Lefthook {
     $cfg = Join-Path $root 'lefthook.yml'
     if (Test-Path $cfg) {
         Write-Output 'lefthook  -- kept existing lefthook.yml'
+        $have = Get-Content $cfg -Raw
         # Keeping a foreign config is right, but "kept" must not read as "wired":
         # `lefthook install` would then succeed with no gate job in it at all.
-        if ((Get-Content $cfg -Raw) -notmatch 'qgate') {
+        if ($have -notmatch 'qgate') {
             # Both hook names: a job under pre-commit alone leaves `git merge --no-ff`
             # unguarded, which is the whole point of the pre-merge-commit block in the
             # template we are quoting from.
@@ -207,6 +222,22 @@ function Install-Lefthook {
             # file drifted apart once already, and the pasted copy was the broken
             # one -- it said bare `qgate`, which exits 127 under a Git shell.
             Write-Output "            $($script:LefthookRun)"
+        } else {
+            # A file this installer wrote at an older version is not a foreign file,
+            # and "kept existing" read as "wired" for it: when pre-merge-commit was
+            # added to the template, every already-wired repo kept a pre-commit-only
+            # config and `qgate wire` reported success while the merge bypass stayed
+            # wide open. It is still not overwritten -- the gate cannot tell an old
+            # template from one somebody has since edited -- but it is no longer
+            # silent about what is missing.
+            $missing = @($script:LefthookHooks |
+                Where-Object { $have -notmatch "(?m)^$([regex]::Escape($_))\s*:" })
+            if ($missing) {
+                Write-Output "  warn:   it has no $($missing -join ', ') hook -- a commit created that way runs NO gate at all."
+                Write-Output '          If you have not hand-edited this file, replace it with the current template:'
+                Write-Output "            Copy-Item '$($script:LefthookTemplate)' '$cfg' -Force; lefthook install"
+                Write-Output '          Otherwise copy the missing block out of that template yourself.'
+            }
         }
     } else {
         Copy-Item (Join-Path $PSScriptRoot 'templates\lefthook.yml') $cfg
