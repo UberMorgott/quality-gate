@@ -46,6 +46,30 @@ function Test-GitIgnored([string]$Root, [string]$Path) {
     return $ignored
 }
 
+# The same question asked per DIRECTORY and remembered. The Godot runner collects
+# every *.gd in the project with Get-ChildItem -Recurse, and a project holds hundreds
+# of them: one git process per file is not a filter, it is a second build step.
+# Directories are far fewer, an ignored checkout IS a directory, and check-ignore
+# answers for one -- measured, including a directory several levels inside the ignored
+# one, and exit 1 for the repo root itself.
+#
+# Batching through `check-ignore --stdin` was tried and rejected: git C-quotes any
+# path containing a backslash on the way back out (`"C:\\dir\\f.gd"`, plus a trailing
+# CR), and `-z`, which would return them raw, switches the INPUT to NUL-separated too,
+# which a PowerShell pipeline does not produce. Exit codes need no parsing at all.
+#
+# Granularity is the directory, so a .gitignore rule naming an individual file inside
+# a directory that is otherwise tracked is NOT honoured here. That is the price of not
+# spawning git per file; the case this exists for -- a whole nested checkout -- is a
+# directory.
+$script:IgnoredDirs = @{}
+function Test-GitIgnoredDir([string]$Root, [string]$Dir) {
+    if (-not $script:IgnoredDirs.ContainsKey($Dir)) {
+        $script:IgnoredDirs[$Dir] = Test-GitIgnored $Root $Dir
+    }
+    return $script:IgnoredDirs[$Dir]
+}
+
 function Find-Marker([string]$Root, [string[]]$Names, [int]$Depth = 3) {
     Get-ChildItem -Path $Root -Recurse -Depth $Depth -File -Force -ErrorAction SilentlyContinue |
         Where-Object {

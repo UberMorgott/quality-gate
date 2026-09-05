@@ -93,6 +93,32 @@ $r = Invoke-Gate $gign
 Check 'gofmt still fails on a real unformatted file' `
     (($r.Code -ne 0) -and ($r.Out -match '\[FAIL\] gofmt') -and ($r.Out -match 'ugly\.go') -and ($r.Out -notmatch 'bad\.go')) $r.Out
 
+# The Godot runner had the identical hole: it collects every *.gd with
+# Get-ChildItem -Recurse and excluded only .godot/ and addons/, so the same nested
+# checkout reddened a godot repo's root gate. The question is asked per DIRECTORY and
+# cached there rather than per file -- this list is every script in the project, while
+# gofmt only ever names the handful it wants reformatted.
+if ((Get-Command gdformat -ErrorAction SilentlyContinue) -and (Get-Command gdlint -ErrorAction SilentlyContinue)) {
+    $gdIgn = Join-Path $tmp 'godot-ignored'
+    Copy-Item (Join-Path $PSScriptRoot 'testdata\godot-fixture') $gdIgn -Recurse
+    Set-Content (Join-Path $gdIgn '.gitignore') '.claude/'
+    git -C $gdIgn init -q 2>$null
+    git -C $gdIgn add -A 2>$null
+    git -C $gdIgn -c user.email=selftest@local -c user.name=selftest commit -qm init *> $null
+    $uglyGd = "extends Node`n`nfunc  _ready():`n        var x    =   1`n        print( x )`n"
+    New-Item -ItemType Directory -Path (Join-Path $gdIgn '.claude\worktrees\agent-x') -Force | Out-Null
+    [IO.File]::WriteAllText((Join-Path $gdIgn '.claude\worktrees\agent-x\bad.gd'), $uglyGd)
+    $r = Invoke-Gate $gdIgn
+    Check 'a misformatted .gd in a gitignored worktree does not fail the gate' `
+        (($r.Code -eq 0) -and ($r.Out -notmatch 'bad\.gd')) $r.Out
+    [IO.File]::WriteAllText((Join-Path $gdIgn 'ugly.gd'), $uglyGd)
+    $r = Invoke-Gate $gdIgn
+    Check 'gdformat still fails on a misformatted .gd in the project' `
+        (($r.Code -ne 0) -and ($r.Out -match '\[FAIL\] gdformat') -and ($r.Out -match 'ugly\.gd') -and ($r.Out -notmatch 'bad\.gd')) $r.Out
+} else {
+    Write-Output '[skip] gdformat/gdlint not on PATH -- the Godot ignore filter cannot run'
+}
+
 # 2. Clean Go fixture, no linter config -> passes, warns exactly once.
 $go = Join-Path $tmp 'go'
 Copy-Item (Join-Path $PSScriptRoot 'testdata\go-fixture') $go -Recurse

@@ -517,8 +517,13 @@ function Invoke-GodotStack($s) {
     # should not be blocked by its docstrings. Its files still count as targets
     # a reference may resolve to (see $known below); they are just not scanned.
     $noGodotDir = '[\\/](\.godot|addons)[\\/]'
+    # Ignored directories are not this project's code, for the same reason gofmt no
+    # longer walks into them: a nested checkout under a gitignored path -- Claude Code
+    # puts agent worktrees in .claude/worktrees/<agent>/ -- would otherwise be linted
+    # as part of the root project and redden its gate over files not in its index.
+    # Asked per directory and cached, because this list is every .gd in the project.
     $gd = @(Get-ChildItem $s.Dir -Recurse -File -Filter '*.gd' -ErrorAction SilentlyContinue |
-        Where-Object { $_.FullName -notmatch $noGodotDir })
+        Where-Object { $_.FullName -notmatch $noGodotDir -and -not (Test-GitIgnoredDir $s.Dir $_.DirectoryName) })
     # -All means "every detected stack, ignore git status", so it must ignore it
     # here too -- narrowing under -All left both lint phases out of the output
     # entirely while the stack line still said [PASS].
