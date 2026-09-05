@@ -705,17 +705,73 @@ $past = (Get-Date).AddDays(-5).ToString('yyyy-MM-dd')
  {"name":"nodate","reason":"missing until"}
 ]}
 "@)
-$out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\outdated.ps1') -Root $def 2>&1 | Out-String)
-Check 'a live deferral hides its finding but stays visible' `
-    (($out -match '\[DEFERRED\] go until') -and ($out -notmatch '\[OUTDATED\] tool go ')) $out
+# These assertions used to be made against a LIVE run and were not sound. Two of them
+# went red on a perfectly healthy gate whenever the registry was unreachable --
+# measured, same commit and same machine minutes apart: 118/118, then 116/118. They
+# also depended, silently, on THIS machine's cargo happening to be behind, so an
+# up-to-date cargo failed them exactly as an outage did. And the first one passed
+# OFFLINE for no reason at all: an absent [OUTDATED] satisfies its -notmatch whether a
+# live deferral hid the finding or the network simply never produced one.
+#
+# So the contract is pinned to fixed inputs. The seam is the cache: outdated writes one
+# [OUTDATED] line per finding to a per-repo file in TEMP, and -Summary is the only
+# caller allowed to answer from it, so seeding that file fixes BOTH halves of the
+# input -- installed version and latest version -- with no registry in the loop.
+function Set-Deferrals([string]$RepoRoot, [string]$Json) {
+    $f = Join-Path $RepoRoot 'qgate.deferrals.json'
+    [IO.File]::WriteAllText($f, $Json)
+    # Backdated on purpose: the cache is trusted only while it is STRICTLY newer than
+    # every manifest, and two writes in the same instant are not strictly ordered.
+    (Get-Item $f).LastWriteTime = (Get-Date).AddMinutes(-5)
+}
+function Set-OutdatedCache([string]$RepoRoot, [string[]]$Lines) {
+    Set-Content -Path (Join-Path ([IO.Path]::GetTempPath()) `
+        "quality-gate-outdated-$(Get-PathKey (Resolve-Path $RepoRoot).Path).txt") -Value ($Lines -join "`n")
+}
+function Get-Summary([string]$RepoRoot) {
+    (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\outdated.ps1') -Root $RepoRoot -Summary 2>&1 | Out-String)
+}
+$fixedFinding = '[OUTDATED] tool rust/cargo 1.0.0 -> 2.0.0'
+
+Set-Deferrals $def '{"dependencies":[]}'
+Set-OutdatedCache $def @($fixedFinding)
+$s = Get-Summary $def
+Check 'a finding with no deferral is reported' `
+    (($s -match 'dependency update\(s\) available') -and ($s -notmatch 'have expired')) $s
+
+Set-Deferrals $def "{`"dependencies`":[{`"name`":`"rust/cargo`",`"until`":`"$future`",`"reason`":`"waiting on the edition bump`"}]}"
+Set-OutdatedCache $def @($fixedFinding)
+$s = Get-Summary $def
+Check 'a live deferral hides the finding' `
+    (($s -notmatch 'dependency update\(s\) available') -and ($s -notmatch 'have expired')) $s
+
+Set-Deferrals $def "{`"dependencies`":[{`"name`":`"rust/cargo`",`"until`":`"$past`",`"reason`":`"was waiting on the edition bump`"},{`"name`":`"nodate`",`"reason`":`"missing until`"}]}"
+Set-OutdatedCache $def @($fixedFinding)
+$s = Get-Summary $def
+# Both halves in one run: the expiry is announced AND the finding it was hiding is
+# back. An implementation that printed the marker and went on suppressing the finding
+# would satisfy either half alone.
 Check 'an expired deferral is reported and its finding comes back' `
-    (($out -match '\[DEFERRAL EXPIRED\] rust/cargo') -and ($out -match '\[OUTDATED\] tool rust/cargo')) $out
-Check 'a deferral without until is a warning, not a silent skip' ($out -match "entry for 'nodate' needs 'until'") $out
-# The run above wrote the cache; the summary answers from it and must still see
-# the expiry, or an expired deferral would go unmentioned for the cache's life.
-$out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\outdated.ps1') -Root $def -Summary 2>&1 | Out-String)
-Check 'the cached summary still reports an expired deferral' ($out -match 'deferral\(s\).*have expired') $out
-Check 'qgate outdated never fails, deferrals included' ($LASTEXITCODE -eq 0) $out
+    (($s -match 'deferral\(s\).*have expired') -and ($s -match 'dependency update\(s\) available')) $s
+# Printed ahead of the cache branch, so it must survive the path the pre-commit run
+# actually takes -- this used to be asserted only against the live report.
+Check 'a deferral without until is a warning, not a silent skip' ($s -match "entry for 'nodate' needs 'until'") $s
+
+# The live path is still worth one smoke test -- a real registry answer flowing into a
+# real deferral is not what the cache path proves -- but only when its subject exists.
+# The precondition is checked out loud instead of being assumed: neither the registry
+# being up nor this machine's cargo being behind is anything this suite arranges.
+Set-Deferrals $def '{"dependencies":[]}'
+$live = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\outdated.ps1') -Root $def 2>&1 | Out-String)
+Check 'qgate outdated never fails, deferrals included' ($LASTEXITCODE -eq 0) $live
+if ($live -match '\[OUTDATED\] tool rust/cargo') {
+    Set-Deferrals $def "{`"dependencies`":[{`"name`":`"rust/cargo`",`"until`":`"$past`",`"reason`":`"was waiting on the edition bump`"}]}"
+    $live = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\outdated.ps1') -Root $def 2>&1 | Out-String)
+    Check 'a live registry answer still reaches the deferral logic' `
+        (($live -match '\[DEFERRAL EXPIRED\] rust/cargo') -and ($live -match '\[OUTDATED\] tool rust/cargo')) $live
+} else {
+    Write-Output '[skip] no live rust/cargo finding to defer -- registry unreachable, or this cargo is current'
+}
 
 # 26. An unreadable qgate.deferrals.json must say so ONCE. `@($null)` iterates one
 # null element, so the correct "not readable" line was followed by a second warning
