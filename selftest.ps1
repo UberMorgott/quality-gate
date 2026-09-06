@@ -455,6 +455,80 @@ if ($dnSdks) {
     Check 'a file in a new directory is not called no changed .cs files' `
         ($out -notmatch 'no changed \.cs files') $out
 
+    # Two or more dotnet projects in one run share ONE `dotnet format` pass over a
+    # temporary solution: measured on ContentTool (13 csproj, warm), 25.6s of per-project
+    # calls against 3.3-3.6s for one call over the same projects. The saving is worthless
+    # if the report stops naming the project that is actually dirty, so both halves --
+    # the clean project passes, the dirty one fails with ITS csproj in the fix line.
+    $dnMulti = Join-Path $tmp 'dotnet-multi'
+    foreach ($n in 'A', 'B') {
+        $d = Join-Path $dnMulti $n
+        New-Item -ItemType Directory -Path $d -Force | Out-Null
+        [IO.File]::WriteAllText((Join-Path $d "$n.csproj"), $dnProjClean)
+        [IO.File]::WriteAllText((Join-Path $d 'Greeter.cs'), $dnCsClean)
+    }
+    $uglyOne = "namespace Fixture;`r`n`r`npublic static class Ugly`r`n{`r`n public static int One() => 1;`r`n}`r`n"
+    [IO.File]::WriteAllText((Join-Path $dnMulti 'B\Ugly.cs'), $uglyOne)
+    $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $dnMulti -All 2>&1 | Out-String)
+    $dnMultiCode = $LASTEXITCODE
+    Check 'one format pass over two projects still blames the project that is dirty' `
+        (($dnMultiCode -ne 0) -and ($out -match '\[PASS\] format \(\d+\.\ds, one pass over 2 projects\)') -and
+            ($out -match '\[FAIL\] format \(shared pass\)') -and ($out -match 'B\\Ugly\.cs') -and
+            ($out -match 'fix: dotnet format whitespace B\.csproj')) "code=$dnMultiCode $out"
+    # The absence half, and it is the whole risk of sharing one pass: the clean project
+    # must not inherit its neighbour's violations, and no phase may print 0.0s for work
+    # that really took three seconds somewhere else.
+    Check 'a shared format pass does not blame the clean project or claim zero time' `
+        (($out -notmatch 'fix: dotnet format whitespace A\.csproj') -and ($out -notmatch 'format \(0\.0s')) $out
+    # ...and the temporary solution is by-product: it lives outside the repository and
+    # does not survive the run that made it.
+    $dnSlnKey = "quality-gate-fmt-$(Get-PathKey (Resolve-Path $dnMulti).Path)-*"
+    Check 'the temporary solution is gone when the run ends' `
+        (-not (Get-ChildItem ([IO.Path]::GetTempPath()) -Filter $dnSlnKey -Directory -ErrorAction SilentlyContinue)) `
+        $dnSlnKey
+
+    # The fast lane narrows the same pass with --include, and the narrowing is what keeps
+    # a repository with committed violations committable: B carries one nobody touched,
+    # A's touched file carries one, and only A's is a verdict.
+    $dnMultiFast = Join-Path $tmp 'dotnet-multi-fast'
+    Copy-Item $dnMulti $dnMultiFast -Recurse
+    [IO.File]::WriteAllText((Join-Path $dnMultiFast 'A\Ugly.cs'), $uglyOne)
+    git -C $dnMultiFast init -q 2>$null
+    git -C $dnMultiFast add -A 2>$null
+    git -C $dnMultiFast -c user.email=selftest@local -c user.name=selftest commit -qm init 2>$null
+    [IO.File]::WriteAllText((Join-Path $dnMultiFast 'A\Ugly.cs'),
+        "namespace Fixture;`r`n`r`npublic static class Ugly`r`n{`r`n public static int One() => 1;`r`n  public static int Two() => 2;`r`n}`r`n")
+    $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $dnMultiFast 2>&1 | Out-String)
+    $dnMultiFastCode = $LASTEXITCODE
+    Check 'the fast lane judges the touched project' `
+        (($dnMultiFastCode -ne 0) -and ($out -match 'A\\Ugly\.cs') -and
+            ($out -match 'fix: dotnet format whitespace A\.csproj')) "code=$dnMultiFastCode $out"
+    # The absence half: an --include list that matched nothing (an absolute path does
+    # exactly that, silently) would leave B's committed violation to be reported instead.
+    Check 'the fast lane does not report the violation nobody touched' `
+        ($out -notmatch 'B\\Ugly\.cs') $out
+
+    # A project no installed SDK can build cannot go into the solution -- it fails the
+    # LOAD, which would turn one machine gap into a formatting verdict on every project
+    # beside it. It is still reported as the skip it always was, and the other two are
+    # still checked in one pass.
+    $dnMultiSdk = Join-Path $tmp 'dotnet-multi-sdk'
+    Copy-Item $dnMulti $dnMultiSdk -Recurse
+    Remove-Item (Join-Path $dnMultiSdk 'B\Ugly.cs') -Force
+    $dnC = Join-Path $dnMultiSdk 'C'
+    New-Item -ItemType Directory -Path $dnC -Force | Out-Null
+    [IO.File]::WriteAllText((Join-Path $dnC 'C.csproj'), $dnProjClean.Replace('net8.0', 'net99.0'))
+    [IO.File]::WriteAllText((Join-Path $dnC 'Greeter.cs'), $dnCsClean)
+    $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $dnMultiSdk -All 2>&1 | Out-String)
+    $dnMultiSdkCode = $LASTEXITCODE
+    Check 'a project no SDK here can build is left out of the shared pass, not run through it' `
+        (($dnMultiSdkCode -eq 0) -and ($out -match 'one pass over 2 projects') -and
+            ($out -match 'needs \.NET SDK 99\.x')) "code=$dnMultiSdkCode $out"
+    # The absence half: leaving it out must not turn into an error, and must not quietly
+    # drop the formatting check for the projects that CAN be loaded.
+    Check 'leaving the unbuildable project out is not an error and not a dropped check' `
+        (($out -notmatch 'error ') -and ($out -match '\[PASS\] format \(shared pass\)')) $out
+
     # The whole-project check is the one CI and the generated pre-commit hook run, and on
     # a real mod it is 1397 WHITESPACE lines -- 323k chars, which the report's global
     # 6000-char truncation then cut to 27 lines and a byte count: no total, no file count,
