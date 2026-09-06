@@ -286,7 +286,13 @@ function Phase {
     # and printed `(0.0s)` for a phase that cost six seconds -- a time that says the
     # opposite of the truth is worse than no time at all.
     param([string]$Name, [scriptblock]$Body, [switch]$FailIfOutput, [double]$Elapsed = -1)
-    if ($script:Failed) { return }
+    # A phase the run never reached must not vanish. Reported from the field: a file with a
+    # whitespace nit AND a compile error printed `[FAIL] format` and no `build` line at all,
+    # so the report read as "the only thing wrong here is whitespace". Same rule the stack
+    # loop already applies one level up -- the work is still skipped, the skipping is on the
+    # record. Not counted as a phase: it did not run, and the zero-phase invariant asks how
+    # many ran. Here in Phase, so every stack gets it, not just the one that reported it.
+    if ($script:Failed) { $script:Lines += "[SKIP] $Name -- not run: an earlier phase failed"; return }
     $script:Phases++
     $sw = [Diagnostics.Stopwatch]::StartNew()
     $global:LASTEXITCODE = 0

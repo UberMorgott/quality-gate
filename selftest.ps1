@@ -310,6 +310,19 @@ if ($dnSdks) {
     $r = Invoke-Gate $dn
     Check 'a compile error fails the dotnet gate' (($r.Code -ne 0) -and ($r.Out -match 'error CS0029')) $r.Out
     Check 'a compile error is not reported as a formatting problem' ($r.Out -notmatch 'WHITESPACE') $r.Out
+
+    # Both defects in one file. Reported from the field: `[FAIL] format` and then NO build
+    # line at all, so the report said the only thing wrong here was whitespace -- the
+    # phases after a failure were skipped in silence. The build is still not run; it is
+    # now on the record that it was not.
+    [IO.File]::WriteAllText($dnCs, $dnCsClean.Replace(
+            '        return $"Hello, {name}!";', ' int x = "s"; return $"Hello, {name}!{x}";'))
+    $r = Invoke-Gate $dn
+    Check 'a phase the run never reached is named, not dropped' `
+        (($r.Code -ne 0) -and ($r.Out -match 'FAIL\] format') -and ($r.Out -match 'SKIP\] build -- not run')) $r.Out
+    # The absence half: the skipped build must not be reported as a verdict on the code --
+    # nothing compiled, so there is no CS to print and printing one would be a lie.
+    Check 'a skipped build is not reported as a compile error' ($r.Out -notmatch 'error CS') $r.Out
     [IO.File]::WriteAllText($dnCs, $dnCsClean)
 
     # A game mod's <Reference> HintPath points into a Steam directory, and CI and half
