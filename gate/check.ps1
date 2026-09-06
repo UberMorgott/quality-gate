@@ -504,11 +504,25 @@ function Invoke-DotnetStack($s) {
         }
     }
     if ($runFormat) {
-        Phase 'format' {
-            dotnet format whitespace @fmtArgs
-            # Every line already names file(line,col); what none of them says is the
-            # one command that fixes all of them.
-            if ($LASTEXITCODE -ne 0) { "fix: dotnet format whitespace $proj" }
+        $fmtOut = (& dotnet format whitespace @fmtArgs 2>&1 | Out-String).TrimEnd()
+        $fmtCode = $LASTEXITCODE
+        if ($fmtCode -ne 0 -and $fmtOut -notmatch 'error WHITESPACE') {
+            # dotnet format loads the project through MSBuild before it reads a single
+            # character of whitespace, and a workspace it cannot load exits non-zero with
+            # no WHITESPACE line at all. Calling that a formatting failure would print
+            # `fix: dotnet format whitespace` at a reader whose problem it does not touch;
+            # same convention as govulncheck offline -- an answer nobody got is not a
+            # verdict.
+            $script:Lines += "[UNKNOWN] ${proj}: could not check formatting -- dotnet format failed to load the project"
+            $script:Lines += (($fmtOut -split "`r?`n" | Where-Object { $_.Trim() } | Select-Object -Last 5) -join "`n")
+        }
+        else {
+            Phase 'format' {
+                $fmtOut
+                # Every line already names file(line,col); what none of them says is the
+                # one command that fixes all of them.
+                if ($fmtCode -ne 0) { "fix: dotnet format whitespace $proj"; $global:LASTEXITCODE = 1 }
+            }
         }
     }
 
