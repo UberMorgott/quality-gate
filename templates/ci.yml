@@ -35,12 +35,14 @@ jobs:
               Add-Content $env:GITHUB_OUTPUT
           }
           $rust = [bool](Get-ChildItem -Recurse -Depth 3 -Filter Cargo.toml -File -EA SilentlyContinue)
+          $dotnet = [bool](Get-ChildItem -Recurse -Depth 3 -Filter *.csproj -File -EA SilentlyContinue)
           "go=$(($null -ne $gomod).ToString().ToLower())" | Add-Content $env:GITHUB_OUTPUT
           if ($gomod) {
             "gomod=$($gomod.FullName.Substring($PWD.Path.Length + 1) -replace '\\', '/')" | Add-Content $env:GITHUB_OUTPUT
           }
           "web=$($web.ToString().ToLower())"   | Add-Content $env:GITHUB_OUTPUT
           "rust=$($rust.ToString().ToLower())" | Add-Content $env:GITHUB_OUTPUT
+          "dotnet=$($dotnet.ToString().ToLower())" | Add-Content $env:GITHUB_OUTPUT
 
       - uses: actions/setup-go@v5
         if: steps.stacks.outputs.go == 'true'
@@ -73,6 +75,13 @@ jobs:
         if: steps.stacks.outputs.rust == 'true'
         with:
           components: clippy, rustfmt
+
+      # A game mod's <Reference> HintPath points into a Steam install no runner has, so
+      # the gate reports those projects as skipped with the reason and checks the rest.
+      - uses: actions/setup-dotnet@v4
+        if: steps.stacks.outputs.dotnet == 'true'
+        with:
+          dotnet-version: '8.0.x'
 
       - name: install quality-gate
         shell: pwsh

@@ -11,7 +11,7 @@
 # With no stack switch the changed side is auto-detected from git status.
 [CmdletBinding(PositionalBinding = $false)]
 param(
-    [string[]]$Only,      # go | web | rust | proto | godot -- restrict to these stacks (one value: -Only go,web)
+    [string[]]$Only,      # go | web | rust | proto | godot | dotnet -- restrict to these stacks (one value: -Only go,web)
     [switch]$All,         # every detected stack, ignore git status
     [switch]$Fast,
     [switch]$Full,
@@ -424,6 +424,112 @@ function Invoke-RustStack($s) {
     Phase 'cargo test' { cargo test --quiet }
 }
 
+function Invoke-DotnetStack($s) {
+    Set-Location $s.Dir
+    $proj = $s.Marker
+    $env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'
+    $env:DOTNET_NOLOGO = '1'
+    $env:DOTNET_SKIP_FIRST_TIME_EXPERIENCE = '1'
+    # The `dotnet` first on PATH can be the x86 host with no SDK beside it -- it runs,
+    # it answers `--version`, and it cannot build anything ("No .NET SDKs were found").
+    # So the question is the SDK list, not the executable.
+    $sdks = @(if (Have 'dotnet') { (& dotnet --list-sdks 2>$null) | Where-Object { $_ } })
+    if (-not $sdks) {
+        # Same split as the Godot binary: every phase here needs the SDK, and failing
+        # every agent turn over a toolchain the fast lane cannot install is not a gate.
+        if ($Full) { Fail 'dotnet: no .NET SDK found -- required at the full level (install https://dot.net)'; return }
+        $script:Lines += '[WARN] dotnet SDK not found -- dotnet stack skipped (install https://dot.net)'
+        return
+    }
+    $sdkVers = @($sdks | ForEach-Object { ($_ -split ' ')[0] })
+    $maxSdk = ($sdkVers | ForEach-Object { [int]($_ -split '\.')[0] } | Measure-Object -Maximum).Maximum
+
+    # Evaluation only: -getProperty/-getItem run no targets, so a Directory.Build.props
+    # <Error> guarding a missing game install does not fire here and the references come
+    # back as readable data. That is the whole point -- a game mod's HintPath points into
+    # a Steam directory that CI and half the developer machines do not have, and a build
+    # failure there is a fact about the machine, not about the code.
+    $q = (& dotnet msbuild $proj -getProperty:TargetFramework -getItem:Reference -nologo 2>&1 | Out-String).Trim()
+    $qCode = $LASTEXITCODE
+    # A csproj msbuild cannot even evaluate IS a defect, so this one is a real phase.
+    Phase 'refs' { if ($qCode -ne 0) { $q; $global:LASTEXITCODE = 1 } }
+    if ($script:Failed) { return }
+    $info = try { $q | ConvertFrom-Json } catch { $null }
+
+    $tfm = $info.Properties.TargetFramework
+    # net4xx builds on any modern SDK; net<major>.0 needs that major installed. Reported
+    # as a skip, not a red build: a project targeting an SDK nobody here has is a gap in
+    # the machine, and the raw NETSDK1045 tells the reader nothing about which one.
+    if ($tfm -match '^net(\d+)\.\d' -and [int]$Matches[1] -gt $maxSdk) {
+        $script:Lines += "[SKIP] ${proj}: needs .NET SDK $($Matches[1]).x, installed $($sdkVers -join ', ')"
+        return
+    }
+    $missing = @($info.Items.Reference | Where-Object { $_.HintPath -and -not (Test-Path $_.HintPath) })
+
+    # Whitespace only: the gate reports, it never rewrites, and a repo with no
+    # .editorconfig has no style to enforce beyond it. Measured on two real mods: 1396
+    # and 447 violations, so the whole project is a full-level question. The fast lane
+    # judges the files this commit touches, or it blocks every commit forever.
+    $fmtArgs = @($proj, '--verify-no-changes', '--no-restore', '-v', 'q')
+    $runFormat = $true
+    if (-not $Full -and -not $All) {
+        $changed = Get-ChangedPaths $Root
+        if ($null -ne $changed) {
+            $prefix = if ($s.Rel) { "$($s.Rel)/" } else { '' }
+            # --include is resolved against the CURRENT DIRECTORY, and an ABSOLUTE path
+            # matches nothing at all -- silently, exit 0, a green format phase over an
+            # unformatted file. Set-Location above put us in the project directory, so
+            # these are relative to it.
+            $cs = @($changed | Where-Object { $_ -like '*.cs' -and $_.StartsWith($prefix) } |
+                ForEach-Object { $_.Substring($prefix.Length) })
+            if ($cs) { $fmtArgs += @('--include') + $cs }
+            # A phase that did not run must never look like a phase that passed.
+            else { $runFormat = $false; $script:Lines += "[SKIP] format $proj -- no changed .cs files" }
+        }
+    }
+    if ($runFormat) {
+        Phase 'format' {
+            dotnet format whitespace @fmtArgs
+            # Every line already names file(line,col); what none of them says is the
+            # one command that fixes all of them.
+            if ($LASTEXITCODE -ne 0) { "fix: dotnet format whitespace $proj" }
+        }
+    }
+
+    if ($missing) {
+        # Format needed none of them (measured); a compiler does. Reported once, with
+        # the count and a name, so the reader can tell "game not installed" from "the
+        # csproj is wrong" without reading forty MSB3245 lines.
+        $script:Lines += "[SKIP] ${proj}: $($missing.Count) reference(s) missing ($([IO.Path]::GetFileName($missing[0].HintPath))) -- game/SDK not installed on this machine"
+        return
+    }
+    # No -warnaserror: real repos carry warnings and a fast lane stricter than CI is a
+    # gate people learn to bypass. The count is a note, the build is the verdict.
+    Phase 'build' {
+        $o = (& dotnet build $proj -nologo -v q -clp:NoSummary 2>&1 | Out-String).Trim()
+        if ($LASTEXITCODE -ne 0) { $o; return }
+        $w = @([regex]::Matches($o, '(?m):\s+warning\s')).Count
+        if ($w) { $script:Lines += "[WARN] ${proj}: $w compiler warning(s)" }
+    }
+    if (-not $Full) { return }
+
+    # Test projects in these repos are custom Exe runners, so the phase exists only
+    # where a real test SDK does.
+    if ((Get-Content $proj -Raw) -match 'Microsoft\.NET\.Test\.Sdk') {
+        Phase 'test' { dotnet test $proj --no-build -nologo -v q }
+    }
+    # See the govulncheck note above: a known vulnerability is a defect, it lives on the
+    # network, and a project with no PackageReference has nothing to ask about.
+    if ((Get-Content $proj -Raw) -match 'PackageReference') {
+        Phase 'vuln' {
+            $o = (& dotnet list $proj package --vulnerable --include-transitive 2>&1 | Out-String).Trim()
+            # The command exits 0 whether or not it found anything, so the report is
+            # the verdict.
+            if ($o -match 'has the following vulnerable packages') { $o; $global:LASTEXITCODE = 1 }
+        }
+    }
+}
+
 function Invoke-WebStack($s) {
     Set-Location $s.Dir
     $bin = Join-Path $s.Dir 'node_modules\.bin'
@@ -705,6 +811,7 @@ foreach ($s in $stacks) {
             'rust' { Invoke-RustStack $s }
             'proto' { Invoke-ProtoStack $s }
             'godot' { Invoke-GodotStack $s }
+            'dotnet' { Invoke-DotnetStack $s }
         }
     } catch {
         # Fail closed: a crash in the gate is a failure, never a silent pass.

@@ -14,6 +14,7 @@ $script:KnownMarkers = [ordered]@{
     proto  = 'buf.yaml'
     python = 'pyproject.toml or requirements.txt'
     rust   = 'Cargo.toml'
+    dotnet = '*.csproj'
 }
 
 # Directories that never hold a project we own.
@@ -73,7 +74,11 @@ function Test-GitIgnoredDir([string]$Root, [string]$Dir) {
 function Find-Marker([string]$Root, [string[]]$Names, [int]$Depth = 3) {
     Get-ChildItem -Path $Root -Recurse -Depth $Depth -File -Force -ErrorAction SilentlyContinue |
         Where-Object {
-            $Names -contains $_.Name -and
+            # -like, not -contains: the .NET marker is a PATTERN (*.csproj), because a
+            # C# project file is named after the project. A literal name has no wildcard
+            # character in it, so every other stack keeps matching exactly as before.
+            $f = $_
+            ($Names | Where-Object { $f.Name -like $_ }) -and
             ($_.FullName.Substring($Root.Length) -split '[\\/]' | Where-Object { $script:SkipDirs -contains $_ }).Count -eq 0 -and
             # Last: it spawns a process, and the cheap tests above have already cut
             # the candidates down to the handful of real marker files.
@@ -193,6 +198,18 @@ function Get-Stacks([string]$Root) {
             $warn = 'cargo not on PATH -- the gate cannot verify this stack until it is'
         }
         $stacks += [pscustomobject]@{ Stack = 'rust'; Dir = $dir; Rel = (& $rel $dir); Marker = 'Cargo.toml'; Implemented = $true; Warn = $warn }
+    }
+
+    # One stack per PROJECT FILE, not per directory: a .NET repo carries several
+    # (root plus tools/*, demos/*, tests/*) and every one of them builds on its own.
+    # No .sln handling -- these repos have none, and the csproj is what the SDK takes.
+    foreach ($m in Find-Marker $Root @('*.csproj')) {
+        $dir = $m.DirectoryName
+        $warn = ''
+        if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) {
+            $warn = 'dotnet not on PATH -- the gate cannot verify this stack until it is'
+        }
+        $stacks += [pscustomobject]@{ Stack = 'dotnet'; Dir = $dir; Rel = (& $rel $dir); Marker = $m.Name; Implemented = $true; Warn = $warn }
     }
 
     foreach ($m in Find-Marker $Root @('buf.yaml')) {

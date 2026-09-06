@@ -35,7 +35,7 @@ Gate flags: -All  -Fast  -Full  -Only <stack[,stack]>  -Quiet  -Why  -Baseline <
   -Quiet prints nothing on a green run and the whole report on a red one
        (what the generated pre-commit hook uses; CI wants the [PASS] lines).
        A [WARN] about the gate's own unreadable config is not silenced.
-  -Only takes go web rust proto godot: -Only go,web ("go,web" and `go web` are the same)
+  -Only takes go web rust proto godot dotnet: -Only go,web ("go,web" and `go web` are the same)
        python is detected but not checked, so a run that names it alone checks
        nothing and FAILS (-All flags it only when a real stack ran too)
 A run that executed zero check phases is never green.
@@ -71,7 +71,7 @@ switch ($cmd) {
         . (Join-Path $home_ 'gate\detect.ps1')
         Write-Output "install   $home_  $(git -C $home_ rev-parse --short HEAD 2>$null)"
         Write-Output "resolved  $((Get-Command qgate -ErrorAction SilentlyContinue).Source)"
-        foreach ($t in 'go', 'golangci-lint', 'govulncheck', 'node', 'npm', 'cargo', 'lefthook', 'buf', 'gdformat', 'gdlint') {
+        foreach ($t in 'go', 'golangci-lint', 'govulncheck', 'node', 'npm', 'cargo', 'dotnet', 'lefthook', 'buf', 'gdformat', 'gdlint') {
             $exe = Get-Command $t -ErrorAction SilentlyContinue
             # An absent tool is reported, not skipped: "what does the gate think it
             # has right now" is the whole question this command answers.
@@ -82,6 +82,9 @@ switch ($cmd) {
                 'node' { "node $(& node --version)" }
                 'npm' { "npm $(& npm --version)" }
                 'cargo' { (& cargo --version) }
+                # The SDK list, not `--version`: the x86 host answers the latter and
+                # can still build nothing at all.
+                'dotnet' { "dotnet SDKs: $((@(& dotnet --list-sdks 2>$null | ForEach-Object { ($_ -split ' ')[0] }) -join ', '))" }
                 # Prints a bare version number, which alone in the list reads as nothing.
                 'lefthook' { "lefthook $(& lefthook version)" }
                 # Prints a multi-line report; the scanner's own version is the line
