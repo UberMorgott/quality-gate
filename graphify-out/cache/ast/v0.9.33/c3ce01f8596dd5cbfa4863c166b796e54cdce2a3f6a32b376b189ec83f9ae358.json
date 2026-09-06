@@ -1,1 +1,0 @@
-{"nodes": [{"id": "pkg_python_fixture", "label": "python-fixture", "file_type": "code", "type": "package", "ecosystem": "python", "source_file": "testdata/python-fixture/pyproject.toml", "source_location": "L1", "version": "0.0.0"}], "edges": []}
