@@ -322,11 +322,49 @@ if ($dnSdks) {
     Check 'a missing reference is not blamed on the code' `
         (($r.Out -notmatch 'error CS') -and ($r.Out -notmatch 'error MSB')) $r.Out
 
+    # ...and the HintPath is usually RELATIVE to the csproj (`..\..\lib\X.dll` in a real
+    # test project), so both halves: a relative hint that resolves must not be called
+    # missing, and one that does not must still be found. Resolving it against the
+    # process directory instead of the project directory passes the first half and fails
+    # the second -- or worse, silently skips every project on a machine that has
+    # everything. The payload is a real managed assembly because the build phase runs
+    # right after and a file of garbage bytes would fail it for the wrong reason.
+    $dnLib = Join-Path $tmp 'lib'
+    New-Item -ItemType Directory $dnLib -Force | Out-Null
+    Copy-Item ([psobject].Assembly.Location) (Join-Path $dnLib 'Ghost.dll') -Force
+    $dnRelRef = $dnProjClean.Replace('</Project>', @"
+  <ItemGroup>
+    <Reference Include="Ghost"><HintPath>..\lib\Ghost.dll</HintPath></Reference>
+  </ItemGroup>
+</Project>
+"@)
+    [IO.File]::WriteAllText($dnProj, $dnRelRef)
+    $r = Invoke-Gate $dn
+    Check 'a relative HintPath that resolves is not reported as missing' `
+        (($r.Code -eq 0) -and ($r.Out -notmatch 'reference\(s\) missing')) $r.Out
+    Remove-Item (Join-Path $dnLib 'Ghost.dll') -Force
+    $r = Invoke-Gate $dn
+    Check 'a relative HintPath that resolves to nothing is a skip that names the file' `
+        (($r.Code -eq 0) -and ($r.Out -match 'reference\(s\) missing') -and ($r.Out -match 'Ghost\.dll')) $r.Out
+    Check 'a missing relative reference is not blamed on the code' `
+        (($r.Out -notmatch 'error CS') -and ($r.Out -notmatch 'error MSB')) $r.Out
+
     [IO.File]::WriteAllText($dnProj, $dnProjClean.Replace('net8.0', 'net99.0'))
     $r = Invoke-Gate $dn
     Check 'a target framework no installed SDK can build is a skip that names both' `
         (($r.Code -eq 0) -and ($r.Out -match 'needs \.NET SDK 99\.x') -and ($r.Out -match 'installed \d')) $r.Out
     Check 'an SDK the machine lacks is not reported as an error' ($r.Out -notmatch 'error ') $r.Out
+
+    # A multi-targeted project leaves the SINGULAR property empty, so reading only that
+    # one reports nothing and builds the project anyway -- green, on a TFM no SDK here
+    # can produce.
+    [IO.File]::WriteAllText($dnProj, $dnProjClean.Replace(
+            '<TargetFramework>net8.0</TargetFramework>', '<TargetFrameworks>net8.0;net99.0</TargetFrameworks>'))
+    $r = Invoke-Gate $dn
+    Check 'one unbuildable TFM in a multi-targeted project is a skip that names it' `
+        (($r.Code -eq 0) -and ($r.Out -match 'needs \.NET SDK 99\.x')) $r.Out
+    Check 'a multi-targeted project is not failed over the TFM nobody has' `
+        (($r.Out -notmatch 'error ') -and ($r.Out -notmatch 'reference\(s\) missing')) $r.Out
 
     # ...but a csproj msbuild cannot even evaluate IS a defect in the repository, and it
     # has to land as one rather than as another environment excuse.
