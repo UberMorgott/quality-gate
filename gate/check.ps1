@@ -285,7 +285,11 @@ function Phase {
     # be classified before it can be a verdict), so the stopwatch here wrapped nothing
     # and printed `(0.0s)` for a phase that cost six seconds -- a time that says the
     # opposite of the truth is worse than no time at all.
-    param([string]$Name, [scriptblock]$Body, [switch]$FailIfOutput, [double]$Elapsed = -1)
+    # -Time: the parenthetical, written out. For a phase whose real cost is not a
+    # duration of its own -- one `dotnet format` pass shared by several projects, where
+    # printing the same 3.4s on each would multiply the run's cost by the number of
+    # stacks, and printing 0.0s on the others would deny the work happened at all.
+    param([string]$Name, [scriptblock]$Body, [switch]$FailIfOutput, [double]$Elapsed = -1, [string]$Time)
     # A phase the run never reached must not vanish. Reported from the field: a file with a
     # whitespace nit AND a compile error printed `[FAIL] format` and no `build` line at all,
     # so the report read as "the only thing wrong here is whitespace". Same rule the stack
@@ -302,9 +306,9 @@ function Phase {
     # phase printed `0,0s`, so the timings the report exists to show were unreadable to
     # anything that parses them and inconsistent between machines.
     $secs = if ($Elapsed -ge 0) { $Elapsed } else { $sw.Elapsed.TotalSeconds }
-    $sec = $secs.ToString('0.0', [Globalization.CultureInfo]::InvariantCulture)
+    $sec = if ($Time) { $Time } else { "$($secs.ToString('0.0', [Globalization.CultureInfo]::InvariantCulture))s" }
     if (($LASTEXITCODE -ne 0) -or ($FailIfOutput -and $out)) {
-        $script:Lines += "[FAIL] $Name (${sec}s)"
+        $script:Lines += "[FAIL] $Name ($sec)"
         if ($out) { $script:Lines += $out }
         # A phase killed because the HOST ran out of memory is not a finding about the
         # code, and the raw dump does not say which of the two it is. Reported from the
@@ -326,7 +330,7 @@ function Phase {
         }
         $script:Failed = $true
     } else {
-        $script:Lines += "[PASS] $Name (${sec}s)"
+        $script:Lines += "[PASS] $Name ($sec)"
     }
 }
 
@@ -446,6 +450,123 @@ function Invoke-RustStack($s) {
     Phase 'cargo test' { cargo test --quiet }
 }
 
+# --- dotnet: one format pass over a temporary solution ---------------------
+# `dotnet format` pays for loading an MSBuild workspace before it reads a single
+# character of whitespace, and that cost is per INVOCATION, not per project. Measured
+# on ContentTool (13 csproj, warm): 13 per-project calls 25.6s, ONE call over a
+# solution holding the same 13 projects 3.3-3.6s. So a run with two or more dotnet
+# stacks asks once and splits the answer back out per project -- every WHITESPACE line
+# ends with `[<absolute csproj path>]`, so the attribution is the tool's own and not a
+# guess of ours.
+$script:DnEval = @{}
+$script:FmtShared = $null   # $null = not tried yet, $false = per-project calls
+$script:FmtSlnDir = $null
+
+# One MSBuild evaluation per csproj, cached: the shared pass needs every project's TFM
+# before the second stack has run its own `refs` phase, and paying for that evaluation
+# twice would cost more than the pass saves.
+function Get-DotnetEval([string]$ProjPath) {
+    if (-not $script:DnEval.ContainsKey($ProjPath)) {
+        $sw = [Diagnostics.Stopwatch]::StartNew()
+        $q = (& dotnet msbuild $ProjPath -getProperty:TargetFramework -getProperty:TargetFrameworks `
+                -getProperty:IsTestProject -getItem:Reference -getItem:PackageReference -nologo 2>&1 | Out-String).Trim()
+        $code = $LASTEXITCODE
+        $sw.Stop()
+        $script:DnEval[$ProjPath] = @{ Out = $q; Code = $code; Elapsed = $sw.Elapsed.TotalSeconds }
+    }
+    $script:DnEval[$ProjPath]
+}
+
+function Get-DotnetTfms($info) {
+    @(if ($info.Properties.TargetFramework) { $info.Properties.TargetFramework }
+        else { ($info.Properties.TargetFrameworks -split ';') | ForEach-Object { $_.Trim() } | Where-Object { $_ } })
+}
+
+# The first TFM no installed SDK can build, or $null.
+function Get-DotnetTooNew($Tfms, [int]$MaxSdk) {
+    foreach ($t in $Tfms) { if ($t -match '^net(\d+)\.\d' -and [int]$Matches[1] -gt $MaxSdk) { return $Matches[1] } }
+    $null
+}
+
+# Changed .cs files belonging to one stack, as the REPO-relative paths git gave us.
+function Get-DotnetChangedCs($Stack, $Changed) {
+    $prefix = if ($Stack.Rel) { "$($Stack.Rel)/" } else { '' }
+    @($Changed | Where-Object { $_ -like '*.cs' -and $_.StartsWith($prefix) })
+}
+
+# $false when this run gets no shared pass -- fewer than two projects to check, or a
+# solution that would not load. Every caller falls back to the per-project call.
+function Get-DotnetSharedFormat([int]$MaxSdk, $Changed) {
+    if ($null -ne $script:FmtShared) { return $script:FmtShared }
+    $script:FmtShared = $false
+    $cand = @()
+    $inc = @()
+    foreach ($d in @($stacks | Where-Object { $_.Stack -eq 'dotnet' -and $_.Implemented })) {
+        # Only the projects this run would format anyway: the workspace load IS the
+        # cost, so a project whose .cs files nobody touched does not belong in here.
+        $cs = if ($null -ne $Changed) { Get-DotnetChangedCs $d $Changed } else { @() }
+        if ($null -ne $Changed -and -not $cs) { continue }
+        $e = Get-DotnetEval (Join-Path $d.Dir $d.Marker)
+        if ($e.Code -ne 0) { continue }
+        $i = try { $e.Out | ConvertFrom-Json } catch { $null }
+        if (-not $i) { continue }
+        # A TFM newer than every installed SDK fails the whole solution load, and the
+        # project is a [SKIP] in its own stack anyway -- one machine gap must not turn
+        # into a formatting verdict on the projects beside it.
+        if (Get-DotnetTooNew (Get-DotnetTfms $i) $MaxSdk) { continue }
+        $cand += (Join-Path $d.Dir $d.Marker)
+        $inc += $cs
+    }
+    if ($cand.Count -lt 2) { return $false }
+
+    # Written as text rather than `dotnet new sln` + `dotnet sln add`: measured 0.008s
+    # against 0.63s for the same 13 projects, and 0.6s is a fifth of what the whole
+    # pass costs. Absolute csproj paths load exactly like the relative ones the SDK
+    # writes (measured); the type GUID is the one `dotnet sln add` stamps on a .csproj.
+    # Outside the repository, keyed by root AND process, like the Go build directory:
+    # two agents, or a hook and a hand-run qgate, must not write one file over another.
+    $script:FmtSlnDir = Join-Path ([IO.Path]::GetTempPath()) "quality-gate-fmt-$(Get-PathKey $Root)-$PID"
+    New-Item -ItemType Directory -Path $script:FmtSlnDir -Force | Out-Null
+    $sln = Join-Path $script:FmtSlnDir 'gate.sln'
+    $txt = "Microsoft Visual Studio Solution File, Format Version 12.00`r`n"
+    foreach ($p in $cand) {
+        $txt += "Project(`"{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}`") = `"$([IO.Path]::GetFileNameWithoutExtension($p))`", " +
+        "`"$p`", `"{$([guid]::NewGuid().ToString().ToUpper())}`"`r`nEndProject`r`n"
+    }
+    [IO.File]::WriteAllText($sln, $txt)
+
+    $fargs = @($sln, '--verify-no-changes', '--no-restore', '-v', 'q')
+    # --include is resolved against the CURRENT DIRECTORY, and an ABSOLUTE path matches
+    # nothing at all -- silently, exit 0. The paths here are repo-relative because that
+    # is what Get-ChangedPaths returns, so the pass runs from the repo root.
+    if ($inc) { $fargs += @('--include') + $inc }
+    Push-Location $Root
+    $sw = [Diagnostics.Stopwatch]::StartNew()
+    $out = (& dotnet format whitespace @fargs 2>&1 | Out-String).TrimEnd()
+    $code = $LASTEXITCODE
+    $sw.Stop()
+    Pop-Location
+
+    $ws = @($out -split "`r?`n" | Where-Object { $_ -match 'error WHITESPACE' })
+    if ($code -ne 0 -and -not $ws) {
+        # The solution did not load. Nothing in that is a verdict on anyone's
+        # whitespace, so the run goes back to the call it used to make and says so --
+        # a check quietly downgraded is how a gate stops being one.
+        $script:Lines += '[WARN] the shared dotnet format pass could not load its solution -- falling back to one call per project'
+        return $false
+    }
+    $byProj = @{}
+    foreach ($l in $ws) {
+        if ($l -match '\[([^\[\]]+\.csproj)\]\s*$') {
+            $k = $Matches[1].ToLowerInvariant()
+            if (-not $byProj.ContainsKey($k)) { $byProj[$k] = @() }
+            $byProj[$k] += $l
+        }
+    }
+    $script:FmtShared = @{ Lines = $byProj; Elapsed = $sw.Elapsed.TotalSeconds; Count = $cand.Count; First = $true }
+    $script:FmtShared
+}
+
 function Invoke-DotnetStack($s) {
     Set-Location $s.Dir
     $proj = $s.Marker
@@ -478,31 +599,29 @@ function Invoke-DotnetStack($s) {
     # and no `vuln` phase at all, while `dotnet test --no-build` on the same project found
     # the failing test and exited 1. Evaluation sees every import; a regex over one file
     # sees one file.
-    $refsSw = [Diagnostics.Stopwatch]::StartNew()
-    $q = (& dotnet msbuild $proj -getProperty:TargetFramework -getProperty:TargetFrameworks `
-            -getProperty:IsTestProject -getItem:Reference -getItem:PackageReference -nologo 2>&1 | Out-String).Trim()
-    $qCode = $LASTEXITCODE
-    $refsSw.Stop()
+    #
+    # Cached: the shared format pass below evaluates every dotnet project in the run
+    # before the first one is formatted, so by the time a later stack gets here the
+    # answer is already paid for. The elapsed time is the one that evaluation cost,
+    # whenever it happened.
+    $projAbs = Join-Path $s.Dir $proj
+    $ev = Get-DotnetEval $projAbs
     # A csproj msbuild cannot even evaluate IS a defect, so this one is a real phase.
-    Phase 'refs' { if ($qCode -ne 0) { $q; $global:LASTEXITCODE = 1 } } -Elapsed $refsSw.Elapsed.TotalSeconds
+    Phase 'refs' { if ($ev.Code -ne 0) { $ev.Out; $global:LASTEXITCODE = 1 } } -Elapsed $ev.Elapsed
     if ($script:Failed) { return }
-    $info = try { $q | ConvertFrom-Json } catch { $null }
+    $info = try { $ev.Out | ConvertFrom-Json } catch { $null }
 
     # A multi-targeted project leaves the singular property EMPTY and lists them in the
     # plural one as `net8.0;net472`. Reading only TargetFramework there is a silent pass
     # over every TFM the project actually has.
-    $tfms = @(
-        if ($info.Properties.TargetFramework) { $info.Properties.TargetFramework }
-        else { ($info.Properties.TargetFrameworks -split ';') | ForEach-Object { $_.Trim() } | Where-Object { $_ } }
-    )
+    $tfms = Get-DotnetTfms $info
     # net4xx builds on any modern SDK; net<major>.0 needs that major installed. Reported
     # as a skip, not a red build: a project targeting an SDK nobody here has is a gap in
     # the machine, and the raw NETSDK1045 tells the reader nothing about which one.
-    foreach ($tfm in $tfms) {
-        if ($tfm -match '^net(\d+)\.\d' -and [int]$Matches[1] -gt $maxSdk) {
-            $script:Lines += "[SKIP] ${proj}: needs .NET SDK $($Matches[1]).x, installed $($sdkVers -join ', ')"
-            return
-        }
+    $tooNew = Get-DotnetTooNew $tfms $maxSdk
+    if ($tooNew) {
+        $script:Lines += "[SKIP] ${proj}: needs .NET SDK $($tooNew).x, installed $($sdkVers -join ', ')"
+        return
     }
     # A multi-targeted project evaluates with TargetFramework EMPTY, so everything inside
     # an `ItemGroup Condition="'$(TargetFramework)' == 'net8.0-windows'"` is simply absent
@@ -540,6 +659,7 @@ function Invoke-DotnetStack($s) {
     # judges the files this commit touches, or it blocks every commit forever.
     $fmtArgs = @($proj, '--verify-no-changes', '--no-restore', '-v', 'q')
     $runFormat = $true
+    $changed = $null
     if (-not $Full -and -not $All) {
         $changed = Get-ChangedPaths $Root
         if ($null -ne $changed) {
@@ -548,18 +668,38 @@ function Invoke-DotnetStack($s) {
             # matches nothing at all -- silently, exit 0, a green format phase over an
             # unformatted file. Set-Location above put us in the project directory, so
             # these are relative to it.
-            $cs = @($changed | Where-Object { $_ -like '*.cs' -and $_.StartsWith($prefix) } |
-                ForEach-Object { $_.Substring($prefix.Length) })
+            $cs = @(Get-DotnetChangedCs $s $changed | ForEach-Object { $_.Substring($prefix.Length) })
             if ($cs) { $fmtArgs += @('--include') + $cs }
             # A phase that did not run must never look like a phase that passed.
             else { $runFormat = $false; $script:Lines += "[SKIP] format $proj -- no changed .cs files" }
         }
     }
     if ($runFormat) {
-        $fmtSw = [Diagnostics.Stopwatch]::StartNew()
-        $fmtOut = (& dotnet format whitespace @fmtArgs 2>&1 | Out-String).TrimEnd()
-        $fmtCode = $LASTEXITCODE
-        $fmtSw.Stop()
+        # One pass over every dotnet project in this run, when there are two or more of
+        # them; $false when there are not, and the per-project call below is unchanged.
+        $shared = Get-DotnetSharedFormat $maxSdk $changed
+        $fmtPhaseArgs = @{}
+        if ($shared) {
+            $ws = @($shared.Lines[$projAbs.ToLowerInvariant()])
+            $fmtOut = ($ws -join "`n")
+            # The tool's own exit code says whether the SOLUTION is clean; this project's
+            # verdict is whether any of those lines carries its csproj.
+            $fmtCode = if ($ws) { 2 } else { 0 }
+            # The real cost lands on the first project that reads the pass. The others
+            # say where their answer came from: a repeated 3.4s would multiply the run's
+            # cost by the number of stacks, and 0.0s would deny the work happened.
+            $fmtPhaseArgs.Time = if ($shared.First) {
+                "$($shared.Elapsed.ToString('0.0', [Globalization.CultureInfo]::InvariantCulture))s, one pass over $($shared.Count) projects"
+            } else { 'shared pass' }
+            $shared.First = $false
+        }
+        else {
+            $fmtSw = [Diagnostics.Stopwatch]::StartNew()
+            $fmtOut = (& dotnet format whitespace @fmtArgs 2>&1 | Out-String).TrimEnd()
+            $fmtCode = $LASTEXITCODE
+            $fmtSw.Stop()
+            $fmtPhaseArgs.Elapsed = $fmtSw.Elapsed.TotalSeconds
+        }
         if ($fmtCode -ne 0 -and $fmtOut -notmatch 'error WHITESPACE') {
             # dotnet format loads the project through MSBuild before it reads a single
             # character of whitespace, and a workspace it cannot load exits non-zero with
@@ -590,7 +730,7 @@ function Invoke-DotnetStack($s) {
                 # Every line already names file(line,col); what none of them says is the
                 # one command that fixes all of them.
                 if ($fmtCode -ne 0) { "fix: dotnet format whitespace $proj"; $global:LASTEXITCODE = 1 }
-            } -Elapsed $fmtSw.Elapsed.TotalSeconds
+            } @fmtPhaseArgs
         }
     }
 
@@ -990,6 +1130,13 @@ foreach ($s in $stacks) {
         $report += "$(if ($ran) { '[PASS]' } else { '[SKIP]' }) $label ($($s.Marker))$(if (-not $ran) { ' -- no check phase applies here' }) $timings"
     }
 }
+
+# The temporary solution the dotnet format pass ran over is pure by-product: nothing
+# reads it after the pass, and leaving it behind would keep one directory per repository
+# ever gated on this machine, forever. Here rather than in a finally around the loop --
+# every path out of the loop reaches this line, and a killed process leaves a directory
+# named by its own PID, which nothing else will ever collide with.
+if ($script:FmtSlnDir) { Remove-Item $script:FmtSlnDir -Recurse -Force -ErrorAction SilentlyContinue }
 
 # THE INVARIANT: a run that executed zero check phases is not a green run.
 # Every false green this gate has shipped was a different door into this one room --
