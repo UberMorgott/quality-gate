@@ -597,8 +597,19 @@ function Invoke-DotnetStack($s) {
     }
     # No -warnaserror: real repos carry warnings and a fast lane stricter than CI is a
     # gate people learn to bypass. The count is a note, the build is the verdict.
+    #
+    # --no-incremental under -Full, because the count is read out of the BUILD OUTPUT and
+    # an incremental build that compiles nothing prints nothing: reported from the field,
+    # `[WARN] RailCheck.csproj: 9 compiler warning(s)` on a cold obj/ and no line at all on
+    # the next run of the same commit. The number then says whether csc ran, not what the
+    # code contains -- exactly the shape of defect PLAYBOOK 0.1 is about. Measured here
+    # (warm obj/): RailCheck.csproj 1.3s incremental vs 2.7-3.8s, Multiplayer.csproj
+    # 1.3-1.7s vs 1.6-1.7s. The fast lane keeps the incremental build: it runs on every
+    # commit, and its warning count is a note beside a verdict that does not depend on it.
+    $buildArgs = @($proj, '-nologo', '-v', 'q', '-clp:NoSummary')
+    if ($Full) { $buildArgs += '--no-incremental' }
     Phase 'build' {
-        $o = (& dotnet build $proj -nologo -v q -clp:NoSummary 2>&1 | Out-String).Trim()
+        $o = (& dotnet build @buildArgs 2>&1 | Out-String).Trim()
         if ($LASTEXITCODE -ne 0) { $o; return }
         $w = @([regex]::Matches($o, '(?m):\s+warning\s')).Count
         if ($w) { $script:Lines += "[WARN] ${proj}: $w compiler warning(s)" }

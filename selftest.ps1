@@ -452,6 +452,29 @@ if ($dnSdks) {
         ((@($out -split "`r?`n" | Where-Object { $_ -match 'error WHITESPACE' }).Count -le 20) -and
             ($out -match 'Flood\.cs\(5,') -and ($out -notmatch 'Flood\.cs\(3[0-4],')) $out
 
+    # The warning count is read out of the BUILD OUTPUT, and an incremental build that
+    # compiles nothing prints nothing: reported from the field, `[WARN] RailCheck.csproj:
+    # 9 compiler warning(s)` on a cold obj/ and no line at all on the next run of the same
+    # commit. The number said whether csc ran, not what the code contains. Two runs of the
+    # SAME tree is the whole test -- one run cannot tell the two behaviours apart.
+    $dnWarn = Join-Path $tmp 'dotnet-warn'
+    Copy-Item (Join-Path $PSScriptRoot 'testdata\dotnet-fixture') $dnWarn -Recurse
+    [IO.File]::WriteAllText((Join-Path $dnWarn 'Warned.cs'),
+        "namespace Fixture;`r`n`r`npublic static class Warned`r`n{`r`n    public static int One()`r`n    {`r`n        int unused;`r`n        return 1;`r`n    }`r`n}`r`n")
+    $dnWarn1 = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $dnWarn -All -Full 2>&1 | Out-String)
+    $dnWarn1Code = $LASTEXITCODE
+    $dnWarn2 = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $dnWarn -All -Full 2>&1 | Out-String)
+    $dnWarn2Code = $LASTEXITCODE
+    Check 'the full level counts compiler warnings on every run, not only a cold one' `
+        (($dnWarn1 -match '\[WARN\] Fixture\.csproj: 1 compiler warning\(s\)') -and
+            ($dnWarn2 -match '\[WARN\] Fixture\.csproj: 1 compiler warning\(s\)')) `
+        "run1=$dnWarn1`nrun2=$dnWarn2"
+    # The absence half: a warning is a note beside a green build, never a compile error and
+    # never a red run -- rebuilding from scratch must not change the verdict.
+    Check 'a counted warning is not turned into a compile error or a red run' `
+        (($dnWarn1Code -eq 0) -and ($dnWarn2Code -eq 0) -and ($dnWarn2 -notmatch 'error CS')) `
+        "code1=$dnWarn1Code code2=$dnWarn2Code $dnWarn2"
+
     # `test` and `vuln` used to exist only where a regex found their marker in the csproj
     # TEXT, so anything imported through Directory.Build.props was invisible: measured, a
     # project whose Microsoft.NET.Test.Sdk and xunit come from there passed `-All -Full`
