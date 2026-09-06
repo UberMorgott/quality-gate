@@ -48,6 +48,10 @@ Check 'detects web stack'  ([bool]($stacks | Where-Object { $_.Stack -eq 'web' -
 Check 'detects rust stack'  ([bool]($stacks | Where-Object { $_.Stack -eq 'rust' -and $_.Implemented }))
 Check 'detects proto stack' ([bool]($stacks | Where-Object { $_.Stack -eq 'proto' -and $_.Implemented }))
 Check 'detects godot stack' ([bool]($stacks | Where-Object { $_.Stack -eq 'godot' -and $_.Implemented }))
+# The one marker that is a PATTERN: a csproj is named after its project, and one .NET
+# repo carries several of them. The marker recorded has to be the file, not the glob.
+Check 'detects dotnet stack by its csproj name' `
+    ([bool]($stacks | Where-Object { $_.Stack -eq 'dotnet' -and $_.Marker -eq 'Fixture.csproj' -and $_.Implemented }))
 Check 'detects python stack as not implemented' ([bool]($stacks | Where-Object { $_.Stack -eq 'python' -and -not $_.Implemented }))
 # A stack with no marker file does not exist at all. testdata/ now holds a python
 # fixture (check 28 needs one), so this has to be asked of a tree that has no python
@@ -271,6 +275,98 @@ Check 'rust violation fails the gate' ($r.Code -ne 0) $r.Out
 [IO.File]::WriteAllText($rsMain, $rsClean)
 $r = Invoke-Gate $rust
 Check 'rust green again after the fix' ($r.Code -eq 0) $r.Out
+
+# 11b. .NET, red then green -- and then the two verdicts that are NOT red: a project
+# whose references live in a game install this machine does not have, and one targeting
+# an SDK major nobody here has. Both are gaps in the machine, and reporting them as a
+# broken build would teach people to ignore the build phase.
+$dnSdks = @(if (Get-Command dotnet -ErrorAction SilentlyContinue) { (& dotnet --list-sdks 2>$null) | Where-Object { $_ } })
+if ($dnSdks) {
+    $dn = Join-Path $tmp 'dotnet'
+    Copy-Item (Join-Path $PSScriptRoot 'testdata\dotnet-fixture') $dn -Recurse
+    $dnProj = Join-Path $dn 'Fixture.csproj'
+    $dnCs = Join-Path $dn 'Greeter.cs'
+    $dnProjClean = [IO.File]::ReadAllText($dnProj)
+    $dnCsClean = [IO.File]::ReadAllText($dnCs)
+    $r = Invoke-Gate $dn
+    Check 'clean dotnet fixture passes' ($r.Code -eq 0) $r.Out
+    $dnFullOut = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $dn -All -Full 2>&1 | Out-String)
+    Check 'clean dotnet fixture passes at the full level' ($LASTEXITCODE -eq 0) $dnFullOut
+
+    # One space where eight belong. The fix hint matters as much as the finding: every
+    # line names file(line,col) and not one of them names the command that fixes them.
+    [IO.File]::WriteAllText($dnCs, $dnCsClean.Replace('        return $"Hello', ' return $"Hello'))
+    $r = Invoke-Gate $dn
+    Check 'a whitespace violation fails the dotnet gate' `
+        (($r.Code -ne 0) -and ($r.Out -match 'WHITESPACE') -and ($r.Out -match 'fix: dotnet format whitespace')) $r.Out
+    Check 'a whitespace violation is not reported as a compile error' ($r.Out -notmatch 'error CS') $r.Out
+
+    [IO.File]::WriteAllText($dnCs, $dnCsClean.Replace('return $"Hello, {name}!";', 'int x = "s"; return $"Hello, {name}!{x}";'))
+    $r = Invoke-Gate $dn
+    Check 'a compile error fails the dotnet gate' (($r.Code -ne 0) -and ($r.Out -match 'error CS0029')) $r.Out
+    Check 'a compile error is not reported as a formatting problem' ($r.Out -notmatch 'WHITESPACE') $r.Out
+    [IO.File]::WriteAllText($dnCs, $dnCsClean)
+
+    # A game mod's <Reference> HintPath points into a Steam directory, and CI and half
+    # the developer machines do not have one. Read by evaluating the project, never by
+    # building it: the build would report forty MSB3245 lines about the code instead.
+    [IO.File]::WriteAllText($dnProj, $dnProjClean.Replace('</Project>', @"
+  <ItemGroup>
+    <Reference Include="Ghost"><HintPath>C:\does\not\exist\Ghost.dll</HintPath></Reference>
+  </ItemGroup>
+</Project>
+"@))
+    $r = Invoke-Gate $dn
+    Check 'a reference the machine does not have is a skip with the reason, not a red build' `
+        (($r.Code -eq 0) -and ($r.Out -match 'reference\(s\) missing') -and ($r.Out -match 'Ghost\.dll')) $r.Out
+    Check 'a missing reference is not blamed on the code' `
+        (($r.Out -notmatch 'error CS') -and ($r.Out -notmatch 'error MSB')) $r.Out
+
+    [IO.File]::WriteAllText($dnProj, $dnProjClean.Replace('net8.0', 'net99.0'))
+    $r = Invoke-Gate $dn
+    Check 'a target framework no installed SDK can build is a skip that names both' `
+        (($r.Code -eq 0) -and ($r.Out -match 'needs \.NET SDK 99\.x') -and ($r.Out -match 'installed \d')) $r.Out
+    Check 'an SDK the machine lacks is not reported as an error' ($r.Out -notmatch 'error ') $r.Out
+
+    # ...but a csproj msbuild cannot even evaluate IS a defect in the repository, and it
+    # has to land as one rather than as another environment excuse.
+    [IO.File]::WriteAllText($dnProj, $dnProjClean.Replace('</Project>', '<Nope'))
+    $r = Invoke-Gate $dn
+    Check 'an unparseable csproj fails the gate' (($r.Code -ne 0) -and ($r.Out -match '\[FAIL\] refs')) $r.Out
+    Check 'an unparseable csproj is not called a missing reference' ($r.Out -notmatch 'reference\(s\) missing') $r.Out
+    [IO.File]::WriteAllText($dnProj, $dnProjClean)
+
+    # The fast lane. Measured on two real mods: 1396 and 447 whitespace violations, so
+    # a whole-project format check on every commit blocks the repository forever. Both
+    # halves, or "narrowed correctly" is indistinguishable from "format switched off":
+    # the committed violation must be ignored while nothing .cs changed, and must be
+    # found the moment it is touched.
+    $dnFast = Join-Path $tmp 'dotnet-fast'
+    Copy-Item (Join-Path $PSScriptRoot 'testdata\dotnet-fixture') $dnFast -Recurse
+    $ugly = Join-Path $dnFast 'Ugly.cs'
+    [IO.File]::WriteAllText($ugly, "namespace Fixture;`r`n`r`npublic static class Ugly`r`n{`r`n public static int One() => 1;`r`n}`r`n")
+    git -C $dnFast init -q 2>$null
+    git -C $dnFast add -A 2>$null
+    git -C $dnFast -c user.email=selftest@local -c user.name=selftest commit -qm init 2>$null
+    [IO.File]::WriteAllText((Join-Path $dnFast 'notes.md'), "not a .cs file`n")
+    $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $dnFast 2>&1 | Out-String)
+    $dnFastCode = $LASTEXITCODE
+    Check 'the fast lane does not format a project whose .cs files nobody touched' `
+        (($dnFastCode -eq 0) -and ($out -match '\[SKIP\] format Fixture\.csproj') -and ($out -notmatch 'WHITESPACE')) `
+        "code=$dnFastCode $out"
+    # ...and it still builds it, or the narrowing would have dropped the stack entirely.
+    Check 'the fast lane still builds a project it did not format' ($out -match '\[PASS\] build') $out
+    [IO.File]::WriteAllText($ugly, "namespace Fixture;`r`n`r`npublic static class Ugly`r`n{`r`n public static int One() => 1;`r`n  public static int Two() => 2;`r`n}`r`n")
+    $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $dnFast 2>&1 | Out-String)
+    $dnTouchCode = $LASTEXITCODE
+    Check 'touching a .cs file brings the whitespace check back' `
+        (($dnTouchCode -ne 0) -and ($out -match 'WHITESPACE') -and ($out -match 'Ugly\.cs')) "code=$dnTouchCode $out"
+    # --include is resolved against the CURRENT DIRECTORY and an absolute path matches
+    # nothing at all -- silently, exit 0. That is the shape this half would catch.
+    Check 'the narrowed format check is not a silent no-op' ($out -notmatch '\[SKIP\] format') $out
+} else {
+    Write-Output '[skip] no .NET SDK on this machine -- the dotnet stack cannot be exercised'
+}
 
 # 16. Proto, red then green. buf ships with nothing else, so its absence is a
 # skip -- same rule as golangci-lint above.
