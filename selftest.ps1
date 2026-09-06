@@ -402,6 +402,28 @@ if ($dnSdks) {
     # --include is resolved against the CURRENT DIRECTORY and an absolute path matches
     # nothing at all -- silently, exit 0. That is the shape this half would catch.
     Check 'the narrowed format check is not a silent no-op' ($out -notmatch '\[SKIP\] format') $out
+
+    # ...and the file added inside a BRAND NEW directory, which is the shape the narrowing
+    # could not see at all. `git status --porcelain` collapses a wholly untracked directory
+    # to one entry, `NewFolder/`, so the changed-path list held a directory, the `*.cs`
+    # filter dropped it, and the fast lane reported `no changed .cs files` and exited 0
+    # over a real violation that `-All` finds. Get-ChangedPaths is what every stack narrows
+    # through, so this was the fast lane's blind spot everywhere, not just here.
+    $dnNew = Join-Path $tmp 'dotnet-newdir'
+    Copy-Item (Join-Path $PSScriptRoot 'testdata\dotnet-fixture') $dnNew -Recurse
+    git -C $dnNew init -q 2>$null
+    git -C $dnNew add -A 2>$null
+    git -C $dnNew -c user.email=selftest@local -c user.name=selftest commit -qm init 2>$null
+    New-Item -ItemType Directory -Path (Join-Path $dnNew 'NewFolder') -Force | Out-Null
+    [IO.File]::WriteAllText((Join-Path $dnNew 'NewFolder\Ugly.cs'),
+        "namespace Fixture;`r`n`r`npublic static class Ugly`r`n{`r`n public static int One() => 1;`r`n}`r`n")
+    $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $dnNew 2>&1 | Out-String)
+    $dnNewCode = $LASTEXITCODE
+    Check 'a violation inside a brand new directory is seen by the fast lane' `
+        (($dnNewCode -ne 0) -and ($out -match 'WHITESPACE') -and ($out -match 'Ugly\.cs')) "code=$dnNewCode $out"
+    # The absence half, and it is the whole bug: the run used to be green with this line.
+    Check 'a file in a new directory is not called no changed .cs files' `
+        ($out -notmatch 'no changed \.cs files') $out
 } else {
     Write-Output '[skip] no .NET SDK on this machine -- the dotnet stack cannot be exercised'
 }

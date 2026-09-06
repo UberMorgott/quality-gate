@@ -145,7 +145,14 @@ function Get-ChangedPaths([string]$Repo) {
     # -z: NUL separated and NOT quoted/escaped. With plain --porcelain git escapes
     # spaces, tabs and every non-ASCII byte, and the escaped string then matches no
     # stack directory -- the gate would check the wrong stack, or none.
-    $raw = (& git -C $Repo status --porcelain=v1 -z 2>$null | Out-String)
+    # --untracked-files=all: git's DEFAULT collapses a wholly untracked directory to one
+    # entry, `NewFolder/`. Measured: a new `NewFolder/Ugly.cs` with a whitespace violation
+    # came back as the directory, matched no `*.cs` filter and no stack prefix, and the
+    # fast lane reported `[SKIP] format -- no changed .cs files` and exited 0 while `-All`
+    # found the violation. Every stack narrows through this one function, so the whole
+    # fast lane was blind to a file added inside a new directory. Ignored files are still
+    # excluded -- -uall widens the listing, it does not switch off .gitignore.
+    $raw = (& git -C $Repo status --porcelain=v1 -z --untracked-files=all 2>$null | Out-String)
     if ($LASTEXITCODE -ne 0) { return $null }
     $paths = @()
     $items = @($raw -split "`0")
