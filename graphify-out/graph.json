@@ -122,7 +122,7 @@
       "label": "Invoke-GodotStack()",
       "file_type": "code",
       "source_file": "gate/check.ps1",
-      "source_location": "L795",
+      "source_location": "L801",
       "_origin": "ast",
       "id": "gate_check_invoke_godotstack",
       "community": 9,
@@ -135,10 +135,10 @@
       "source_file": "selftest.ps1",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "selftest",
       "community": 5,
       "community_name": "selftest.ps1",
-      "norm_label": "selftest.ps1"
+      "norm_label": "selftest.ps1",
+      "id": "selftest"
     },
     {
       "label": "Check()",
@@ -146,10 +146,10 @@
       "source_file": "selftest.ps1",
       "source_location": "L29",
       "_origin": "ast",
-      "id": "selftest_check",
       "community": 5,
       "community_name": "selftest.ps1",
-      "norm_label": "check()"
+      "norm_label": "check()",
+      "id": "selftest_check"
     },
     {
       "label": "Set-GoFile()",
@@ -157,10 +157,10 @@
       "source_file": "selftest.ps1",
       "source_location": "L34",
       "_origin": "ast",
-      "id": "selftest_set_gofile",
       "community": 5,
       "community_name": "selftest.ps1",
-      "norm_label": "set-gofile()"
+      "norm_label": "set-gofile()",
+      "id": "selftest_set_gofile"
     },
     {
       "label": "Invoke-Gate()",
@@ -168,10 +168,10 @@
       "source_file": "selftest.ps1",
       "source_location": "L39",
       "_origin": "ast",
-      "id": "selftest_invoke_gate",
       "community": 5,
       "community_name": "selftest.ps1",
-      "norm_label": "invoke-gate()"
+      "norm_label": "invoke-gate()",
+      "id": "selftest_invoke_gate"
     },
     {
       "label": "Invoke-StopHook()",
@@ -179,10 +179,10 @@
       "source_file": "selftest.ps1",
       "source_location": "L812",
       "_origin": "ast",
-      "id": "selftest_invoke_stophook",
       "community": 5,
       "community_name": "selftest.ps1",
-      "norm_label": "invoke-stophook()"
+      "norm_label": "invoke-stophook()",
+      "id": "selftest_invoke_stophook"
     },
     {
       "label": "Set-Deferrals()",
@@ -190,10 +190,10 @@
       "source_file": "selftest.ps1",
       "source_location": "L1102",
       "_origin": "ast",
-      "id": "selftest_set_deferrals",
       "community": 5,
       "community_name": "selftest.ps1",
-      "norm_label": "set-deferrals()"
+      "norm_label": "set-deferrals()",
+      "id": "selftest_set_deferrals"
     },
     {
       "label": "Set-OutdatedCache()",
@@ -201,10 +201,10 @@
       "source_file": "selftest.ps1",
       "source_location": "L1109",
       "_origin": "ast",
-      "id": "selftest_set_outdatedcache",
       "community": 5,
       "community_name": "selftest.ps1",
-      "norm_label": "set-outdatedcache()"
+      "norm_label": "set-outdatedcache()",
+      "id": "selftest_set_outdatedcache"
     },
     {
       "label": "Get-Summary()",
@@ -212,10 +212,10 @@
       "source_file": "selftest.ps1",
       "source_location": "L1113",
       "_origin": "ast",
-      "id": "selftest_get_summary",
       "community": 5,
       "community_name": "selftest.ps1",
-      "norm_label": "get-summary()"
+      "norm_label": "get-summary()",
+      "id": "selftest_get_summary"
     },
     {
       "label": "Fixture.csproj",
@@ -2178,7 +2178,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "gate/check.ps1",
-      "source_location": "L795",
+      "source_location": "L801",
       "weight": 1.0,
       "_origin": "ast",
       "source": "gate_check",
@@ -2211,7 +2211,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "gate/check.ps1",
-      "source_location": "L813",
+      "source_location": "L819",
       "weight": 1.0,
       "_origin": "ast",
       "source": "gate_check_invoke_godotstack",
@@ -2233,7 +2233,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "gate/check.ps1",
-      "source_location": "L822",
+      "source_location": "L828",
       "weight": 1.0,
       "_origin": "ast",
       "source": "gate_check_invoke_godotstack",
@@ -2255,7 +2255,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "gate/check.ps1",
-      "source_location": "L833",
+      "source_location": "L839",
       "weight": 1.0,
       "_origin": "ast",
       "source": "gate_check_invoke_godotstack",
@@ -2277,7 +2277,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "gate/check.ps1",
-      "source_location": "L819",
+      "source_location": "L825",
       "weight": 1.0,
       "_origin": "ast",
       "source": "gate_check_invoke_godotstack",
@@ -2290,7 +2290,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "gate/check.ps1",
-      "source_location": "L889",
+      "source_location": "L895",
       "weight": 1.0,
       "_origin": "ast",
       "source": "gate_check_invoke_godotstack",
@@ -2302,7 +2302,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "gate/check.ps1",
-      "source_location": "L807",
+      "source_location": "L813",
       "weight": 1.0,
       "_origin": "ast",
       "source": "gate_check_invoke_godotstack",
@@ -2315,9 +2315,9 @@
       "source_location": "L29",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "selftest",
-      "target": "selftest_check",
-      "confidence_score": 1.0
+      "target": "selftest_check"
     },
     {
       "relation": "contains",
@@ -2326,9 +2326,9 @@
       "source_location": "L1113",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "selftest",
-      "target": "selftest_get_summary",
-      "confidence_score": 1.0
+      "target": "selftest_get_summary"
     },
     {
       "relation": "contains",
@@ -2337,9 +2337,9 @@
       "source_location": "L39",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "selftest",
-      "target": "selftest_invoke_gate",
-      "confidence_score": 1.0
+      "target": "selftest_invoke_gate"
     },
     {
       "relation": "contains",
@@ -2348,9 +2348,9 @@
       "source_location": "L812",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "selftest",
-      "target": "selftest_invoke_stophook",
-      "confidence_score": 1.0
+      "target": "selftest_invoke_stophook"
     },
     {
       "relation": "contains",
@@ -2359,9 +2359,9 @@
       "source_location": "L1102",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "selftest",
-      "target": "selftest_set_deferrals",
-      "confidence_score": 1.0
+      "target": "selftest_set_deferrals"
     },
     {
       "relation": "contains",
@@ -2370,9 +2370,9 @@
       "source_location": "L34",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "selftest",
-      "target": "selftest_set_gofile",
-      "confidence_score": 1.0
+      "target": "selftest_set_gofile"
     },
     {
       "relation": "contains",
@@ -2381,9 +2381,9 @@
       "source_location": "L1109",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "selftest",
-      "target": "selftest_set_outdatedcache",
-      "confidence_score": 1.0
+      "target": "selftest_set_outdatedcache"
     },
     {
       "relation": "calls",
@@ -3938,5 +3938,5 @@
       "source_file": "HANDOFF.md"
     }
   ],
-  "built_at_commit": "a680086d2a4ac2eddab2c6944e05cd2db298424a"
+  "built_at_commit": "f82ddb06114ac6e7a8725b6883890229c2be4d86"
 }
