@@ -643,7 +643,9 @@ function Invoke-DotnetStack($s) {
         # prints the table in the machine's display language. JSON is the only answer
         # that means the same thing everywhere. It needs the assets file, which is why
         # this runs after `build` restored one.
+        $vulnSw = [Diagnostics.Stopwatch]::StartNew()
         $vo = (& dotnet list $proj package --vulnerable --include-transitive --format json --output-version 1 2>&1 | Out-String).Trim()
+        $vulnSw.Stop()
         $vj = try { $vo | ConvertFrom-Json } catch { $null }
         if (-not $vj -or $vj.problems) {
             # An unreachable source prints plain `error:` lines and no JSON at all; a
@@ -656,12 +658,16 @@ function Invoke-DotnetStack($s) {
             $vulnerable = @(foreach ($f in @($vj.projects.frameworks)) {
                     @($f.topLevelPackages) + @($f.transitivePackages) | Where-Object { $_.vulnerabilities }
                 })
+            # Same as format/refs above: the tool ran before the Phase (its JSON has to be
+            # parsed before it can be a verdict), so the stopwatch inside Phase wrapped a
+            # loop over an in-memory array and printed `(0.0s)` for a phase that just went
+            # to the advisory database over the network.
             Phase 'vuln' {
                 foreach ($p in $vulnerable) {
                     foreach ($v in $p.vulnerabilities) { "$($p.id) $($p.resolvedVersion): $($v.severity) -- $($v.advisoryurl)" }
                 }
                 if ($vulnerable) { $global:LASTEXITCODE = 1 }
-            }
+            } -Elapsed $vulnSw.Elapsed.TotalSeconds
         }
     }
     # Same reason as `test` above: nothing to ask reads exactly like nothing found.
