@@ -296,7 +296,19 @@ if ($dnSdks) {
     $r = Invoke-Gate $dn
     Check 'clean dotnet fixture passes' ($r.Code -eq 0) $r.Out
     $dnFullOut = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $dn -All -Full 2>&1 | Out-String)
-    Check 'clean dotnet fixture passes at the full level' ($LASTEXITCODE -eq 0) $dnFullOut
+    $dnFullCode = $LASTEXITCODE
+    Check 'clean dotnet fixture passes at the full level' ($dnFullCode -eq 0) $dnFullOut
+    # `test` and `vuln` are conditional, and an omitted phase used to read exactly like a
+    # passing one: the report could not tell "checked, clean" from "never asked". -Full is
+    # what CI and the generated hook run, so that is where the difference is spelled out.
+    Check 'the full level says which phases do not apply here' `
+        (($dnFullOut -match '\[SKIP\] test -- no test project') -and
+            ($dnFullOut -match '\[SKIP\] vuln -- no package references')) $dnFullOut
+    # The absence half: naming them must not turn a green run red, and must not be mistaken
+    # for the run having verified nothing -- the zero-phase invariant counts phases that RAN.
+    Check 'naming an inapplicable phase is not a failure and not an empty run' `
+        (($dnFullCode -eq 0) -and ($dnFullOut -notmatch 'no check phase ran') -and
+            ($dnFullOut -match '\[PASS\] build')) $dnFullOut
 
     # One space where eight belong. The fix hint matters as much as the finding: every
     # line names file(line,col) and not one of them names the command that fixes them.

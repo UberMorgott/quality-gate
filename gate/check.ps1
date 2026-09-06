@@ -631,6 +631,10 @@ function Invoke-DotnetStack($s) {
     if ($info.Properties.IsTestProject -eq 'true' -or $pkgIds -contains 'Microsoft.NET.Test.Sdk') {
         Phase 'test' { dotnet test $proj --no-build -nologo -v q }
     }
+    # An omitted phase and a passing one read identically in the report, and this is the
+    # level where the reader is entitled to the difference: -Full is what CI and the
+    # generated pre-commit hook run. The fast lane says nothing -- it never promised these.
+    else { $script:Lines += '[SKIP] test -- no test project (IsTestProject/Microsoft.NET.Test.Sdk)' }
     # See the govulncheck note above: a known vulnerability is a defect, it lives on the
     # network, and a project with no PackageReference has nothing to ask about.
     if ($pkgIds) {
@@ -660,6 +664,8 @@ function Invoke-DotnetStack($s) {
             }
         }
     }
+    # Same reason as `test` above: nothing to ask reads exactly like nothing found.
+    else { $script:Lines += '[SKIP] vuln -- no package references' }
 }
 
 function Invoke-WebStack($s) {

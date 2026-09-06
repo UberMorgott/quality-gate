@@ -520,7 +520,10 @@ workspace. Нет `cargo` на PATH — стек падает (непровер�
    через `Directory.Build.props`, поиском по файлу не находится, и фазы тестов у проекта
    просто не было — замерено, `-All -Full` возвращал 0 там, где `dotnet test --no-build`
    находил падающий тест. Тестовые проекты в таких репозиториях часто самописные
-   `Exe`-раннеры, и фазы у них нет.
+   `Exe`-раннеры, и фазы у них нет — но на `-Full` это теперь сказано вслух:
+   `[SKIP] test -- no test project (IsTestProject/Microsoft.NET.Test.Sdk)`. «Проверено,
+   чисто» и «не спрашивали» в отчёте выглядели одинаково. На быстром уровне строки нет:
+   он этих фаз и не обещал.
 5. (только `-Full`, после `build` — нужен восстановленный проект)
    `dotnet list package --vulnerable --include-transitive --format json --output-version 1` —
    если у проекта есть вычисленные `PackageReference` (снова: вычисленные, а не текст csproj).
@@ -529,7 +532,8 @@ workspace. Нет `cargo` на PATH — стек падает (непровер�
    локализована. Вердикт — JSON: `vulnerabilities` в `projects[].frameworks[].topLevelPackages[]`
    и `transitivePackages[]` дают падение со списком «пакет + severity»; `problems[]` или вообще
    не-JSON (недоступный источник печатает голые `error:`) — `[UNKNOWN] could not check`, потому
-   что «не спросили» — это не «чисто».
+   что «не спросили» — это не «чисто». Нет ни одного `PackageReference` — спрашивать не о чем,
+   и это тоже на виду: `[SKIP] vuln -- no package references`.
 
 **proto** (в каталоге `buf.yaml`; нет `buf` на PATH — стек падает):
 1. `buf lint`
