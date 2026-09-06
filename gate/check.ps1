@@ -479,15 +479,33 @@ function Invoke-DotnetStack($s) {
             return
         }
     }
+    # A multi-targeted project evaluates with TargetFramework EMPTY, so everything inside
+    # an `ItemGroup Condition="'$(TargetFramework)' == 'net8.0-windows'"` is simply absent
+    # from the answer above. Measured on `net8.0;net8.0-windows`: the conditioned
+    # <Reference> came back as `"Reference": []`, the missing game DLL went unreported,
+    # and the run built the project instead of the [SKIP] it owed the reader -- CS0246.
+    # One evaluation per TFM (measured at 0s each, and only for the multi-targeted case),
+    # unioned.
+    $refs = @($info.Items.Reference)
+    if (-not $info.Properties.TargetFramework) {
+        foreach ($tfm in $tfms) {
+            $tq = (& dotnet msbuild $proj -getItem:Reference -p:TargetFramework=$tfm -nologo 2>&1 | Out-String).Trim()
+            # A TFM that will not evaluate is not a verdict here: `refs` above already
+            # passed on the project as a whole, and the build phase is what judges code.
+            $ti = if ($LASTEXITCODE -eq 0) { try { $tq | ConvertFrom-Json } catch { $null } }
+            if ($ti) { $refs += @($ti.Items.Reference) }
+        }
+    }
     # HintPath is routinely RELATIVE to the csproj (`..\..\lib\AssetsTools.NET.dll` in a
     # real test project), so it is resolved against the project directory explicitly --
     # not against wherever the process happens to stand. The item's own FullPath field is
     # not an option: msbuild builds it from Identity, so it reads
     # `<projectdir>\AssetsTools.NET` -- the wrong directory and no extension.
     # -PathType Leaf because a reference is a FILE; a directory of that name is not one.
-    $missing = @($info.Items.Reference | Where-Object { $_.HintPath } | Where-Object {
-            -not (Test-Path -LiteralPath ([IO.Path]::GetFullPath($_.HintPath, $s.Dir)) -PathType Leaf)
-        })
+    # Unique by HintPath: the same reference listed under two TFMs is one missing file,
+    # and the count in the message below is what the reader acts on.
+    $missing = @($refs | Where-Object { $_.HintPath } | Sort-Object -Property HintPath -Unique |
+        Where-Object { -not (Test-Path -LiteralPath ([IO.Path]::GetFullPath($_.HintPath, $s.Dir)) -PathType Leaf) })
 
     # Whitespace only: the gate reports, it never rewrites, and a repo with no
     # .editorconfig has no style to enforce beyond it. Measured on two real mods: 1396

@@ -424,6 +424,27 @@ if ($dnSdks) {
     # The absence half, and it is the whole bug: the run used to be green with this line.
     Check 'a file in a new directory is not called no changed .cs files' `
         ($out -notmatch 'no changed \.cs files') $out
+
+    # A multi-targeted project evaluates with TargetFramework EMPTY, so every item inside
+    # an ItemGroup conditioned on it is absent from the answer: measured on
+    # `net8.0;net8.0-windows`, the conditioned <Reference> came back as `"Reference": []`,
+    # the missing game DLL went unreported, and the gate BUILT the project -- turning the
+    # [SKIP] it owed the reader into CS0246. References are evaluated per TFM now.
+    [IO.File]::WriteAllText($dnProj, $dnProjClean.Replace(
+            '<TargetFramework>net8.0</TargetFramework>',
+            '<TargetFrameworks>net8.0;net8.0-windows</TargetFrameworks>').Replace('</Project>', @"
+  <ItemGroup Condition="'`$(TargetFramework)' == 'net8.0-windows'">
+    <Reference Include="Ghost"><HintPath>C:\does\not\exist\Ghost.dll</HintPath></Reference>
+  </ItemGroup>
+</Project>
+"@))
+    $r = Invoke-Gate $dn
+    Check 'a reference conditioned on one target framework is still evaluated' `
+        (($r.Code -eq 0) -and ($r.Out -match 'reference\(s\) missing') -and ($r.Out -match 'Ghost\.dll')) $r.Out
+    # The absence half: the old behaviour was to see no reference and build anyway.
+    Check 'a conditioned missing reference is not built over' `
+        (($r.Out -notmatch 'error CS') -and ($r.Out -notmatch 'error MSB') -and ($r.Out -notmatch '\[PASS\] build')) $r.Out
+    [IO.File]::WriteAllText($dnProj, $dnProjClean)
 } else {
     Write-Output '[skip] no .NET SDK on this machine -- the dotnet stack cannot be exercised'
 }
