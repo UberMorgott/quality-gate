@@ -92,6 +92,11 @@ Set-Content (Join-Path $gign '.claude\worktrees\agent-x\go.mod') 'module example
 $r = Invoke-Gate $gign
 Check 'an unformatted file in a gitignored worktree does not fail the gate' `
     (($r.Code -eq 0) -and ($r.Out -notmatch 'bad\.go')) $r.Out
+# '{0:N1}' formats with the CURRENT culture: on a ru-RU machine every phase printed
+# `(0,0s)`, so the timings this report exists to show meant something different per
+# machine and parsed as nothing. Both halves -- a dot present, no comma anywhere.
+Check 'a phase time prints with a dot in any locale' `
+    (($r.Out -match '\(\d+\.\ds\)') -and ($r.Out -notmatch '\(\d+,\ds\)')) $r.Out
 [IO.File]::WriteAllText((Join-Path $gign 'ugly.go'), "package main`n`nfunc  Ugly()  {}`n")
 $r = Invoke-Gate $gign
 Check 'gofmt still fails on a real unformatted file' `

@@ -287,7 +287,10 @@ function Phase {
     $global:LASTEXITCODE = 0
     $out = (& $Body 2>&1 | Out-String).TrimEnd()
     $sw.Stop()
-    $sec = '{0:N1}' -f $sw.Elapsed.TotalSeconds
+    # InvariantCulture, not '{0:N1}': under a comma-decimal locale (ru-RU here) every
+    # phase printed `0,0s`, so the timings the report exists to show were unreadable to
+    # anything that parses them and inconsistent between machines.
+    $sec = $sw.Elapsed.TotalSeconds.ToString('0.0', [Globalization.CultureInfo]::InvariantCulture)
     if (($LASTEXITCODE -ne 0) -or ($FailIfOutput -and $out)) {
         $script:Lines += "[FAIL] $Name (${sec}s)"
         if ($out) { $script:Lines += $out }
