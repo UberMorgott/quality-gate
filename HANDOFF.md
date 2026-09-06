@@ -60,19 +60,22 @@
 
 ### 1.3 Открыто: обкатка на соседних репозиториях
 
-- В обоих целевых репо `dotnet format whitespace` находит **1396** (Multiplayer2) и **447**
-  (ContentTool) нарушений. `-All`/`-Full` там красные до однократного
-  `dotnet format whitespace <csproj>` — это решение владельца репо, гейт его не принимает.
-  Быстрая полоса трогает только staged `.cs`, поэтому коммит без правок `.cs` проходит.
+- **Multiplayer2 подключён** (их коммиты `60e9dcc` style-format 87 файлов, `09c42ec` хуки,
+  `49e5b48` пробный PASS): `qgate wire -NoHook`, тело `templates/pre-commit` дописано в их
+  `.githooks/pre-commit` (после law-integrity + RailCheck) и в новый `.githooks/pre-merge-commit`.
+  Зелёный pre-commit у них ≈74 с (law-integrity 2 + RailCheck 50 + гейт 20). `-All -Full` на
+  трёх csproj — 18 с, всё PASS, ложных отказов не было. **ContentTool не подключён**: там
+  **447** нарушений `dotnet format whitespace`, `-All`/`-Full` красные до однократного
+  форматирования — решение владельца репо, гейт его не принимает. Быстрая полоса трогает
+  только staged `.cs`, поэтому коммит без правок `.cs` проходит.
 - Первый упавший стек снимает остальные (`an earlier stack failed, not run`) — штатное
   поведение гейта; в ContentTool это 12 `[SKIP]` после одного `[FAIL] format`. То же теперь
   и на уровне фаз: `[SKIP] build -- not run: an earlier phase failed` (раньше фазы после
   падения исчезали молча, и файл с помаркой **и** ошибкой компиляции показывал только
   WHITESPACE). На `-Full` неприменимые фазы тоже названы:
   `[SKIP] test -- no test project (…)`, `[SKIP] vuln -- no package references`.
-- В Multiplayer2 уже стоит свой `core.hooksPath=.githooks` с `pre-commit`
-  (`tools/law-integrity.ps1` + RailCheck). `qgate wire` туда ещё не запускался;
-  lefthook и существующий хук надо совместить осознанно, а не затирать.
+- В Multiplayer2 свой `core.hooksPath=.githooks`; lefthook туда сознательно не пускали
+  (`-NoHook` + дописанное тело). Тот же рецепт для ContentTool, когда решат форматировать.
 - Известная ловушка из их хука: первый `dotnet` в PATH бывает x86-хостом без SDK
   (`No .NET SDKs were found`) — гейт трактует пустой `dotnet --list-sdks` как отсутствие
   инструмента.
