@@ -425,6 +425,26 @@ if ($dnSdks) {
     Check 'a file in a new directory is not called no changed .cs files' `
         ($out -notmatch 'no changed \.cs files') $out
 
+    # `test` and `vuln` used to exist only where a regex found their marker in the csproj
+    # TEXT, so anything imported through Directory.Build.props was invisible: measured, a
+    # project whose Microsoft.NET.Test.Sdk and xunit come from there passed `-All -Full`
+    # with no `test` phase at all while `dotnet test --no-build` found the failing test and
+    # exited 1. Both facts now come from the MSBuild evaluation that already runs. The
+    # cheap half of that needs no package and no restore: a project that simply declares
+    # itself one, in a csproj whose text does not contain the string the old check hunted.
+    $dnTest = Join-Path $tmp 'dotnet-istest'
+    Copy-Item (Join-Path $PSScriptRoot 'testdata\dotnet-fixture') $dnTest -Recurse
+    [IO.File]::WriteAllText((Join-Path $dnTest 'Fixture.csproj'), $dnProjClean.Replace(
+            '<Nullable>enable</Nullable>', "<IsTestProject>true</IsTestProject>`n    <Nullable>enable</Nullable>"))
+    $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $dnTest -All -Full 2>&1 | Out-String)
+    $dnTestCode = $LASTEXITCODE
+    Check 'a project that evaluates as a test project gets the test phase' `
+        (($dnTestCode -ne 0) -and ($out -match '\[FAIL\] test')) "code=$dnTestCode $out"
+    # ...and the red is the test phase speaking, not an earlier phase falling over: a
+    # broken build would satisfy "exit non-zero" while proving nothing about detection.
+    Check 'the test phase verdict is not standing on an earlier failure' `
+        ($out -notmatch '\[FAIL\] (refs|format|build)') $out
+
     # A multi-targeted project evaluates with TargetFramework EMPTY, so every item inside
     # an ItemGroup conditioned on it is absent from the answer: measured on
     # `net8.0;net8.0-windows`, the conditioned <Reference> came back as `"Reference": []`,
@@ -445,6 +465,62 @@ if ($dnSdks) {
     Check 'a conditioned missing reference is not built over' `
         (($r.Out -notmatch 'error CS') -and ($r.Out -notmatch 'error MSB') -and ($r.Out -notmatch '\[PASS\] build')) $r.Out
     [IO.File]::WriteAllText($dnProj, $dnProjClean)
+
+    # The other half of the same defect, plus the report bug it was hiding behind. The
+    # package here is declared ONLY in Directory.Build.props, so the vulnerability gate
+    # used to skip the project outright; and with the source unreachable that gate answers
+    # [UNKNOWN] -- which the summary of a PASSING stack then dropped, because its filter
+    # kept [PASS]/[WARN]/[SKIP] and nothing else. Measured: `[PASS] dotnet ... [PASS]
+    # build`, exit 0, over a question nobody asked. The package has to come down once
+    # before the source is broken, so a machine with no source skips this out loud.
+    $dnPkg = Join-Path $tmp 'dotnet-props'
+    Copy-Item (Join-Path $PSScriptRoot 'testdata\dotnet-fixture') $dnPkg -Recurse
+    [IO.File]::WriteAllText((Join-Path $dnPkg 'Directory.Build.props'), @'
+<Project>
+  <ItemGroup>
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+  </ItemGroup>
+</Project>
+'@)
+    Push-Location $dnPkg
+    & dotnet restore Fixture.csproj -nologo *> $null
+    $dnRestored = ($LASTEXITCODE -eq 0)
+    Pop-Location
+    if ($dnRestored) {
+        # <clear /> plus a port nothing listens on: restore is already satisfied from the
+        # global packages folder, `dotnet list package --vulnerable` is not. The retry caps
+        # turn NuGet's 18 seconds of backoff into two (measured).
+        [IO.File]::WriteAllText((Join-Path $dnPkg 'NuGet.config'), @'
+<configuration>
+  <packageSources>
+    <clear />
+    <add key="unreachable" value="http://127.0.0.1:9/v3/index.json" />
+  </packageSources>
+</configuration>
+'@)
+        $priorRetry = @($env:NUGET_ENABLE_ENHANCED_HTTP_RETRY, $env:NUGET_ENHANCED_MAX_NETWORK_TRY_COUNT,
+            $env:NUGET_ENHANCED_NETWORK_RETRY_DELAY_MILLISECONDS)
+        $env:NUGET_ENABLE_ENHANCED_HTTP_RETRY = 'true'
+        $env:NUGET_ENHANCED_MAX_NETWORK_TRY_COUNT = '1'
+        $env:NUGET_ENHANCED_NETWORK_RETRY_DELAY_MILLISECONDS = '0'
+        try {
+            $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $dnPkg -All -Full 2>&1 | Out-String)
+            $dnPkgCode = $LASTEXITCODE
+        } finally {
+            $env:NUGET_ENABLE_ENHANCED_HTTP_RETRY = $priorRetry[0]
+            $env:NUGET_ENHANCED_MAX_NETWORK_TRY_COUNT = $priorRetry[1]
+            $env:NUGET_ENHANCED_NETWORK_RETRY_DELAY_MILLISECONDS = $priorRetry[2]
+        }
+        Check 'a package declared only in Directory.Build.props reaches the vulnerability gate' `
+            (($dnPkgCode -eq 0) -and ($out -match 'could not check for vulnerable packages')) "code=$dnPkgCode $out"
+        Check 'an unperformed check is not dropped from the report of a passing stack' `
+            (($out -match '\[PASS\] dotnet') -and ($out -match '\[UNKNOWN\]')) $out
+        # ...and it is there because the summary kept it, not because the stack failed and
+        # dumped its raw lines -- which is how this would pass while still being broken.
+        Check 'the [UNKNOWN] survived the summary, it is not a failure dump' ($out -notmatch '\[FAIL\]') $out
+    } else {
+        Write-Output '[skip] no NuGet source reachable -- the Directory.Build.props package checks cannot run'
+    }
 } else {
     Write-Output '[skip] no .NET SDK on this machine -- the dotnet stack cannot be exercised'
 }

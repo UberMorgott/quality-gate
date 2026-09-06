@@ -37,12 +37,16 @@
 - `build` — `dotnet build -nologo -v q -clp:NoSummary`, 2–3 с, инкрементально 1–2 с;
   `net48/net472` собирается на SDK 8 без Visual Studio (reference assemblies тянет
   restore). Предупреждения компилятора — `[WARN] N compiler warning(s)`, не отказ;
-- `test` (`-Full`) — только при `Microsoft.NET.Test.Sdk` в csproj; в целевых репо тестовые
-  проекты — `Exe`-раннеры, фаза не появляется;
-- `vuln` (`-Full`, после build) — `dotnet list package --vulnerable --include-transitive
-  --format json --output-version 1`. `frameworks` в JSON **отсутствует**, когда уязвимостей
-  нет; недоступный источник печатает `error:` без JSON, нересторенный проект — `problems[]`;
-  оба → `[UNKNOWN]`.
+- `test` (`-Full`) — при вычисленном `IsTestProject == true` **или** `Microsoft.NET.Test.Sdk`
+  среди вычисленных `PackageReference`. Не текст csproj: через `Directory.Build.props` пакет
+  поиском по файлу не находится (замерено — `-All -Full` = 0, `dotnet test --no-build` = 1 на
+  том же проекте). `IsTestProject` до restore пустой, поэтому нужны оба условия. В целевых
+  репо тестовые проекты — `Exe`-раннеры, фаза не появляется;
+- `vuln` (`-Full`, после build) — при непустом списке вычисленных `PackageReference`;
+  `dotnet list package --vulnerable --include-transitive --format json --output-version 1`.
+  `frameworks` в JSON **отсутствует**, когда уязвимостей нет; недоступный источник печатает
+  `error:` без JSON, нересторенный проект — `problems[]`; оба → `[UNKNOWN]`, и эта строка
+  теперь доживает до отчёта успешного стека (раньше фильтр сводки её выбрасывал).
 
 ### 1.2 Граф знаний теперь в git: `c20db8a`, `212da7e`, `da8479a`
 

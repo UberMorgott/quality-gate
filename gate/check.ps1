@@ -456,7 +456,15 @@ function Invoke-DotnetStack($s) {
     # back as readable data. That is the whole point -- a game mod's HintPath points into
     # a Steam directory that CI and half the developer machines do not have, and a build
     # failure there is a fact about the machine, not about the code.
-    $q = (& dotnet msbuild $proj -getProperty:TargetFramework -getProperty:TargetFrameworks -getItem:Reference -nologo 2>&1 | Out-String).Trim()
+    #
+    # IsTestProject and PackageReference are asked here too, because the phases below used
+    # to grep the csproj TEXT for them. Measured: with Microsoft.NET.Test.Sdk and xunit
+    # pulled in through Directory.Build.props, `-All -Full` exited 0 with no `test` phase
+    # and no `vuln` phase at all, while `dotnet test --no-build` on the same project found
+    # the failing test and exited 1. Evaluation sees every import; a regex over one file
+    # sees one file.
+    $q = (& dotnet msbuild $proj -getProperty:TargetFramework -getProperty:TargetFrameworks `
+            -getProperty:IsTestProject -getItem:Reference -getItem:PackageReference -nologo 2>&1 | Out-String).Trim()
     $qCode = $LASTEXITCODE
     # A csproj msbuild cannot even evaluate IS a defect, so this one is a real phase.
     Phase 'refs' { if ($qCode -ne 0) { $q; $global:LASTEXITCODE = 1 } }
@@ -485,15 +493,17 @@ function Invoke-DotnetStack($s) {
     # <Reference> came back as `"Reference": []`, the missing game DLL went unreported,
     # and the run built the project instead of the [SKIP] it owed the reader -- CS0246.
     # One evaluation per TFM (measured at 0s each, and only for the multi-targeted case),
-    # unioned.
+    # unioned. PackageReference rides along in the same call for the same reason.
     $refs = @($info.Items.Reference)
+    $pkgs = @($info.Items.PackageReference)
     if (-not $info.Properties.TargetFramework) {
         foreach ($tfm in $tfms) {
-            $tq = (& dotnet msbuild $proj -getItem:Reference -p:TargetFramework=$tfm -nologo 2>&1 | Out-String).Trim()
+            $tq = (& dotnet msbuild $proj -getItem:Reference -getItem:PackageReference `
+                    -p:TargetFramework=$tfm -nologo 2>&1 | Out-String).Trim()
             # A TFM that will not evaluate is not a verdict here: `refs` above already
             # passed on the project as a whole, and the build phase is what judges code.
             $ti = if ($LASTEXITCODE -eq 0) { try { $tq | ConvertFrom-Json } catch { $null } }
-            if ($ti) { $refs += @($ti.Items.Reference) }
+            if ($ti) { $refs += @($ti.Items.Reference); $pkgs += @($ti.Items.PackageReference) }
         }
     }
     # HintPath is routinely RELATIVE to the csproj (`..\..\lib\AssetsTools.NET.dll` in a
@@ -569,13 +579,17 @@ function Invoke-DotnetStack($s) {
     if (-not $Full) { return }
 
     # Test projects in these repos are custom Exe runners, so the phase exists only
-    # where a real test SDK does.
-    if ((Get-Content $proj -Raw) -match 'Microsoft\.NET\.Test\.Sdk') {
+    # where a real test SDK does. Both facts come from the evaluation above, never from
+    # the csproj text: IsTestProject is what the SDK itself sets once the project is
+    # restored, and the PackageReference list covers the project before its first restore
+    # and everything Directory.Build.props imports into it.
+    $pkgIds = @($pkgs.Identity)
+    if ($info.Properties.IsTestProject -eq 'true' -or $pkgIds -contains 'Microsoft.NET.Test.Sdk') {
         Phase 'test' { dotnet test $proj --no-build -nologo -v q }
     }
     # See the govulncheck note above: a known vulnerability is a defect, it lives on the
     # network, and a project with no PackageReference has nothing to ask about.
-    if ((Get-Content $proj -Raw) -match 'PackageReference') {
+    if ($pkgIds) {
         # Neither the exit code nor the human table is readable: it exits 0 whether or
         # not it found anything, exits 1 when the source was merely unreachable, and
         # prints the table in the machine's display language. JSON is the only answer
@@ -903,7 +917,14 @@ foreach ($s in $stacks) {
     } elseif (-not $Quiet) {
         # SKIP belongs in the summary too: a phase that did not run is exactly what
         # a reader of a [PASS] stack line needs to be told about.
-        $timings = ($script:Lines | Where-Object { $_ -match '^\[(PASS|WARN|SKIP)\]' }) -join ' '
+        # UNKNOWN belongs here for the same reason SKIP does, and more so: it is the gate
+        # saying a check was never performed -- the vulnerability database unreachable, a
+        # project dotnet format could not load. Measured: with the source offline the vuln
+        # branch wrote its [UNKNOWN] and this filter dropped it, so the stack reported
+        # `[PASS] dotnet ... [PASS] build` and exit 0 over a question nobody answered. An
+        # unperformed check hidden behind a green line is the one thing this report must
+        # never do. One filter, so every stack that ever emits one is covered.
+        $timings = ($script:Lines | Where-Object { $_ -match '^\[(PASS|WARN|SKIP|UNKNOWN)\]' }) -join ' '
         # Same rule one level down from the invariant below. Every web phase is
         # conditional on a config file or a package script, so a project with none of
         # them ran nothing and was still reported [PASS]. A stack that verified
