@@ -449,22 +449,38 @@ function Invoke-DotnetStack($s) {
     # back as readable data. That is the whole point -- a game mod's HintPath points into
     # a Steam directory that CI and half the developer machines do not have, and a build
     # failure there is a fact about the machine, not about the code.
-    $q = (& dotnet msbuild $proj -getProperty:TargetFramework -getItem:Reference -nologo 2>&1 | Out-String).Trim()
+    $q = (& dotnet msbuild $proj -getProperty:TargetFramework -getProperty:TargetFrameworks -getItem:Reference -nologo 2>&1 | Out-String).Trim()
     $qCode = $LASTEXITCODE
     # A csproj msbuild cannot even evaluate IS a defect, so this one is a real phase.
     Phase 'refs' { if ($qCode -ne 0) { $q; $global:LASTEXITCODE = 1 } }
     if ($script:Failed) { return }
     $info = try { $q | ConvertFrom-Json } catch { $null }
 
-    $tfm = $info.Properties.TargetFramework
+    # A multi-targeted project leaves the singular property EMPTY and lists them in the
+    # plural one as `net8.0;net472`. Reading only TargetFramework there is a silent pass
+    # over every TFM the project actually has.
+    $tfms = @(
+        if ($info.Properties.TargetFramework) { $info.Properties.TargetFramework }
+        else { ($info.Properties.TargetFrameworks -split ';') | ForEach-Object { $_.Trim() } | Where-Object { $_ } }
+    )
     # net4xx builds on any modern SDK; net<major>.0 needs that major installed. Reported
     # as a skip, not a red build: a project targeting an SDK nobody here has is a gap in
     # the machine, and the raw NETSDK1045 tells the reader nothing about which one.
-    if ($tfm -match '^net(\d+)\.\d' -and [int]$Matches[1] -gt $maxSdk) {
-        $script:Lines += "[SKIP] ${proj}: needs .NET SDK $($Matches[1]).x, installed $($sdkVers -join ', ')"
-        return
+    foreach ($tfm in $tfms) {
+        if ($tfm -match '^net(\d+)\.\d' -and [int]$Matches[1] -gt $maxSdk) {
+            $script:Lines += "[SKIP] ${proj}: needs .NET SDK $($Matches[1]).x, installed $($sdkVers -join ', ')"
+            return
+        }
     }
-    $missing = @($info.Items.Reference | Where-Object { $_.HintPath -and -not (Test-Path $_.HintPath) })
+    # HintPath is routinely RELATIVE to the csproj (`..\..\lib\AssetsTools.NET.dll` in a
+    # real test project), so it is resolved against the project directory explicitly --
+    # not against wherever the process happens to stand. The item's own FullPath field is
+    # not an option: msbuild builds it from Identity, so it reads
+    # `<projectdir>\AssetsTools.NET` -- the wrong directory and no extension.
+    # -PathType Leaf because a reference is a FILE; a directory of that name is not one.
+    $missing = @($info.Items.Reference | Where-Object { $_.HintPath } | Where-Object {
+            -not (Test-Path -LiteralPath ([IO.Path]::GetFullPath($_.HintPath, $s.Dir)) -PathType Leaf)
+        })
 
     # Whitespace only: the gate reports, it never rewrites, and a repo with no
     # .editorconfig has no style to enforce beyond it. Measured on two real mods: 1396
