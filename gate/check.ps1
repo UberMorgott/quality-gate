@@ -566,7 +566,21 @@ function Invoke-DotnetStack($s) {
         }
         else {
             Phase 'format' {
-                $fmtOut
+                # Whole-project on a real mod is 1397 WHITESPACE lines -- 323k chars, which
+                # the report's global 6000-char truncation then cut to 27 lines and a byte
+                # count. Twenty lines and the real totals say strictly more than a flood
+                # sliced at an arbitrary character, and the fix is one command either way.
+                $ws = @($fmtOut -split "`r?`n" | Where-Object { $_ -match 'error WHITESPACE' })
+                if ($ws.Count -gt 20) {
+                    # The summary goes FIRST, not after the twenty: every WHITESPACE line
+                    # carries the .cs path AND the csproj path, so twenty of them can still
+                    # top the report's 6000-char truncation -- measured, and the line it ate
+                    # was the count. The totals are the only part a reader cannot recover.
+                    $files = @($ws | ForEach-Object { ($_ -split '\(')[0].Trim() } | Sort-Object -Unique).Count
+                    "format: $($ws.Count) violation(s) in $files file(s) -- showing first 20"
+                    $ws | Select-Object -First 20
+                }
+                else { $fmtOut }
                 # Every line already names file(line,col); what none of them says is the
                 # one command that fixes all of them.
                 if ($fmtCode -ne 0) { "fix: dotnet format whitespace $proj"; $global:LASTEXITCODE = 1 }

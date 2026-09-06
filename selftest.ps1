@@ -430,6 +430,28 @@ if ($dnSdks) {
     Check 'a file in a new directory is not called no changed .cs files' `
         ($out -notmatch 'no changed \.cs files') $out
 
+    # The whole-project check is the one CI and the generated pre-commit hook run, and on
+    # a real mod it is 1397 WHITESPACE lines -- 323k chars, which the report's global
+    # 6000-char truncation then cut to 27 lines and a byte count: no total, no file count,
+    # and the cut landing mid-line. Capped at twenty with the real numbers beside it.
+    $dnFlood = Join-Path $tmp 'dotnet-flood'
+    Copy-Item (Join-Path $PSScriptRoot 'testdata\dotnet-fixture') $dnFlood -Recurse
+    # One space where four belong, thirty times: methods M1..M30 land on lines 5..34.
+    $floodBody = ((1..30 | ForEach-Object { " public static int M$_() => $_;" }) -join "`r`n")
+    [IO.File]::WriteAllText((Join-Path $dnFlood 'Flood.cs'),
+        "namespace Fixture;`r`n`r`npublic static class Flood`r`n{`r`n$floodBody`r`n}`r`n")
+    $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $dnFlood -All 2>&1 | Out-String)
+    $dnFloodCode = $LASTEXITCODE
+    Check 'a format flood is capped and counted' `
+        (($dnFloodCode -ne 0) -and ($out -match 'format: 3\d violation\(s\) in 1 file\(s\) -- showing first 20')) `
+        "code=$dnFloodCode $out"
+    # The absence half, and it is the whole point: a cap that printed all thirty would
+    # satisfy the count above. M1 is on line 5 and must still be there; M26..M30 are on
+    # lines 30..34, past the cap, and must not be.
+    Check 'the format flood stops at twenty lines' `
+        ((@($out -split "`r?`n" | Where-Object { $_ -match 'error WHITESPACE' }).Count -le 20) -and
+            ($out -match 'Flood\.cs\(5,') -and ($out -notmatch 'Flood\.cs\(3[0-4],')) $out
+
     # `test` and `vuln` used to exist only where a regex found their marker in the csproj
     # TEXT, so anything imported through Directory.Build.props was invisible: measured, a
     # project whose Microsoft.NET.Test.Sdk and xunit come from there passed `-All -Full`
