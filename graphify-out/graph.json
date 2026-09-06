@@ -53,14 +53,37 @@
   },
   "nodes": [
     {
+      "label": "CLAUDE.md",
+      "file_type": "document",
+      "source_file": "CLAUDE.md",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "claude",
+      "community": 26,
+      "community_name": "CLAUDE.md",
+      "norm_label": "claude.md"
+    },
+    {
+      "label": "graphify",
+      "file_type": "document",
+      "source_file": "CLAUDE.md",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "claude_graphify",
+      "community": 26,
+      "community_name": "CLAUDE.md",
+      "norm_label": "graphify"
+    },
+    {
       "label": "qgate.ps1",
       "file_type": "code",
       "source_file": "bin/qgate.ps1",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "bin_qgate",
       "community": 15,
-      "norm_label": "qgate.ps1"
+      "norm_label": "qgate.ps1",
+      "id": "bin_qgate",
+      "community_name": "qgate.ps1"
     },
     {
       "label": "Invoke-Child()",
@@ -68,9 +91,10 @@
       "source_file": "bin/qgate.ps1",
       "source_location": "L45",
       "_origin": "ast",
-      "id": "bin_qgate_invoke_child",
       "community": 15,
-      "norm_label": "invoke-child()"
+      "norm_label": "invoke-child()",
+      "id": "bin_qgate_invoke_child",
+      "community_name": "qgate.ps1"
     },
     {
       "label": "bootstrap.ps1",
@@ -78,9 +102,10 @@
       "source_file": "bootstrap.ps1",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "bootstrap",
       "community": 20,
-      "norm_label": "bootstrap.ps1"
+      "norm_label": "bootstrap.ps1",
+      "id": "bootstrap",
+      "community_name": "bootstrap.ps1"
     },
     {
       "label": "check.ps1",
@@ -88,9 +113,10 @@
       "source_file": "gate/check.ps1",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "gate_check",
       "community": 9,
-      "norm_label": "check.ps1"
+      "norm_label": "check.ps1",
+      "id": "gate_check",
+      "community_name": "Invoke-GodotStack"
     },
     {
       "label": "Get-ChangedPaths()",
@@ -98,9 +124,10 @@
       "source_file": "gate/check.ps1",
       "source_location": "L144",
       "_origin": "ast",
-      "id": "gate_check_get_changedpaths",
       "community": 9,
-      "norm_label": "get-changedpaths()"
+      "norm_label": "get-changedpaths()",
+      "id": "gate_check_get_changedpaths",
+      "community_name": "Invoke-GodotStack"
     },
     {
       "label": "Phase()",
@@ -108,9 +135,10 @@
       "source_file": "gate/check.ps1",
       "source_location": "L275",
       "_origin": "ast",
-      "id": "gate_check_phase",
       "community": 9,
-      "norm_label": "phase()"
+      "norm_label": "phase()",
+      "id": "gate_check_phase",
+      "community_name": "Invoke-GodotStack"
     },
     {
       "label": "Fail()",
@@ -118,9 +146,10 @@
       "source_file": "gate/check.ps1",
       "source_location": "L311",
       "_origin": "ast",
-      "id": "gate_check_fail",
       "community": 9,
-      "norm_label": "fail()"
+      "norm_label": "fail()",
+      "id": "gate_check_fail",
+      "community_name": "Invoke-GodotStack"
     },
     {
       "label": "Have()",
@@ -128,9 +157,10 @@
       "source_file": "gate/check.ps1",
       "source_location": "L316",
       "_origin": "ast",
-      "id": "gate_check_have",
       "community": 9,
-      "norm_label": "have()"
+      "norm_label": "have()",
+      "id": "gate_check_have",
+      "community_name": "Invoke-GodotStack"
     },
     {
       "label": "Invoke-GodotStack()",
@@ -138,9 +168,10 @@
       "source_file": "gate/check.ps1",
       "source_location": "L551",
       "_origin": "ast",
-      "id": "gate_check_invoke_godotstack",
       "community": 9,
-      "norm_label": "invoke-godotstack()"
+      "norm_label": "invoke-godotstack()",
+      "id": "gate_check_invoke_godotstack",
+      "community_name": "Invoke-GodotStack"
     },
     {
       "label": "detect.ps1",
@@ -148,9 +179,10 @@
       "source_file": "gate/detect.ps1",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "gate_detect",
       "community": 1,
-      "norm_label": "detect.ps1"
+      "norm_label": "detect.ps1",
+      "id": "gate_detect",
+      "community_name": "detect.ps1"
     },
     {
       "label": "Get-RepoRoot()",
@@ -158,9 +190,10 @@
       "source_file": "gate/detect.ps1",
       "source_location": "L22",
       "_origin": "ast",
-      "id": "gate_detect_get_reporoot",
       "community": 1,
-      "norm_label": "get-reporoot()"
+      "norm_label": "get-reporoot()",
+      "id": "gate_detect_get_reporoot",
+      "community_name": "detect.ps1"
     },
     {
       "label": "Test-GitIgnored()",
@@ -168,9 +201,10 @@
       "source_file": "gate/detect.ps1",
       "source_location": "L36",
       "_origin": "ast",
-      "id": "gate_detect_test_gitignored",
       "community": 1,
-      "norm_label": "test-gitignored()"
+      "norm_label": "test-gitignored()",
+      "id": "gate_detect_test_gitignored",
+      "community_name": "detect.ps1"
     },
     {
       "label": "Test-GitIgnoredDir()",
@@ -178,9 +212,10 @@
       "source_file": "gate/detect.ps1",
       "source_location": "L66",
       "_origin": "ast",
-      "id": "gate_detect_test_gitignoreddir",
       "community": 1,
-      "norm_label": "test-gitignoreddir()"
+      "norm_label": "test-gitignoreddir()",
+      "id": "gate_detect_test_gitignoreddir",
+      "community_name": "detect.ps1"
     },
     {
       "label": "Find-Marker()",
@@ -188,9 +223,10 @@
       "source_file": "gate/detect.ps1",
       "source_location": "L73",
       "_origin": "ast",
-      "id": "gate_detect_find_marker",
       "community": 1,
-      "norm_label": "find-marker()"
+      "norm_label": "find-marker()",
+      "id": "gate_detect_find_marker",
+      "community_name": "detect.ps1"
     },
     {
       "label": "Get-PathKey()",
@@ -198,9 +234,10 @@
       "source_file": "gate/detect.ps1",
       "source_location": "L86",
       "_origin": "ast",
-      "id": "gate_detect_get_pathkey",
       "community": 5,
-      "norm_label": "get-pathkey()"
+      "norm_label": "get-pathkey()",
+      "id": "gate_detect_get_pathkey",
+      "community_name": "selftest.ps1"
     },
     {
       "label": "Get-GoBuiltWith()",
@@ -208,9 +245,10 @@
       "source_file": "gate/detect.ps1",
       "source_location": "L107",
       "_origin": "ast",
-      "id": "gate_detect_get_gobuiltwith",
       "community": 1,
-      "norm_label": "get-gobuiltwith()"
+      "norm_label": "get-gobuiltwith()",
+      "id": "gate_detect_get_gobuiltwith",
+      "community_name": "detect.ps1"
     },
     {
       "label": "Test-GoToolStale()",
@@ -218,9 +256,10 @@
       "source_file": "gate/detect.ps1",
       "source_location": "L124",
       "_origin": "ast",
-      "id": "gate_detect_test_gotoolstale",
       "community": 1,
-      "norm_label": "test-gotoolstale()"
+      "norm_label": "test-gotoolstale()",
+      "id": "gate_detect_test_gotoolstale",
+      "community_name": "detect.ps1"
     },
     {
       "label": "Get-GodotBin()",
@@ -228,9 +267,10 @@
       "source_file": "gate/detect.ps1",
       "source_location": "L136",
       "_origin": "ast",
-      "id": "gate_detect_get_godotbin",
       "community": 1,
-      "norm_label": "get-godotbin()"
+      "norm_label": "get-godotbin()",
+      "id": "gate_detect_get_godotbin",
+      "community_name": "detect.ps1"
     },
     {
       "label": "Test-AnyFile()",
@@ -238,9 +278,10 @@
       "source_file": "gate/detect.ps1",
       "source_location": "L143",
       "_origin": "ast",
-      "id": "gate_detect_test_anyfile",
       "community": 1,
-      "norm_label": "test-anyfile()"
+      "norm_label": "test-anyfile()",
+      "id": "gate_detect_test_anyfile",
+      "community_name": "detect.ps1"
     },
     {
       "label": "Get-Stacks()",
@@ -248,9 +289,10 @@
       "source_file": "gate/detect.ps1",
       "source_location": "L157",
       "_origin": "ast",
-      "id": "gate_detect_get_stacks",
       "community": 1,
-      "norm_label": "get-stacks()"
+      "norm_label": "get-stacks()",
+      "id": "gate_detect_get_stacks",
+      "community_name": "detect.ps1"
     },
     {
       "label": "outdated.ps1",
@@ -258,9 +300,10 @@
       "source_file": "gate/outdated.ps1",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "gate_outdated",
       "community": 13,
-      "norm_label": "outdated.ps1"
+      "norm_label": "outdated.ps1",
+      "id": "gate_outdated",
+      "community_name": "outdated.ps1"
     },
     {
       "label": "Split-Deferred()",
@@ -268,9 +311,10 @@
       "source_file": "gate/outdated.ps1",
       "source_location": "L81",
       "_origin": "ast",
-      "id": "gate_outdated_split_deferred",
       "community": 13,
-      "norm_label": "split-deferred()"
+      "norm_label": "split-deferred()",
+      "id": "gate_outdated_split_deferred",
+      "community_name": "outdated.ps1"
     },
     {
       "label": "Get-Latest()",
@@ -278,9 +322,10 @@
       "source_file": "gate/outdated.ps1",
       "source_location": "L113",
       "_origin": "ast",
-      "id": "gate_outdated_get_latest",
       "community": 13,
-      "norm_label": "get-latest()"
+      "norm_label": "get-latest()",
+      "id": "gate_outdated_get_latest",
+      "community_name": "outdated.ps1"
     },
     {
       "label": "stop-hook.ps1",
@@ -288,9 +333,10 @@
       "source_file": "gate/stop-hook.ps1",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "gate_stop_hook",
       "community": 21,
-      "norm_label": "stop-hook.ps1"
+      "norm_label": "stop-hook.ps1",
+      "id": "gate_stop_hook",
+      "community_name": "stop-hook.ps1"
     },
     {
       "label": "install.ps1",
@@ -298,9 +344,10 @@
       "source_file": "install.ps1",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "install",
       "community": 1,
-      "norm_label": "install.ps1"
+      "norm_label": "install.ps1",
+      "id": "install",
+      "community_name": "detect.ps1"
     },
     {
       "label": "Install-WebConfigs()",
@@ -308,9 +355,10 @@
       "source_file": "install.ps1",
       "source_location": "L33",
       "_origin": "ast",
-      "id": "install_install_webconfigs",
       "community": 1,
-      "norm_label": "install-webconfigs()"
+      "norm_label": "install-webconfigs()",
+      "id": "install_install_webconfigs",
+      "community_name": "detect.ps1"
     },
     {
       "label": "Set-StopHook()",
@@ -318,9 +366,10 @@
       "source_file": "install.ps1",
       "source_location": "L117",
       "_origin": "ast",
-      "id": "install_set_stophook",
       "community": 1,
-      "norm_label": "set-stophook()"
+      "norm_label": "set-stophook()",
+      "id": "install_set_stophook",
+      "community_name": "detect.ps1"
     },
     {
       "label": "Set-AgentDoc()",
@@ -328,9 +377,10 @@
       "source_file": "install.ps1",
       "source_location": "L175",
       "_origin": "ast",
-      "id": "install_set_agentdoc",
       "community": 1,
-      "norm_label": "set-agentdoc()"
+      "norm_label": "set-agentdoc()",
+      "id": "install_set_agentdoc",
+      "community_name": "detect.ps1"
     },
     {
       "label": "Install-Lefthook()",
@@ -338,9 +388,10 @@
       "source_file": "install.ps1",
       "source_location": "L208",
       "_origin": "ast",
-      "id": "install_install_lefthook",
       "community": 1,
-      "norm_label": "install-lefthook()"
+      "norm_label": "install-lefthook()",
+      "id": "install_install_lefthook",
+      "community_name": "detect.ps1"
     },
     {
       "label": "selftest.ps1",
@@ -348,9 +399,10 @@
       "source_file": "selftest.ps1",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "selftest",
       "community": 5,
-      "norm_label": "selftest.ps1"
+      "norm_label": "selftest.ps1",
+      "id": "selftest",
+      "community_name": "selftest.ps1"
     },
     {
       "label": "Check()",
@@ -358,9 +410,10 @@
       "source_file": "selftest.ps1",
       "source_location": "L29",
       "_origin": "ast",
-      "id": "selftest_check",
       "community": 5,
-      "norm_label": "check()"
+      "norm_label": "check()",
+      "id": "selftest_check",
+      "community_name": "selftest.ps1"
     },
     {
       "label": "Set-GoFile()",
@@ -368,9 +421,10 @@
       "source_file": "selftest.ps1",
       "source_location": "L34",
       "_origin": "ast",
-      "id": "selftest_set_gofile",
       "community": 5,
-      "norm_label": "set-gofile()"
+      "norm_label": "set-gofile()",
+      "id": "selftest_set_gofile",
+      "community_name": "selftest.ps1"
     },
     {
       "label": "Invoke-Gate()",
@@ -378,9 +432,10 @@
       "source_file": "selftest.ps1",
       "source_location": "L39",
       "_origin": "ast",
-      "id": "selftest_invoke_gate",
       "community": 5,
-      "norm_label": "invoke-gate()"
+      "norm_label": "invoke-gate()",
+      "id": "selftest_invoke_gate",
+      "community_name": "selftest.ps1"
     },
     {
       "label": "Invoke-StopHook()",
@@ -388,9 +443,10 @@
       "source_file": "selftest.ps1",
       "source_location": "L484",
       "_origin": "ast",
-      "id": "selftest_invoke_stophook",
       "community": 5,
-      "norm_label": "invoke-stophook()"
+      "norm_label": "invoke-stophook()",
+      "id": "selftest_invoke_stophook",
+      "community_name": "selftest.ps1"
     },
     {
       "label": "Set-Deferrals()",
@@ -398,9 +454,10 @@
       "source_file": "selftest.ps1",
       "source_location": "L774",
       "_origin": "ast",
-      "id": "selftest_set_deferrals",
       "community": 5,
-      "norm_label": "set-deferrals()"
+      "norm_label": "set-deferrals()",
+      "id": "selftest_set_deferrals",
+      "community_name": "selftest.ps1"
     },
     {
       "label": "Set-OutdatedCache()",
@@ -408,9 +465,10 @@
       "source_file": "selftest.ps1",
       "source_location": "L781",
       "_origin": "ast",
-      "id": "selftest_set_outdatedcache",
       "community": 5,
-      "norm_label": "set-outdatedcache()"
+      "norm_label": "set-outdatedcache()",
+      "id": "selftest_set_outdatedcache",
+      "community_name": "selftest.ps1"
     },
     {
       "label": "Get-Summary()",
@@ -418,9 +476,10 @@
       "source_file": "selftest.ps1",
       "source_location": "L785",
       "_origin": "ast",
-      "id": "selftest_get_summary",
       "community": 5,
-      "norm_label": "get-summary()"
+      "norm_label": "get-summary()",
+      "id": "selftest_get_summary",
+      "community_name": "selftest.ps1"
     },
     {
       "label": ".stylelintrc.json",
@@ -428,9 +487,10 @@
       "source_file": "templates/.stylelintrc.json",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "templates_stylelintrc",
       "community": 7,
-      "norm_label": ".stylelintrc.json"
+      "norm_label": ".stylelintrc.json",
+      "id": "templates_stylelintrc",
+      "community_name": "ignoreFiles"
     },
     {
       "label": "extends",
@@ -438,9 +498,10 @@
       "source_file": "templates/.stylelintrc.json",
       "source_location": "L2",
       "_origin": "ast",
-      "id": "templates_stylelintrc_extends",
       "community": 7,
-      "norm_label": "extends"
+      "norm_label": "extends",
+      "id": "templates_stylelintrc_extends",
+      "community_name": "ignoreFiles"
     },
     {
       "label": "stylelint-config-standard-scss",
@@ -448,9 +509,10 @@
       "source_file": "templates/.stylelintrc.json",
       "source_location": "L2",
       "_origin": "ast",
-      "id": "ref_stylelint_config_standard_scss",
       "community": 7,
-      "norm_label": "stylelint-config-standard-scss"
+      "norm_label": "stylelint-config-standard-scss",
+      "id": "ref_stylelint_config_standard_scss",
+      "community_name": "ignoreFiles"
     },
     {
       "label": "stylelint-config-recommended-vue/scss",
@@ -458,9 +520,10 @@
       "source_file": "templates/.stylelintrc.json",
       "source_location": "L2",
       "_origin": "ast",
-      "id": "ref_stylelint_config_recommended_vue_scss",
       "community": 7,
-      "norm_label": "stylelint-config-recommended-vue/scss"
+      "norm_label": "stylelint-config-recommended-vue/scss",
+      "id": "ref_stylelint_config_recommended_vue_scss",
+      "community_name": "ignoreFiles"
     },
     {
       "label": "ignoreFiles",
@@ -468,9 +531,10 @@
       "source_file": "templates/.stylelintrc.json",
       "source_location": "L6",
       "_origin": "ast",
-      "id": "templates_stylelintrc_ignorefiles",
       "community": 7,
-      "norm_label": "ignorefiles"
+      "norm_label": "ignorefiles",
+      "id": "templates_stylelintrc_ignorefiles",
+      "community_name": "ignoreFiles"
     },
     {
       "label": "dist/**",
@@ -478,9 +542,10 @@
       "source_file": "templates/.stylelintrc.json",
       "source_location": "L6",
       "_origin": "ast",
-      "id": "ref_dist",
       "community": 7,
-      "norm_label": "dist/**"
+      "norm_label": "dist/**",
+      "id": "ref_dist",
+      "community_name": "ignoreFiles"
     },
     {
       "label": "coverage/**",
@@ -488,9 +553,10 @@
       "source_file": "templates/.stylelintrc.json",
       "source_location": "L6",
       "_origin": "ast",
-      "id": "ref_coverage",
       "community": 7,
-      "norm_label": "coverage/**"
+      "norm_label": "coverage/**",
+      "id": "ref_coverage",
+      "community_name": "ignoreFiles"
     },
     {
       "label": ".cache/**",
@@ -498,9 +564,10 @@
       "source_file": "templates/.stylelintrc.json",
       "source_location": "L6",
       "_origin": "ast",
-      "id": "ref_cache",
       "community": 7,
-      "norm_label": ".cache/**"
+      "norm_label": ".cache/**",
+      "id": "ref_cache",
+      "community_name": "ignoreFiles"
     },
     {
       "label": "eslint.config.js",
@@ -508,9 +575,10 @@
       "source_file": "templates/eslint.config.js",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "templates_eslint_config",
       "community": 24,
-      "norm_label": "eslint.config.js"
+      "norm_label": "eslint.config.js",
+      "id": "templates_eslint_config",
+      "community_name": "eslint.config.js"
     },
     {
       "label": "pre-commit",
@@ -522,9 +590,10 @@
         "kind": "file"
       },
       "_origin": "ast",
-      "id": "templates_pre_commit",
       "community": 19,
-      "norm_label": "pre-commit"
+      "norm_label": "pre-commit",
+      "id": "templates_pre_commit",
+      "community_name": "pre-commit"
     },
     {
       "label": "pre-commit script",
@@ -536,9 +605,10 @@
         "kind": "bash_entrypoint"
       },
       "_origin": "ast",
-      "id": "templates_pre_commit__entry",
       "community": 19,
-      "norm_label": "pre-commit script"
+      "norm_label": "pre-commit script",
+      "id": "templates_pre_commit__entry",
+      "community_name": "pre-commit"
     },
     {
       "label": "gatefixture",
@@ -548,9 +618,10 @@
       "source_file": "testdata/go-fixture/go.mod",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "pkg_gatefixture",
       "community": 22,
-      "norm_label": "gatefixture"
+      "norm_label": "gatefixture",
+      "id": "pkg_gatefixture",
+      "community_name": "gatefixture"
     },
     {
       "label": "main.go",
@@ -558,9 +629,10 @@
       "source_file": "testdata/go-fixture/main.go",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "testdata_go_fixture_main",
       "community": 11,
-      "norm_label": "main.go"
+      "norm_label": "main.go",
+      "id": "testdata_go_fixture_main",
+      "community_name": "Add"
     },
     {
       "label": "Add()",
@@ -568,9 +640,10 @@
       "source_file": "testdata/go-fixture/main.go",
       "source_location": "L6",
       "_origin": "ast",
-      "id": "testdata_go_fixture_main_add",
       "community": 11,
-      "norm_label": "add()"
+      "norm_label": "add()",
+      "id": "testdata_go_fixture_main_add",
+      "community_name": "Add"
     },
     {
       "label": "main()",
@@ -578,9 +651,10 @@
       "source_file": "testdata/go-fixture/main.go",
       "source_location": "L8",
       "_origin": "ast",
-      "id": "testdata_go_fixture_main_main",
       "community": 11,
-      "norm_label": "main()"
+      "norm_label": "main()",
+      "id": "testdata_go_fixture_main_main",
+      "community_name": "Add"
     },
     {
       "label": "main_test.go",
@@ -588,9 +662,10 @@
       "source_file": "testdata/go-fixture/main_test.go",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "testdata_go_fixture_main_test",
       "community": 11,
-      "norm_label": "main_test.go"
+      "norm_label": "main_test.go",
+      "id": "testdata_go_fixture_main_test",
+      "community_name": "Add"
     },
     {
       "label": "TestAdd()",
@@ -598,9 +673,10 @@
       "source_file": "testdata/go-fixture/main_test.go",
       "source_location": "L5",
       "_origin": "ast",
-      "id": "testdata_go_fixture_main_test_testadd",
       "community": 11,
-      "norm_label": "testadd()"
+      "norm_label": "testadd()",
+      "id": "testdata_go_fixture_main_test_testadd",
+      "community_name": "Add"
     },
     {
       "label": "T",
@@ -608,9 +684,10 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "id": "t",
       "community": 11,
-      "norm_label": "t"
+      "norm_label": "t",
+      "id": "t",
+      "community_name": "Add"
     },
     {
       "label": "python-fixture",
@@ -621,9 +698,10 @@
       "source_location": "L1",
       "version": "0.0.0",
       "_origin": "ast",
-      "id": "pkg_python_fixture",
       "community": 23,
-      "norm_label": "python-fixture"
+      "norm_label": "python-fixture",
+      "id": "pkg_python_fixture",
+      "community_name": "python-fixture"
     },
     {
       "label": "main.rs",
@@ -631,9 +709,10 @@
       "source_file": "testdata/rust-fixture/src/main.rs",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "testdata_rust_fixture_src_main",
       "community": 12,
-      "norm_label": "main.rs"
+      "norm_label": "main.rs",
+      "id": "testdata_rust_fixture_src_main",
+      "community_name": "main.rs"
     },
     {
       "label": "add()",
@@ -641,9 +720,10 @@
       "source_file": "testdata/rust-fixture/src/main.rs",
       "source_location": "L2",
       "_origin": "ast",
-      "id": "testdata_rust_fixture_src_main_add",
       "community": 12,
-      "norm_label": "add()"
+      "norm_label": "add()",
+      "id": "testdata_rust_fixture_src_main_add",
+      "community_name": "main.rs"
     },
     {
       "label": "main()",
@@ -651,9 +731,10 @@
       "source_file": "testdata/rust-fixture/src/main.rs",
       "source_location": "L6",
       "_origin": "ast",
-      "id": "testdata_rust_fixture_src_main_main",
       "community": 12,
-      "norm_label": "main()"
+      "norm_label": "main()",
+      "id": "testdata_rust_fixture_src_main_main",
+      "community_name": "main.rs"
     },
     {
       "label": "adds()",
@@ -661,9 +742,10 @@
       "source_file": "testdata/rust-fixture/src/main.rs",
       "source_location": "L15",
       "_origin": "ast",
-      "id": "testdata_rust_fixture_src_main_adds",
       "community": 12,
-      "norm_label": "adds()"
+      "norm_label": "adds()",
+      "id": "testdata_rust_fixture_src_main_adds",
+      "community_name": "main.rs"
     },
     {
       "label": "package.json",
@@ -671,9 +753,10 @@
       "source_file": "testdata/web-fixture/package.json",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "testdata_web_fixture_package",
       "community": 8,
-      "norm_label": "package.json"
+      "norm_label": "package.json",
+      "id": "testdata_web_fixture_package",
+      "community_name": "package.json"
     },
     {
       "label": "name",
@@ -681,9 +764,10 @@
       "source_file": "testdata/web-fixture/package.json",
       "source_location": "L2",
       "_origin": "ast",
-      "id": "testdata_web_fixture_package_name",
       "community": 8,
-      "norm_label": "name"
+      "norm_label": "name",
+      "id": "testdata_web_fixture_package_name",
+      "community_name": "package.json"
     },
     {
       "label": "private",
@@ -691,9 +775,10 @@
       "source_file": "testdata/web-fixture/package.json",
       "source_location": "L3",
       "_origin": "ast",
-      "id": "testdata_web_fixture_package_private",
       "community": 8,
-      "norm_label": "private"
+      "norm_label": "private",
+      "id": "testdata_web_fixture_package_private",
+      "community_name": "package.json"
     },
     {
       "label": "type",
@@ -701,9 +786,10 @@
       "source_file": "testdata/web-fixture/package.json",
       "source_location": "L4",
       "_origin": "ast",
-      "id": "testdata_web_fixture_package_type",
       "community": 8,
-      "norm_label": "type"
+      "norm_label": "type",
+      "id": "testdata_web_fixture_package_type",
+      "community_name": "package.json"
     },
     {
       "label": "scripts",
@@ -711,9 +797,10 @@
       "source_file": "testdata/web-fixture/package.json",
       "source_location": "L5",
       "_origin": "ast",
-      "id": "testdata_web_fixture_package_scripts",
       "community": 8,
-      "norm_label": "scripts"
+      "norm_label": "scripts",
+      "id": "testdata_web_fixture_package_scripts",
+      "community_name": "package.json"
     },
     {
       "label": "build-only",
@@ -721,9 +808,10 @@
       "source_file": "testdata/web-fixture/package.json",
       "source_location": "L6",
       "_origin": "ast",
-      "id": "testdata_web_fixture_package_scripts_build_only",
       "community": 8,
-      "norm_label": "build-only"
+      "norm_label": "build-only",
+      "id": "testdata_web_fixture_package_scripts_build_only",
+      "community_name": "package.json"
     },
     {
       "label": "type-check",
@@ -731,9 +819,10 @@
       "source_file": "testdata/web-fixture/package.json",
       "source_location": "L7",
       "_origin": "ast",
-      "id": "testdata_web_fixture_package_scripts_type_check",
       "community": 8,
-      "norm_label": "type-check"
+      "norm_label": "type-check",
+      "id": "testdata_web_fixture_package_scripts_type_check",
+      "community_name": "package.json"
     },
     {
       "label": "vite.config.js",
@@ -741,9 +830,10 @@
       "source_file": "testdata/web-fixture/vite.config.js",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "testdata_web_fixture_vite_config",
       "community": 25,
-      "norm_label": "vite.config.js"
+      "norm_label": "vite.config.js",
+      "id": "testdata_web_fixture_vite_config",
+      "community_name": "vite.config.js"
     },
     {
       "label": "quality-gate (qgate)",
@@ -754,9 +844,11 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "id": "readme_quality_gate",
       "community": 0,
-      "norm_label": "quality-gate (qgate)"
+      "norm_label": "quality-gate (qgate)",
+      "_origin": "semantic",
+      "id": "readme_quality_gate",
+      "community_name": "GitHub Actions quality-gate workflow"
     },
     {
       "label": "Marker-file stack detection",
@@ -767,9 +859,11 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "id": "readme_stack_detection",
       "community": 0,
-      "norm_label": "marker-file stack detection"
+      "norm_label": "marker-file stack detection",
+      "_origin": "semantic",
+      "id": "readme_stack_detection",
+      "community_name": "GitHub Actions quality-gate workflow"
     },
     {
       "label": "Two levels: -Fast and -Full",
@@ -780,9 +874,11 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "id": "readme_two_levels",
       "community": 0,
-      "norm_label": "two levels: -fast and -full"
+      "norm_label": "two levels: -fast and -full",
+      "_origin": "semantic",
+      "id": "readme_two_levels",
+      "community_name": "GitHub Actions quality-gate workflow"
     },
     {
       "label": "Fail closed invariant (no check phase ran)",
@@ -793,9 +889,11 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "id": "readme_fail_closed",
       "community": 2,
-      "norm_label": "fail closed invariant (no check phase ran)"
+      "norm_label": "fail closed invariant (no check phase ran)",
+      "_origin": "semantic",
+      "id": "readme_fail_closed",
+      "community_name": "Coverage measures happy paths; a green suite proves nothing"
     },
     {
       "label": "qgate wire (repo wiring, config only)",
@@ -806,9 +904,11 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "id": "readme_qgate_wire",
       "community": 10,
-      "norm_label": "qgate wire (repo wiring, config only)"
+      "norm_label": "qgate wire (repo wiring, config only)",
+      "_origin": "semantic",
+      "id": "readme_qgate_wire",
+      "community_name": "qgate wire (repo wiring, config only)"
     },
     {
       "label": "qgate outdated",
@@ -819,9 +919,11 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "id": "readme_qgate_outdated",
       "community": 3,
-      "norm_label": "qgate outdated"
+      "norm_label": "qgate outdated",
+      "_origin": "semantic",
+      "id": "readme_qgate_outdated",
+      "community_name": "quality_gate job anchor shared by both hooks"
     },
     {
       "label": "qgate.deferrals.json (dated deferrals)",
@@ -832,9 +934,11 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "id": "readme_deferrals",
       "community": 3,
-      "norm_label": "qgate.deferrals.json (dated deferrals)"
+      "norm_label": "qgate.deferrals.json (dated deferrals)",
+      "_origin": "semantic",
+      "id": "readme_deferrals",
+      "community_name": "quality_gate job anchor shared by both hooks"
     },
     {
       "label": "qgate.json toolchain pinning",
@@ -845,9 +949,11 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "id": "readme_toolchain_pinning",
       "community": 0,
-      "norm_label": "qgate.json toolchain pinning"
+      "norm_label": "qgate.json toolchain pinning",
+      "_origin": "semantic",
+      "id": "readme_toolchain_pinning",
+      "community_name": "GitHub Actions quality-gate workflow"
     },
     {
       "label": "Staged-tree guard via git write-tree",
@@ -858,9 +964,11 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "id": "readme_staged_index_guard",
       "community": 6,
-      "norm_label": "staged-tree guard via git write-tree"
+      "norm_label": "staged-tree guard via git write-tree",
+      "_origin": "semantic",
+      "id": "readme_staged_index_guard",
+      "community_name": "Claude Code Stop hook (exit code 2)"
     },
     {
       "label": "Claude Code Stop hook (exit code 2)",
@@ -871,9 +979,11 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "id": "readme_stop_hook",
       "community": 6,
-      "norm_label": "claude code stop hook (exit code 2)"
+      "norm_label": "claude code stop hook (exit code 2)",
+      "_origin": "semantic",
+      "id": "readme_stop_hook",
+      "community_name": "Claude Code Stop hook (exit code 2)"
     },
     {
       "label": "Green-commit marker in TEMP for the Stop hook",
@@ -884,9 +994,11 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "id": "readme_green_commit_marker",
       "community": 6,
-      "norm_label": "green-commit marker in temp for the stop hook"
+      "norm_label": "green-commit marker in temp for the stop hook",
+      "_origin": "semantic",
+      "id": "readme_green_commit_marker",
+      "community_name": "Claude Code Stop hook (exit code 2)"
     },
     {
       "label": "-Quiet (silent only on green)",
@@ -897,9 +1009,11 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "id": "readme_quiet_mode",
       "community": 3,
-      "norm_label": "-quiet (silent only on green)"
+      "norm_label": "-quiet (silent only on green)",
+      "_origin": "semantic",
+      "id": "readme_quiet_mode",
+      "community_name": "quality_gate job anchor shared by both hooks"
     },
     {
       "label": "-Baseline adoption on a legacy codebase",
@@ -910,9 +1024,11 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "id": "readme_baseline_adoption",
       "community": 0,
-      "norm_label": "-baseline adoption on a legacy codebase"
+      "norm_label": "-baseline adoption on a legacy codebase",
+      "_origin": "semantic",
+      "id": "readme_baseline_adoption",
+      "community_name": "GitHub Actions quality-gate workflow"
     },
     {
       "label": "ESLint --suppress-all baseline",
@@ -923,9 +1039,11 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "id": "readme_eslint_suppressions",
       "community": 0,
-      "norm_label": "eslint --suppress-all baseline"
+      "norm_label": "eslint --suppress-all baseline",
+      "_origin": "semantic",
+      "id": "readme_eslint_suppressions",
+      "community_name": "GitHub Actions quality-gate workflow"
     },
     {
       "label": "Stale tool binary vs go.mod toolchain check",
@@ -936,9 +1054,11 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "id": "readme_stale_tool_binary_check",
       "community": 0,
-      "norm_label": "stale tool binary vs go.mod toolchain check"
+      "norm_label": "stale tool binary vs go.mod toolchain check",
+      "_origin": "semantic",
+      "id": "readme_stale_tool_binary_check",
+      "community_name": "GitHub Actions quality-gate workflow"
     },
     {
       "label": "Cross-stack fan-out on .proto change",
@@ -949,9 +1069,11 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "id": "readme_cross_stack_fanout",
       "community": 14,
-      "norm_label": "cross-stack fan-out on .proto change"
+      "norm_label": "cross-stack fan-out on .proto change",
+      "_origin": "semantic",
+      "id": "readme_cross_stack_fanout",
+      "community_name": "Proto stack phases (buf)"
     },
     {
       "label": "Vulnerability phase (govulncheck / npm audit)",
@@ -962,9 +1084,11 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "id": "readme_vulnerability_phase",
       "community": 3,
-      "norm_label": "vulnerability phase (govulncheck / npm audit)"
+      "norm_label": "vulnerability phase (govulncheck / npm audit)",
+      "_origin": "semantic",
+      "id": "readme_vulnerability_phase",
+      "community_name": "quality_gate job anchor shared by both hooks"
     },
     {
       "label": "Go stack phases",
@@ -975,9 +1099,11 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "id": "readme_go_stack",
       "community": 4,
-      "norm_label": "go stack phases"
+      "norm_label": "go stack phases",
+      "_origin": "semantic",
+      "id": "readme_go_stack",
+      "community_name": ".golangci.yml template"
     },
     {
       "label": "Web stack phases",
@@ -988,9 +1114,11 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "id": "readme_web_stack",
       "community": 18,
-      "norm_label": "web stack phases"
+      "norm_label": "web stack phases",
+      "_origin": "semantic",
+      "id": "readme_web_stack",
+      "community_name": "Run the linter without --fix"
     },
     {
       "label": "Rust stack phases",
@@ -1001,9 +1129,11 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "id": "readme_rust_stack",
       "community": 0,
-      "norm_label": "rust stack phases"
+      "norm_label": "rust stack phases",
+      "_origin": "semantic",
+      "id": "readme_rust_stack",
+      "community_name": "GitHub Actions quality-gate workflow"
     },
     {
       "label": "Proto stack phases (buf)",
@@ -1014,9 +1144,11 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "id": "readme_proto_stack",
       "community": 14,
-      "norm_label": "proto stack phases (buf)"
+      "norm_label": "proto stack phases (buf)",
+      "_origin": "semantic",
+      "id": "readme_proto_stack",
+      "community_name": "Proto stack phases (buf)"
     },
     {
       "label": "Godot stack phases",
@@ -1027,9 +1159,11 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "id": "readme_godot_stack",
       "community": 2,
-      "norm_label": "godot stack phases"
+      "norm_label": "godot stack phases",
+      "_origin": "semantic",
+      "id": "readme_godot_stack",
+      "community_name": "Coverage measures happy paths; a green suite proves nothing"
     },
     {
       "label": "Godot writes errors to stdout and exits 0",
@@ -1040,9 +1174,11 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "id": "readme_godot_stdout_trap",
       "community": 2,
-      "norm_label": "godot writes errors to stdout and exits 0"
+      "norm_label": "godot writes errors to stdout and exits 0",
+      "_origin": "semantic",
+      "id": "readme_godot_stdout_trap",
+      "community_name": "Coverage measures happy paths; a green suite proves nothing"
     },
     {
       "label": "qgate selftest (red-then-green on the gate itself)",
@@ -1053,9 +1189,11 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "id": "readme_selftest",
       "community": 2,
-      "norm_label": "qgate selftest (red-then-green on the gate itself)"
+      "norm_label": "qgate selftest (red-then-green on the gate itself)",
+      "_origin": "semantic",
+      "id": "readme_selftest",
+      "community_name": "Coverage measures happy paths; a green suite proves nothing"
     },
     {
       "label": "[NOTE] memory-allocation failure is not a verdict on the code",
@@ -1066,9 +1204,11 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "id": "readme_oom_note",
       "community": 16,
-      "norm_label": "[note] memory-allocation failure is not a verdict on the code"
+      "norm_label": "[note] memory-allocation failure is not a verdict on the code",
+      "_origin": "semantic",
+      "id": "readme_oom_note",
+      "community_name": "errno=1455 is a page-file commit limit, not RAM exhaustion"
     },
     {
       "label": "-Only stack selection",
@@ -1079,9 +1219,11 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "id": "readme_only_flag",
       "community": 2,
-      "norm_label": "-only stack selection"
+      "norm_label": "-only stack selection",
+      "_origin": "semantic",
+      "id": "readme_only_flag",
+      "community_name": "Coverage measures happy paths; a green suite proves nothing"
     },
     {
       "label": "Coverage measures happy paths; a green suite proves nothing",
@@ -1092,9 +1234,11 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "id": "playbook_coverage_illusion",
       "community": 2,
-      "norm_label": "coverage measures happy paths; a green suite proves nothing"
+      "norm_label": "coverage measures happy paths; a green suite proves nothing",
+      "_origin": "semantic",
+      "id": "playbook_coverage_illusion",
+      "community_name": "Coverage measures happy paths; a green suite proves nothing"
     },
     {
       "label": "Mutation check of existing tests",
@@ -1105,9 +1249,11 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "id": "playbook_mutation_check",
       "community": 2,
-      "norm_label": "mutation check of existing tests"
+      "norm_label": "mutation check of existing tests",
+      "_origin": "semantic",
+      "id": "playbook_mutation_check",
+      "community_name": "Coverage measures happy paths; a green suite proves nothing"
     },
     {
       "label": "Red-then-green verification",
@@ -1118,9 +1264,11 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "id": "playbook_red_then_green",
       "community": 2,
-      "norm_label": "red-then-green verification"
+      "norm_label": "red-then-green verification",
+      "_origin": "semantic",
+      "id": "playbook_red_then_green",
+      "community_name": "Coverage measures happy paths; a green suite proves nothing"
     },
     {
       "label": "A right outcome does not prove the right cause (\u00a70.1)",
@@ -1131,9 +1279,11 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "id": "playbook_right_outcome_wrong_cause",
       "community": 2,
-      "norm_label": "a right outcome does not prove the right cause (\u00a70.1)"
+      "norm_label": "a right outcome does not prove the right cause (\u00a70.1)",
+      "_origin": "semantic",
+      "id": "playbook_right_outcome_wrong_cause",
+      "community_name": "Coverage measures happy paths; a green suite proves nothing"
     },
     {
       "label": "Negative check asserts outcome + applied cause + absent cause",
@@ -1144,9 +1294,11 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "id": "playbook_three_assertion_rule",
       "community": 2,
-      "norm_label": "negative check asserts outcome + applied cause + absent cause"
+      "norm_label": "negative check asserts outcome + applied cause + absent cause",
+      "_origin": "semantic",
+      "id": "playbook_three_assertion_rule",
+      "community_name": "Coverage measures happy paths; a green suite proves nothing"
     },
     {
       "label": "PowerShell reads an empty value as absence",
@@ -1157,9 +1309,11 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "id": "playbook_powershell_empty_value_trap",
       "community": 2,
-      "norm_label": "powershell reads an empty value as absence"
+      "norm_label": "powershell reads an empty value as absence",
+      "_origin": "semantic",
+      "id": "playbook_powershell_empty_value_trap",
+      "community_name": "Coverage measures happy paths; a green suite proves nothing"
     },
     {
       "label": "One entry point, stop on first failed phase",
@@ -1170,9 +1324,11 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "id": "playbook_single_entry_gate",
       "community": 0,
-      "norm_label": "one entry point, stop on first failed phase"
+      "norm_label": "one entry point, stop on first failed phase",
+      "_origin": "semantic",
+      "id": "playbook_single_entry_gate",
+      "community_name": "GitHub Actions quality-gate workflow"
     },
     {
       "label": "Wave mechanism: cleanup queue lives in the linter config",
@@ -1183,9 +1339,11 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "id": "playbook_wave_mechanism",
       "community": 0,
-      "norm_label": "wave mechanism: cleanup queue lives in the linter config"
+      "norm_label": "wave mechanism: cleanup queue lives in the linter config",
+      "_origin": "semantic",
+      "id": "playbook_wave_mechanism",
+      "community_name": "GitHub Actions quality-gate workflow"
     },
     {
       "label": "Second-engine review",
@@ -1196,9 +1354,11 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
+      "community": 4,
+      "norm_label": "second-engine review",
+      "_origin": "semantic",
       "id": "playbook_second_engine_review",
-      "community": 0,
-      "norm_label": "second-engine review"
+      "community_name": ".golangci.yml template"
     },
     {
       "label": "Cancellability findings (context propagation)",
@@ -1209,9 +1369,11 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "id": "playbook_context_cancellability",
       "community": 4,
-      "norm_label": "cancellability findings (context propagation)"
+      "norm_label": "cancellability findings (context propagation)",
+      "_origin": "semantic",
+      "id": "playbook_context_cancellability",
+      "community_name": ".golangci.yml template"
     },
     {
       "label": "Final-write timeout created too early",
@@ -1222,9 +1384,11 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "id": "playbook_final_write_timeout_bug",
       "community": 4,
-      "norm_label": "final-write timeout created too early"
+      "norm_label": "final-write timeout created too early",
+      "_origin": "semantic",
+      "id": "playbook_final_write_timeout_bug",
+      "community_name": ".golangci.yml template"
     },
     {
       "label": "Unchecked errors: propagate, log-and-degrade, or join",
@@ -1235,9 +1399,11 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "id": "playbook_unchecked_errors",
       "community": 4,
-      "norm_label": "unchecked errors: propagate, log-and-degrade, or join"
+      "norm_label": "unchecked errors: propagate, log-and-degrade, or join",
+      "_origin": "semantic",
+      "id": "playbook_unchecked_errors",
+      "community_name": ".golangci.yml template"
     },
     {
       "label": "Security findings (path traversal, middleware order, body limits)",
@@ -1248,9 +1414,11 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
+      "community": 4,
+      "norm_label": "security findings (path traversal, middleware order, body limits)",
+      "_origin": "semantic",
       "id": "playbook_security_findings",
-      "community": 0,
-      "norm_label": "security findings (path traversal, middleware order, body limits)"
+      "community_name": ".golangci.yml template"
     },
     {
       "label": "Suppression needs a named reason; stale suppressions flagged",
@@ -1261,9 +1429,11 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "id": "playbook_suppression_discipline",
       "community": 3,
-      "norm_label": "suppression needs a named reason; stale suppressions flagged"
+      "norm_label": "suppression needs a named reason; stale suppressions flagged",
+      "_origin": "semantic",
+      "id": "playbook_suppression_discipline",
+      "community_name": "quality_gate job anchor shared by both hooks"
     },
     {
       "label": "Three rules for a machine-readable deferral file",
@@ -1274,9 +1444,11 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "id": "playbook_deferral_rules",
       "community": 3,
-      "norm_label": "three rules for a machine-readable deferral file"
+      "norm_label": "three rules for a machine-readable deferral file",
+      "_origin": "semantic",
+      "id": "playbook_deferral_rules",
+      "community_name": "quality_gate job anchor shared by both hooks"
     },
     {
       "label": "Commit discipline (per module, explicit paths, consequence in message)",
@@ -1287,9 +1459,11 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "id": "playbook_commit_discipline",
       "community": 6,
-      "norm_label": "commit discipline (per module, explicit paths, consequence in message)"
+      "norm_label": "commit discipline (per module, explicit paths, consequence in message)",
+      "_origin": "semantic",
+      "id": "playbook_commit_discipline",
+      "community_name": "Claude Code Stop hook (exit code 2)"
     },
     {
       "label": "A signature-changing commit must carry its callers",
@@ -1300,9 +1474,11 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "id": "playbook_bisectable_signature_commit",
       "community": 6,
-      "norm_label": "a signature-changing commit must carry its callers"
+      "norm_label": "a signature-changing commit must carry its callers",
+      "_origin": "semantic",
+      "id": "playbook_bisectable_signature_commit",
+      "community_name": "Claude Code Stop hook (exit code 2)"
     },
     {
       "label": "Verify the hook actually executes (relative path silently skipped it)",
@@ -1313,9 +1489,11 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "id": "playbook_hook_actually_runs",
       "community": 6,
-      "norm_label": "verify the hook actually executes (relative path silently skipped it)"
+      "norm_label": "verify the hook actually executes (relative path silently skipped it)",
+      "_origin": "semantic",
+      "id": "playbook_hook_actually_runs",
+      "community_name": "Claude Code Stop hook (exit code 2)"
     },
     {
       "label": "Run the linter without --fix",
@@ -1326,9 +1504,11 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "id": "playbook_no_autofix_in_gate",
       "community": 18,
-      "norm_label": "run the linter without --fix"
+      "norm_label": "run the linter without --fix",
+      "_origin": "semantic",
+      "id": "playbook_no_autofix_in_gate",
+      "community_name": "Run the linter without --fix"
     },
     {
       "label": "Modernizing autofixes can be breaking",
@@ -1339,9 +1519,11 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "id": "playbook_modernize_breaking_autofixes",
       "community": 17,
-      "norm_label": "modernizing autofixes can be breaking"
+      "norm_label": "modernizing autofixes can be breaking",
+      "_origin": "semantic",
+      "id": "playbook_modernize_breaking_autofixes",
+      "community_name": "Modernizing autofixes can be breaking"
     },
     {
       "label": "Taint rules report one finding at a time and are inter-package",
@@ -1352,9 +1534,11 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "id": "playbook_taint_rules_nondeterminism",
       "community": 4,
-      "norm_label": "taint rules report one finding at a time and are inter-package"
+      "norm_label": "taint rules report one finding at a time and are inter-package",
+      "_origin": "semantic",
+      "id": "playbook_taint_rules_nondeterminism",
+      "community_name": ".golangci.yml template"
     },
     {
       "label": "Measured git hook coverage matrix (git 2.53)",
@@ -1365,9 +1549,11 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "id": "handoff_hook_coverage_matrix",
       "community": 10,
-      "norm_label": "measured git hook coverage matrix (git 2.53)"
+      "norm_label": "measured git hook coverage matrix (git 2.53)",
+      "_origin": "semantic",
+      "id": "handoff_hook_coverage_matrix",
+      "community_name": "qgate wire (repo wiring, config only)"
     },
     {
       "label": "cherry-pick and revert cannot be covered cheaply",
@@ -1378,9 +1564,11 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "id": "handoff_cherry_pick_revert_uncovered",
       "community": 10,
-      "norm_label": "cherry-pick and revert cannot be covered cheaply"
+      "norm_label": "cherry-pick and revert cannot be covered cheaply",
+      "_origin": "semantic",
+      "id": "handoff_cherry_pick_revert_uncovered",
+      "community_name": "qgate wire (repo wiring, config only)"
     },
     {
       "label": "git add --renormalize + checkout is a no-op for CRLF",
@@ -1391,9 +1579,11 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "id": "handoff_renormalize_noop",
       "community": 4,
-      "norm_label": "git add --renormalize + checkout is a no-op for crlf"
+      "norm_label": "git add --renormalize + checkout is a no-op for crlf",
+      "_origin": "semantic",
+      "id": "handoff_renormalize_noop",
+      "community_name": ".golangci.yml template"
     },
     {
       "label": "git check-ignore exit codes; --stdin batch unusable on Windows",
@@ -1404,9 +1594,11 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "id": "handoff_check_ignore_behaviour",
       "community": 2,
-      "norm_label": "git check-ignore exit codes; --stdin batch unusable on windows"
+      "norm_label": "git check-ignore exit codes; --stdin batch unusable on windows",
+      "_origin": "semantic",
+      "id": "handoff_check_ignore_behaviour",
+      "community_name": "Coverage measures happy paths; a green suite proves nothing"
     },
     {
       "label": "Parallel commits in one worktree swallow each other's staged files",
@@ -1417,9 +1609,11 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "id": "handoff_parallel_commit_race",
       "community": 6,
-      "norm_label": "parallel commits in one worktree swallow each other's staged files"
+      "norm_label": "parallel commits in one worktree swallow each other's staged files",
+      "_origin": "semantic",
+      "id": "handoff_parallel_commit_race",
+      "community_name": "Claude Code Stop hook (exit code 2)"
     },
     {
       "label": "GIT_INDEX_FILE marks that we are inside a commit",
@@ -1430,9 +1624,11 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "id": "handoff_git_index_file_marker",
       "community": 6,
-      "norm_label": "git_index_file marks that we are inside a commit"
+      "norm_label": "git_index_file marks that we are inside a commit",
+      "_origin": "semantic",
+      "id": "handoff_git_index_file_marker",
+      "community_name": "Claude Code Stop hook (exit code 2)"
     },
     {
       "label": "errno=1455 is a page-file commit limit, not RAM exhaustion",
@@ -1443,9 +1639,11 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "id": "handoff_errno_1455",
       "community": 16,
-      "norm_label": "errno=1455 is a page-file commit limit, not ram exhaustion"
+      "norm_label": "errno=1455 is a page-file commit limit, not ram exhaustion",
+      "_origin": "semantic",
+      "id": "handoff_errno_1455",
+      "community_name": "errno=1455 is a page-file commit limit, not RAM exhaustion"
     },
     {
       "label": "GOTOOLCHAIN=auto unpacking races produce 'missing std package'",
@@ -1456,9 +1654,11 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "id": "handoff_gotoolchain_auto",
       "community": 0,
-      "norm_label": "gotoolchain=auto unpacking races produce 'missing std package'"
+      "norm_label": "gotoolchain=auto unpacking races produce 'missing std package'",
+      "_origin": "semantic",
+      "id": "handoff_gotoolchain_auto",
+      "community_name": "GitHub Actions quality-gate workflow"
     },
     {
       "label": "Deliberately chosen boundaries (not TODOs)",
@@ -1469,9 +1669,11 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "id": "handoff_chosen_boundaries",
       "community": 10,
-      "norm_label": "deliberately chosen boundaries (not todos)"
+      "norm_label": "deliberately chosen boundaries (not todos)",
+      "_origin": "semantic",
+      "id": "handoff_chosen_boundaries",
+      "community_name": "qgate wire (repo wiring, config only)"
     },
     {
       "label": "Incoming agent reports: symptom right, cause wrong half the time",
@@ -1482,9 +1684,11 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
+      "community": 10,
+      "norm_label": "incoming agent reports: symptom right, cause wrong half the time",
+      "_origin": "semantic",
       "id": "handoff_incoming_reports",
-      "community": 0,
-      "norm_label": "incoming agent reports: symptom right, cause wrong half the time"
+      "community_name": "qgate wire (repo wiring, config only)"
     },
     {
       "label": "Selftest counts 121 online / 115 offline",
@@ -1495,9 +1699,11 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "id": "handoff_offline_selftest",
       "community": 2,
-      "norm_label": "selftest counts 121 online / 115 offline"
+      "norm_label": "selftest counts 121 online / 115 offline",
+      "_origin": "semantic",
+      "id": "handoff_offline_selftest",
+      "community_name": "Coverage measures happy paths; a green suite proves nothing"
     },
     {
       "label": ".golangci.yml template",
@@ -1508,9 +1714,11 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "id": "templates__golangci_config",
       "community": 4,
-      "norm_label": ".golangci.yml template"
+      "norm_label": ".golangci.yml template",
+      "_origin": "semantic",
+      "id": "templates__golangci_config",
+      "community_name": ".golangci.yml template"
     },
     {
       "label": "govet disable-all plus non-default analyzer allow-list",
@@ -1521,9 +1729,11 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "id": "templates__golangci_govet_allowlist",
       "community": 4,
-      "norm_label": "govet disable-all plus non-default analyzer allow-list"
+      "norm_label": "govet disable-all plus non-default analyzer allow-list",
+      "_origin": "semantic",
+      "id": "templates__golangci_govet_allowlist",
+      "community_name": ".golangci.yml template"
     },
     {
       "label": "modernize: omitzero and slicesclip pinned off",
@@ -1534,9 +1744,11 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "id": "templates__golangci_modernize_disable",
       "community": 17,
-      "norm_label": "modernize: omitzero and slicesclip pinned off"
+      "norm_label": "modernize: omitzero and slicesclip pinned off",
+      "_origin": "semantic",
+      "id": "templates__golangci_modernize_disable",
+      "community_name": "Modernizing autofixes can be breaking"
     },
     {
       "label": "exhaustive with default-signifies-exhaustive",
@@ -1547,9 +1759,11 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "id": "templates__golangci_exhaustive",
       "community": 3,
-      "norm_label": "exhaustive with default-signifies-exhaustive"
+      "norm_label": "exhaustive with default-signifies-exhaustive",
+      "_origin": "semantic",
+      "id": "templates__golangci_exhaustive",
+      "community_name": "quality_gate job anchor shared by both hooks"
     },
     {
       "label": "nolintlint: no bare or dead suppressions",
@@ -1560,9 +1774,11 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "id": "templates__golangci_nolintlint",
       "community": 3,
-      "norm_label": "nolintlint: no bare or dead suppressions"
+      "norm_label": "nolintlint: no bare or dead suppressions",
+      "_origin": "semantic",
+      "id": "templates__golangci_nolintlint",
+      "community_name": "quality_gate job anchor shared by both hooks"
     },
     {
       "label": "gosec excludes for Windows ACL-irrelevant rules",
@@ -1573,9 +1789,11 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
+      "community": 4,
+      "norm_label": "gosec excludes for windows acl-irrelevant rules",
+      "_origin": "semantic",
       "id": "templates__golangci_gosec_excludes",
-      "community": 0,
-      "norm_label": "gosec excludes for windows acl-irrelevant rules"
+      "community_name": ".golangci.yml template"
     },
     {
       "label": "node_modules/ and vendor/ excluded from linter scope",
@@ -1586,9 +1804,11 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "id": "templates__golangci_path_exclusions",
       "community": 4,
-      "norm_label": "node_modules/ and vendor/ excluded from linter scope"
+      "norm_label": "node_modules/ and vendor/ excluded from linter scope",
+      "_origin": "semantic",
+      "id": "templates__golangci_path_exclusions",
+      "community_name": ".golangci.yml template"
     },
     {
       "label": "Per-package cleanup queue in exclusions.rules",
@@ -1599,9 +1819,11 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "id": "templates__golangci_cleanup_queue",
       "community": 0,
-      "norm_label": "per-package cleanup queue in exclusions.rules"
+      "norm_label": "per-package cleanup queue in exclusions.rules",
+      "_origin": "semantic",
+      "id": "templates__golangci_cleanup_queue",
+      "community_name": "GitHub Actions quality-gate workflow"
     },
     {
       "label": "govet shadow deliberately not enabled (178 hits)",
@@ -1612,9 +1834,11 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "id": "templates__golangci_shadow_rejected",
       "community": 4,
-      "norm_label": "govet shadow deliberately not enabled (178 hits)"
+      "norm_label": "govet shadow deliberately not enabled (178 hits)",
+      "_origin": "semantic",
+      "id": "templates__golangci_shadow_rejected",
+      "community_name": ".golangci.yml template"
     },
     {
       "label": "GitHub Actions quality-gate workflow",
@@ -1625,9 +1849,11 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "id": "templates_ci_workflow",
       "community": 0,
-      "norm_label": "github actions quality-gate workflow"
+      "norm_label": "github actions quality-gate workflow",
+      "_origin": "semantic",
+      "id": "templates_ci_workflow",
+      "community_name": "GitHub Actions quality-gate workflow"
     },
     {
       "label": "detect stacks step (monorepo-aware marker search)",
@@ -1638,9 +1864,11 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "id": "templates_ci_detect_stacks_step",
       "community": 0,
-      "norm_label": "detect stacks step (monorepo-aware marker search)"
+      "norm_label": "detect stacks step (monorepo-aware marker search)",
+      "_origin": "semantic",
+      "id": "templates_ci_detect_stacks_step",
+      "community_name": "GitHub Actions quality-gate workflow"
     },
     {
       "label": "QG_REF tag pin (v1), never main",
@@ -1651,9 +1879,11 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "id": "templates_ci_qg_ref_pin",
       "community": 0,
-      "norm_label": "qg_ref tag pin (v1), never main"
+      "norm_label": "qg_ref tag pin (v1), never main",
+      "_origin": "semantic",
+      "id": "templates_ci_qg_ref_pin",
+      "community_name": "GitHub Actions quality-gate workflow"
     },
     {
       "label": "lefthook.yml template",
@@ -1664,9 +1894,11 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "id": "templates_lefthook_config",
       "community": 10,
-      "norm_label": "lefthook.yml template"
+      "norm_label": "lefthook.yml template",
+      "_origin": "semantic",
+      "id": "templates_lefthook_config",
+      "community_name": "qgate wire (repo wiring, config only)"
     },
     {
       "label": "quality_gate job anchor shared by both hooks",
@@ -1677,9 +1909,11 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "id": "templates_lefthook_quality_gate_job",
       "community": 3,
-      "norm_label": "quality_gate job anchor shared by both hooks"
+      "norm_label": "quality_gate job anchor shared by both hooks",
+      "_origin": "semantic",
+      "id": "templates_lefthook_quality_gate_job",
+      "community_name": "quality_gate job anchor shared by both hooks"
     },
     {
       "label": "lefthook swallows the exit code of pwsh -Command",
@@ -1690,9 +1924,11 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "id": "templates_lefthook_exit_code_trap",
       "community": 10,
-      "norm_label": "lefthook swallows the exit code of pwsh -command"
+      "norm_label": "lefthook swallows the exit code of pwsh -command",
+      "_origin": "semantic",
+      "id": "templates_lefthook_exit_code_trap",
+      "community_name": "qgate wire (repo wiring, config only)"
     },
     {
       "label": "qgate.cmd is load-bearing under the Git shell",
@@ -1703,9 +1939,11 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "id": "templates_lefthook_cmd_shim",
       "community": 3,
-      "norm_label": "qgate.cmd is load-bearing under the git shell"
+      "norm_label": "qgate.cmd is load-bearing under the git shell",
+      "_origin": "semantic",
+      "id": "templates_lefthook_cmd_shim",
+      "community_name": "quality_gate job anchor shared by both hooks"
     },
     {
       "label": "command -v probe is false under sh.exe",
@@ -1716,9 +1954,11 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "id": "templates_lefthook_command_v_trap",
       "community": 3,
-      "norm_label": "command -v probe is false under sh.exe"
+      "norm_label": "command -v probe is false under sh.exe",
+      "_origin": "semantic",
+      "id": "templates_lefthook_command_v_trap",
+      "community_name": "quality_gate job anchor shared by both hooks"
     },
     {
       "label": "lefthook strips quotes from the run: string",
@@ -1729,9 +1969,11 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "id": "templates_lefthook_quote_stripping_trap",
       "community": 3,
-      "norm_label": "lefthook strips quotes from the run: string"
+      "norm_label": "lefthook strips quotes from the run: string",
+      "_origin": "semantic",
+      "id": "templates_lefthook_quote_stripping_trap",
+      "community_name": "quality_gate job anchor shared by both hooks"
     },
     {
       "label": "lefthook ai: key rejected (exits 1, Claude blocks only on 2)",
@@ -1742,9 +1984,11 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "id": "templates_lefthook_ai_key_rejected",
       "community": 6,
-      "norm_label": "lefthook ai: key rejected (exits 1, claude blocks only on 2)"
+      "norm_label": "lefthook ai: key rejected (exits 1, claude blocks only on 2)",
+      "_origin": "semantic",
+      "id": "templates_lefthook_ai_key_rejected",
+      "community_name": "Claude Code Stop hook (exit code 2)"
     },
     {
       "label": "proto fixture buf.yaml (STANDARD lint, FILE breaking)",
@@ -1755,9 +1999,11 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "id": "testdata_proto_fixture_buf_config",
       "community": 14,
-      "norm_label": "proto fixture buf.yaml (standard lint, file breaking)"
+      "norm_label": "proto fixture buf.yaml (standard lint, file breaking)",
+      "_origin": "semantic",
+      "id": "testdata_proto_fixture_buf_config",
+      "community_name": "Proto stack phases (buf)"
     },
     {
       "label": "\"Gate is wrong\" issue template",
@@ -1768,12 +2014,25 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
+      "community": 10,
+      "norm_label": "\"gate is wrong\" issue template",
+      "_origin": "semantic",
       "id": "_github_issue_template_gate_bug_template",
-      "community": 0,
-      "norm_label": "\"gate is wrong\" issue template"
+      "community_name": "qgate wire (repo wiring, config only)"
     }
   ],
   "links": [
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "CLAUDE.md",
+      "source_location": "L1",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "claude",
+      "target": "claude_graphify",
+      "confidence_score": 1.0
+    },
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
@@ -1781,9 +2040,9 @@
       "source_location": "L45",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "bin_qgate",
-      "target": "bin_qgate_invoke_child",
-      "confidence_score": 1.0
+      "target": "bin_qgate_invoke_child"
     },
     {
       "relation": "contains",
@@ -1792,9 +2051,9 @@
       "source_location": "L311",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "gate_check",
-      "target": "gate_check_fail",
-      "confidence_score": 1.0
+      "target": "gate_check_fail"
     },
     {
       "relation": "contains",
@@ -1803,9 +2062,9 @@
       "source_location": "L144",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "gate_check",
-      "target": "gate_check_get_changedpaths",
-      "confidence_score": 1.0
+      "target": "gate_check_get_changedpaths"
     },
     {
       "relation": "contains",
@@ -1814,9 +2073,9 @@
       "source_location": "L316",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "gate_check",
-      "target": "gate_check_have",
-      "confidence_score": 1.0
+      "target": "gate_check_have"
     },
     {
       "relation": "contains",
@@ -1825,9 +2084,9 @@
       "source_location": "L551",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "gate_check",
-      "target": "gate_check_invoke_godotstack",
-      "confidence_score": 1.0
+      "target": "gate_check_invoke_godotstack"
     },
     {
       "relation": "contains",
@@ -1836,9 +2095,9 @@
       "source_location": "L275",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "gate_check",
-      "target": "gate_check_phase",
-      "confidence_score": 1.0
+      "target": "gate_check_phase"
     },
     {
       "relation": "calls",
@@ -1847,9 +2106,9 @@
       "source_location": "L569",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "gate_check_invoke_godotstack",
-      "target": "gate_check_get_changedpaths",
-      "confidence_score": 1.0
+      "target": "gate_check_get_changedpaths"
     },
     {
       "relation": "calls",
@@ -1858,9 +2117,9 @@
       "source_location": "L578",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "gate_check_invoke_godotstack",
-      "target": "gate_check_phase",
-      "confidence_score": 1.0
+      "target": "gate_check_phase"
     },
     {
       "relation": "calls",
@@ -1869,9 +2128,9 @@
       "source_location": "L589",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "gate_check_invoke_godotstack",
-      "target": "gate_check_fail",
-      "confidence_score": 1.0
+      "target": "gate_check_fail"
     },
     {
       "relation": "calls",
@@ -1880,9 +2139,9 @@
       "source_location": "L575",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "gate_check_invoke_godotstack",
-      "target": "gate_check_have",
-      "confidence_score": 1.0
+      "target": "gate_check_have"
     },
     {
       "relation": "calls",
@@ -1915,9 +2174,9 @@
       "source_location": "L73",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "gate_detect",
-      "target": "gate_detect_find_marker",
-      "confidence_score": 1.0
+      "target": "gate_detect_find_marker"
     },
     {
       "relation": "contains",
@@ -1926,9 +2185,9 @@
       "source_location": "L107",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "gate_detect",
-      "target": "gate_detect_get_gobuiltwith",
-      "confidence_score": 1.0
+      "target": "gate_detect_get_gobuiltwith"
     },
     {
       "relation": "contains",
@@ -1937,9 +2196,9 @@
       "source_location": "L136",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "gate_detect",
-      "target": "gate_detect_get_godotbin",
-      "confidence_score": 1.0
+      "target": "gate_detect_get_godotbin"
     },
     {
       "relation": "contains",
@@ -1948,9 +2207,9 @@
       "source_location": "L86",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "gate_detect",
-      "target": "gate_detect_get_pathkey",
-      "confidence_score": 1.0
+      "target": "gate_detect_get_pathkey"
     },
     {
       "relation": "contains",
@@ -1959,9 +2218,9 @@
       "source_location": "L22",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "gate_detect",
-      "target": "gate_detect_get_reporoot",
-      "confidence_score": 1.0
+      "target": "gate_detect_get_reporoot"
     },
     {
       "relation": "contains",
@@ -1970,9 +2229,9 @@
       "source_location": "L157",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "gate_detect",
-      "target": "gate_detect_get_stacks",
-      "confidence_score": 1.0
+      "target": "gate_detect_get_stacks"
     },
     {
       "relation": "contains",
@@ -1981,9 +2240,9 @@
       "source_location": "L143",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "gate_detect",
-      "target": "gate_detect_test_anyfile",
-      "confidence_score": 1.0
+      "target": "gate_detect_test_anyfile"
     },
     {
       "relation": "contains",
@@ -1992,9 +2251,9 @@
       "source_location": "L36",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "gate_detect",
-      "target": "gate_detect_test_gitignored",
-      "confidence_score": 1.0
+      "target": "gate_detect_test_gitignored"
     },
     {
       "relation": "contains",
@@ -2003,9 +2262,9 @@
       "source_location": "L66",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "gate_detect",
-      "target": "gate_detect_test_gitignoreddir",
-      "confidence_score": 1.0
+      "target": "gate_detect_test_gitignoreddir"
     },
     {
       "relation": "contains",
@@ -2014,9 +2273,9 @@
       "source_location": "L124",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "gate_detect",
-      "target": "gate_detect_test_gotoolstale",
-      "confidence_score": 1.0
+      "target": "gate_detect_test_gotoolstale"
     },
     {
       "relation": "calls",
@@ -2025,9 +2284,9 @@
       "source_location": "L80",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "gate_detect_find_marker",
-      "target": "gate_detect_test_gitignored",
-      "confidence_score": 1.0
+      "target": "gate_detect_test_gitignored"
     },
     {
       "relation": "calls",
@@ -2036,9 +2295,9 @@
       "source_location": "L68",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "gate_detect_test_gitignoreddir",
-      "target": "gate_detect_test_gitignored",
-      "confidence_score": 1.0
+      "target": "gate_detect_test_gitignored"
     },
     {
       "relation": "calls",
@@ -2047,9 +2306,9 @@
       "source_location": "L165",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "gate_detect_get_stacks",
-      "target": "gate_detect_find_marker",
-      "confidence_score": 1.0
+      "target": "gate_detect_find_marker"
     },
     {
       "relation": "calls",
@@ -2070,9 +2329,9 @@
       "source_location": "L126",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "gate_detect_test_gotoolstale",
-      "target": "gate_detect_get_gobuiltwith",
-      "confidence_score": 1.0
+      "target": "gate_detect_get_gobuiltwith"
     },
     {
       "relation": "calls",
@@ -2081,9 +2340,9 @@
       "source_location": "L210",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "gate_detect_get_stacks",
-      "target": "gate_detect_get_godotbin",
-      "confidence_score": 1.0
+      "target": "gate_detect_get_godotbin"
     },
     {
       "relation": "calls",
@@ -2092,9 +2351,9 @@
       "source_location": "L177",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "gate_detect_get_stacks",
-      "target": "gate_detect_test_anyfile",
-      "confidence_score": 1.0
+      "target": "gate_detect_test_anyfile"
     },
     {
       "relation": "calls",
@@ -2115,9 +2374,9 @@
       "source_location": "L113",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "gate_outdated",
-      "target": "gate_outdated_get_latest",
-      "confidence_score": 1.0
+      "target": "gate_outdated_get_latest"
     },
     {
       "relation": "contains",
@@ -2126,9 +2385,9 @@
       "source_location": "L81",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "gate_outdated",
-      "target": "gate_outdated_split_deferred",
-      "confidence_score": 1.0
+      "target": "gate_outdated_split_deferred"
     },
     {
       "relation": "contains",
@@ -2137,9 +2396,9 @@
       "source_location": "L208",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "install",
-      "target": "install_install_lefthook",
-      "confidence_score": 1.0
+      "target": "install_install_lefthook"
     },
     {
       "relation": "contains",
@@ -2148,9 +2407,9 @@
       "source_location": "L33",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "install",
-      "target": "install_install_webconfigs",
-      "confidence_score": 1.0
+      "target": "install_install_webconfigs"
     },
     {
       "relation": "contains",
@@ -2159,9 +2418,9 @@
       "source_location": "L175",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "install",
-      "target": "install_set_agentdoc",
-      "confidence_score": 1.0
+      "target": "install_set_agentdoc"
     },
     {
       "relation": "contains",
@@ -2170,9 +2429,9 @@
       "source_location": "L117",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "install",
-      "target": "install_set_stophook",
-      "confidence_score": 1.0
+      "target": "install_set_stophook"
     },
     {
       "relation": "contains",
@@ -2181,9 +2440,9 @@
       "source_location": "L29",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "selftest",
-      "target": "selftest_check",
-      "confidence_score": 1.0
+      "target": "selftest_check"
     },
     {
       "relation": "contains",
@@ -2192,9 +2451,9 @@
       "source_location": "L785",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "selftest",
-      "target": "selftest_get_summary",
-      "confidence_score": 1.0
+      "target": "selftest_get_summary"
     },
     {
       "relation": "contains",
@@ -2203,9 +2462,9 @@
       "source_location": "L39",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "selftest",
-      "target": "selftest_invoke_gate",
-      "confidence_score": 1.0
+      "target": "selftest_invoke_gate"
     },
     {
       "relation": "contains",
@@ -2214,9 +2473,9 @@
       "source_location": "L484",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "selftest",
-      "target": "selftest_invoke_stophook",
-      "confidence_score": 1.0
+      "target": "selftest_invoke_stophook"
     },
     {
       "relation": "contains",
@@ -2225,9 +2484,9 @@
       "source_location": "L774",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "selftest",
-      "target": "selftest_set_deferrals",
-      "confidence_score": 1.0
+      "target": "selftest_set_deferrals"
     },
     {
       "relation": "contains",
@@ -2236,9 +2495,9 @@
       "source_location": "L34",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "selftest",
-      "target": "selftest_set_gofile",
-      "confidence_score": 1.0
+      "target": "selftest_set_gofile"
     },
     {
       "relation": "contains",
@@ -2247,9 +2506,9 @@
       "source_location": "L781",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "selftest",
-      "target": "selftest_set_outdatedcache",
-      "confidence_score": 1.0
+      "target": "selftest_set_outdatedcache"
     },
     {
       "relation": "contains",
@@ -2258,9 +2517,9 @@
       "source_location": "L2",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "templates_stylelintrc",
-      "target": "templates_stylelintrc_extends",
-      "confidence_score": 1.0
+      "target": "templates_stylelintrc_extends"
     },
     {
       "relation": "contains",
@@ -2269,9 +2528,9 @@
       "source_location": "L6",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "templates_stylelintrc",
-      "target": "templates_stylelintrc_ignorefiles",
-      "confidence_score": 1.0
+      "target": "templates_stylelintrc_ignorefiles"
     },
     {
       "relation": "extends",
@@ -2281,9 +2540,9 @@
       "weight": 1.0,
       "context": "import",
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "templates_stylelintrc_extends",
-      "target": "ref_stylelint_config_recommended_vue_scss",
-      "confidence_score": 1.0
+      "target": "ref_stylelint_config_recommended_vue_scss"
     },
     {
       "relation": "extends",
@@ -2293,9 +2552,9 @@
       "weight": 1.0,
       "context": "import",
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "templates_stylelintrc_extends",
-      "target": "ref_stylelint_config_standard_scss",
-      "confidence_score": 1.0
+      "target": "ref_stylelint_config_standard_scss"
     },
     {
       "relation": "extends",
@@ -2305,9 +2564,9 @@
       "weight": 1.0,
       "context": "import",
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "templates_stylelintrc_ignorefiles",
-      "target": "ref_cache",
-      "confidence_score": 1.0
+      "target": "ref_cache"
     },
     {
       "relation": "extends",
@@ -2317,9 +2576,9 @@
       "weight": 1.0,
       "context": "import",
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "templates_stylelintrc_ignorefiles",
-      "target": "ref_coverage",
-      "confidence_score": 1.0
+      "target": "ref_coverage"
     },
     {
       "relation": "extends",
@@ -2329,9 +2588,9 @@
       "weight": 1.0,
       "context": "import",
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "templates_stylelintrc_ignorefiles",
-      "target": "ref_dist",
-      "confidence_score": 1.0
+      "target": "ref_dist"
     },
     {
       "relation": "contains",
@@ -2340,9 +2599,9 @@
       "source_location": "L1",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "templates_pre_commit",
-      "target": "templates_pre_commit__entry",
-      "confidence_score": 1.0
+      "target": "templates_pre_commit__entry"
     },
     {
       "relation": "contains",
@@ -2351,9 +2610,9 @@
       "source_location": "L6",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "testdata_go_fixture_main",
-      "target": "testdata_go_fixture_main_add",
-      "confidence_score": 1.0
+      "target": "testdata_go_fixture_main_add"
     },
     {
       "relation": "contains",
@@ -2362,9 +2621,9 @@
       "source_location": "L8",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "testdata_go_fixture_main",
-      "target": "testdata_go_fixture_main_main",
-      "confidence_score": 1.0
+      "target": "testdata_go_fixture_main_main"
     },
     {
       "relation": "calls",
@@ -2374,9 +2633,9 @@
       "source_location": "L8",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "testdata_go_fixture_main_main",
-      "target": "testdata_go_fixture_main_add",
-      "confidence_score": 1.0
+      "target": "testdata_go_fixture_main_add"
     },
     {
       "relation": "calls",
@@ -2397,9 +2656,9 @@
       "source_location": "L5",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "testdata_go_fixture_main_test",
-      "target": "testdata_go_fixture_main_test_testadd",
-      "confidence_score": 1.0
+      "target": "testdata_go_fixture_main_test_testadd"
     },
     {
       "relation": "references",
@@ -2409,9 +2668,9 @@
       "weight": 1.0,
       "context": "parameter_type",
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "testdata_go_fixture_main_test_testadd",
-      "target": "t",
-      "confidence_score": 1.0
+      "target": "t"
     },
     {
       "relation": "contains",
@@ -2420,9 +2679,9 @@
       "source_location": "L2",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "testdata_rust_fixture_src_main",
-      "target": "testdata_rust_fixture_src_main_add",
-      "confidence_score": 1.0
+      "target": "testdata_rust_fixture_src_main_add"
     },
     {
       "relation": "contains",
@@ -2431,9 +2690,9 @@
       "source_location": "L15",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "testdata_rust_fixture_src_main",
-      "target": "testdata_rust_fixture_src_main_adds",
-      "confidence_score": 1.0
+      "target": "testdata_rust_fixture_src_main_adds"
     },
     {
       "relation": "contains",
@@ -2442,9 +2701,9 @@
       "source_location": "L6",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "testdata_rust_fixture_src_main",
-      "target": "testdata_rust_fixture_src_main_main",
-      "confidence_score": 1.0
+      "target": "testdata_rust_fixture_src_main_main"
     },
     {
       "relation": "contains",
@@ -2453,9 +2712,9 @@
       "source_location": "L2",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "testdata_web_fixture_package",
-      "target": "testdata_web_fixture_package_name",
-      "confidence_score": 1.0
+      "target": "testdata_web_fixture_package_name"
     },
     {
       "relation": "contains",
@@ -2464,9 +2723,9 @@
       "source_location": "L3",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "testdata_web_fixture_package",
-      "target": "testdata_web_fixture_package_private",
-      "confidence_score": 1.0
+      "target": "testdata_web_fixture_package_private"
     },
     {
       "relation": "contains",
@@ -2475,9 +2734,9 @@
       "source_location": "L5",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "testdata_web_fixture_package",
-      "target": "testdata_web_fixture_package_scripts",
-      "confidence_score": 1.0
+      "target": "testdata_web_fixture_package_scripts"
     },
     {
       "relation": "contains",
@@ -2486,9 +2745,9 @@
       "source_location": "L4",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "testdata_web_fixture_package",
-      "target": "testdata_web_fixture_package_type",
-      "confidence_score": 1.0
+      "target": "testdata_web_fixture_package_type"
     },
     {
       "relation": "contains",
@@ -2497,9 +2756,9 @@
       "source_location": "L6",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "testdata_web_fixture_package_scripts",
-      "target": "testdata_web_fixture_package_scripts_build_only",
-      "confidence_score": 1.0
+      "target": "testdata_web_fixture_package_scripts_build_only"
     },
     {
       "relation": "contains",
@@ -2508,9 +2767,9 @@
       "source_location": "L7",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "testdata_web_fixture_package_scripts",
-      "target": "testdata_web_fixture_package_scripts_type_check",
-      "confidence_score": 1.0
+      "target": "testdata_web_fixture_package_scripts_type_check"
     },
     {
       "relation": "references",
@@ -2519,6 +2778,7 @@
       "source_file": ".github/ISSUE_TEMPLATE/gate-bug.md",
       "source_location": null,
       "weight": 1.0,
+      "_origin": "semantic",
       "source": "_github_issue_template_gate_bug_template",
       "target": "readme_quality_gate"
     },
@@ -2529,6 +2789,7 @@
       "source_file": "README.md",
       "source_location": null,
       "weight": 1.0,
+      "_origin": "semantic",
       "source": "readme_quality_gate",
       "target": "playbook_coverage_illusion"
     },
@@ -2539,6 +2800,7 @@
       "source_file": "README.md",
       "source_location": null,
       "weight": 1.0,
+      "_origin": "semantic",
       "source": "readme_quality_gate",
       "target": "playbook_single_entry_gate"
     },
@@ -2549,6 +2811,7 @@
       "source_file": "README.md",
       "source_location": null,
       "weight": 1.0,
+      "_origin": "semantic",
       "source": "readme_rust_stack",
       "target": "readme_stack_detection"
     },
@@ -2559,6 +2822,7 @@
       "source_file": "README.md",
       "source_location": null,
       "weight": 1.0,
+      "_origin": "semantic",
       "source": "readme_stack_detection",
       "target": "playbook_single_entry_gate"
     },
@@ -2569,6 +2833,7 @@
       "source_file": "templates/ci.yml",
       "source_location": null,
       "weight": 1.0,
+      "_origin": "semantic",
       "source": "templates_ci_detect_stacks_step",
       "target": "readme_stack_detection"
     },
@@ -2579,6 +2844,7 @@
       "source_file": "README.md",
       "source_location": null,
       "weight": 1.0,
+      "_origin": "semantic",
       "source": "readme_toolchain_pinning",
       "target": "readme_two_levels"
     },
@@ -2589,6 +2855,7 @@
       "source_file": "README.md",
       "source_location": null,
       "weight": 1.0,
+      "_origin": "semantic",
       "source": "readme_two_levels",
       "target": "playbook_single_entry_gate"
     },
@@ -2599,6 +2866,7 @@
       "source_file": "templates/ci.yml",
       "source_location": null,
       "weight": 1.0,
+      "_origin": "semantic",
       "source": "templates_ci_workflow",
       "target": "readme_two_levels"
     },
@@ -2609,6 +2877,7 @@
       "source_file": "README.md",
       "source_location": null,
       "weight": 1.0,
+      "_origin": "semantic",
       "source": "readme_fail_closed",
       "target": "playbook_right_outcome_wrong_cause"
     },
@@ -2619,6 +2888,7 @@
       "source_file": "README.md",
       "source_location": null,
       "weight": 1.0,
+      "_origin": "semantic",
       "source": "readme_godot_stdout_trap",
       "target": "readme_fail_closed"
     },
@@ -2629,6 +2899,7 @@
       "source_file": "README.md",
       "source_location": null,
       "weight": 1.0,
+      "_origin": "semantic",
       "source": "readme_only_flag",
       "target": "readme_fail_closed"
     },
@@ -2639,6 +2910,7 @@
       "source_file": "HANDOFF.md",
       "source_location": null,
       "weight": 1.0,
+      "_origin": "semantic",
       "source": "handoff_chosen_boundaries",
       "target": "readme_qgate_wire"
     },
@@ -2649,6 +2921,7 @@
       "source_file": "README.md",
       "source_location": null,
       "weight": 1.0,
+      "_origin": "semantic",
       "source": "readme_qgate_wire",
       "target": "_github_issue_template_gate_bug_template"
     },
@@ -2659,6 +2932,7 @@
       "source_file": "README.md",
       "source_location": null,
       "weight": 1.0,
+      "_origin": "semantic",
       "source": "readme_qgate_wire",
       "target": "readme_stop_hook"
     },
@@ -2669,6 +2943,7 @@
       "source_file": "README.md",
       "source_location": null,
       "weight": 1.0,
+      "_origin": "semantic",
       "source": "readme_qgate_wire",
       "target": "templates__golangci_config"
     },
@@ -2679,6 +2954,7 @@
       "source_file": "README.md",
       "source_location": null,
       "weight": 1.0,
+      "_origin": "semantic",
       "source": "readme_qgate_wire",
       "target": "templates_ci_workflow"
     },
@@ -2689,6 +2965,7 @@
       "source_file": "README.md",
       "source_location": null,
       "weight": 1.0,
+      "_origin": "semantic",
       "source": "readme_qgate_wire",
       "target": "templates_lefthook_config"
     },
@@ -2699,6 +2976,7 @@
       "source_file": "README.md",
       "source_location": null,
       "weight": 1.0,
+      "_origin": "semantic",
       "source": "readme_deferrals",
       "target": "readme_qgate_outdated"
     },
@@ -2709,6 +2987,7 @@
       "source_file": "README.md",
       "source_location": null,
       "weight": 1.0,
+      "_origin": "semantic",
       "source": "readme_qgate_outdated",
       "target": "readme_vulnerability_phase"
     },
@@ -2719,6 +2998,7 @@
       "source_file": "README.md",
       "source_location": null,
       "weight": 1.0,
+      "_origin": "semantic",
       "source": "readme_deferrals",
       "target": "playbook_deferral_rules"
     },
@@ -2729,6 +3009,7 @@
       "source_file": "README.md",
       "source_location": null,
       "weight": 1.0,
+      "_origin": "semantic",
       "source": "readme_deferrals",
       "target": "readme_quiet_mode"
     },
@@ -2739,6 +3020,7 @@
       "source_file": "README.md",
       "source_location": null,
       "weight": 1.0,
+      "_origin": "semantic",
       "source": "readme_stale_tool_binary_check",
       "target": "readme_toolchain_pinning"
     },
@@ -2749,6 +3031,7 @@
       "source_file": "templates/ci.yml",
       "source_location": null,
       "weight": 1.0,
+      "_origin": "semantic",
       "source": "templates_ci_qg_ref_pin",
       "target": "readme_toolchain_pinning"
     },
@@ -2759,6 +3042,7 @@
       "source_file": "README.md",
       "source_location": null,
       "weight": 1.0,
+      "_origin": "semantic",
       "source": "readme_staged_index_guard",
       "target": "handoff_git_index_file_marker"
     },
@@ -2769,6 +3053,7 @@
       "source_file": "README.md",
       "source_location": null,
       "weight": 1.0,
+      "_origin": "semantic",
       "source": "readme_staged_index_guard",
       "target": "handoff_parallel_commit_race"
     },
@@ -2779,6 +3064,7 @@
       "source_file": "README.md",
       "source_location": null,
       "weight": 1.0,
+      "_origin": "semantic",
       "source": "readme_stop_hook",
       "target": "playbook_hook_actually_runs"
     },
@@ -2789,6 +3075,7 @@
       "source_file": "README.md",
       "source_location": null,
       "weight": 1.0,
+      "_origin": "semantic",
       "source": "readme_stop_hook",
       "target": "readme_green_commit_marker"
     },
@@ -2799,6 +3086,7 @@
       "source_file": "templates/lefthook.yml",
       "source_location": null,
       "weight": 1.0,
+      "_origin": "semantic",
       "source": "templates_lefthook_ai_key_rejected",
       "target": "readme_stop_hook"
     },
@@ -2809,6 +3097,7 @@
       "source_file": "README.md",
       "source_location": null,
       "weight": 1.0,
+      "_origin": "semantic",
       "source": "readme_green_commit_marker",
       "target": "playbook_commit_discipline"
     },
@@ -2819,6 +3108,7 @@
       "source_file": "templates/lefthook.yml",
       "source_location": null,
       "weight": 1.0,
+      "_origin": "semantic",
       "source": "templates_lefthook_quality_gate_job",
       "target": "readme_quiet_mode"
     },
@@ -2829,6 +3119,7 @@
       "source_file": "README.md",
       "source_location": null,
       "weight": 1.0,
+      "_origin": "semantic",
       "source": "readme_baseline_adoption",
       "target": "playbook_wave_mechanism"
     },
@@ -2839,6 +3130,7 @@
       "source_file": "README.md",
       "source_location": null,
       "weight": 1.0,
+      "_origin": "semantic",
       "source": "readme_baseline_adoption",
       "target": "templates__golangci_cleanup_queue"
     },
@@ -2849,6 +3141,7 @@
       "source_file": "templates/ci.yml",
       "source_location": null,
       "weight": 1.0,
+      "_origin": "semantic",
       "source": "templates_ci_workflow",
       "target": "readme_baseline_adoption"
     },
@@ -2859,6 +3152,7 @@
       "source_file": "templates/.golangci.yml",
       "source_location": null,
       "weight": 1.0,
+      "_origin": "semantic",
       "source": "templates__golangci_cleanup_queue",
       "target": "readme_eslint_suppressions"
     },
@@ -2869,6 +3163,7 @@
       "source_file": "HANDOFF.md",
       "source_location": null,
       "weight": 1.0,
+      "_origin": "semantic",
       "source": "handoff_gotoolchain_auto",
       "target": "readme_stale_tool_binary_check"
     },
@@ -2879,6 +3174,7 @@
       "source_file": "README.md",
       "source_location": null,
       "weight": 1.0,
+      "_origin": "semantic",
       "source": "readme_proto_stack",
       "target": "readme_cross_stack_fanout"
     },
@@ -2889,6 +3185,7 @@
       "source_file": "templates/.golangci.yml",
       "source_location": null,
       "weight": 1.0,
+      "_origin": "semantic",
       "source": "templates__golangci_config",
       "target": "readme_vulnerability_phase"
     },
@@ -2899,6 +3196,7 @@
       "source_file": "HANDOFF.md",
       "source_location": null,
       "weight": 1.0,
+      "_origin": "semantic",
       "source": "readme_go_stack",
       "target": "handoff_renormalize_noop"
     },
@@ -2909,6 +3207,7 @@
       "source_file": "README.md",
       "source_location": null,
       "weight": 1.0,
+      "_origin": "semantic",
       "source": "templates__golangci_config",
       "target": "readme_go_stack"
     },
@@ -2919,6 +3218,7 @@
       "source_file": "templates/.golangci.yml",
       "source_location": null,
       "weight": 1.0,
+      "_origin": "semantic",
       "source": "templates__golangci_govet_allowlist",
       "target": "readme_go_stack"
     },
@@ -2929,6 +3229,7 @@
       "source_file": "README.md",
       "source_location": null,
       "weight": 1.0,
+      "_origin": "semantic",
       "source": "readme_web_stack",
       "target": "playbook_no_autofix_in_gate"
     },
@@ -2939,6 +3240,7 @@
       "source_file": "testdata/proto-fixture/buf.yaml",
       "source_location": null,
       "weight": 1.0,
+      "_origin": "semantic",
       "source": "readme_proto_stack",
       "target": "testdata_proto_fixture_buf_config"
     },
@@ -2949,6 +3251,7 @@
       "source_file": "HANDOFF.md",
       "source_location": null,
       "weight": 1.0,
+      "_origin": "semantic",
       "source": "readme_godot_stack",
       "target": "handoff_check_ignore_behaviour"
     },
@@ -2959,6 +3262,7 @@
       "source_file": "README.md",
       "source_location": null,
       "weight": 1.0,
+      "_origin": "semantic",
       "source": "readme_godot_stack",
       "target": "readme_godot_stdout_trap"
     },
@@ -2969,6 +3273,7 @@
       "source_file": "HANDOFF.md",
       "source_location": null,
       "weight": 1.0,
+      "_origin": "semantic",
       "source": "readme_selftest",
       "target": "handoff_offline_selftest"
     },
@@ -2979,6 +3284,7 @@
       "source_file": "README.md",
       "source_location": null,
       "weight": 1.0,
+      "_origin": "semantic",
       "source": "readme_selftest",
       "target": "playbook_red_then_green"
     },
@@ -2989,6 +3295,7 @@
       "source_file": "README.md",
       "source_location": null,
       "weight": 1.0,
+      "_origin": "semantic",
       "source": "readme_oom_note",
       "target": "handoff_errno_1455"
     },
@@ -2999,6 +3306,7 @@
       "source_file": "README.md",
       "source_location": null,
       "weight": 1.0,
+      "_origin": "semantic",
       "source": "readme_only_flag",
       "target": "playbook_powershell_empty_value_trap"
     },
@@ -3009,6 +3317,7 @@
       "source_file": "PLAYBOOK.md",
       "source_location": null,
       "weight": 1.0,
+      "_origin": "semantic",
       "source": "playbook_mutation_check",
       "target": "playbook_coverage_illusion"
     },
@@ -3019,6 +3328,7 @@
       "source_file": "PLAYBOOK.md",
       "source_location": null,
       "weight": 1.0,
+      "_origin": "semantic",
       "source": "playbook_red_then_green",
       "target": "playbook_coverage_illusion"
     },
@@ -3029,6 +3339,7 @@
       "source_file": "PLAYBOOK.md",
       "source_location": null,
       "weight": 1.0,
+      "_origin": "semantic",
       "source": "playbook_powershell_empty_value_trap",
       "target": "playbook_right_outcome_wrong_cause"
     },
@@ -3039,6 +3350,7 @@
       "source_file": "PLAYBOOK.md",
       "source_location": null,
       "weight": 1.0,
+      "_origin": "semantic",
       "source": "playbook_three_assertion_rule",
       "target": "playbook_right_outcome_wrong_cause"
     },
@@ -3049,6 +3361,7 @@
       "source_file": "HANDOFF.md",
       "source_location": null,
       "weight": 1.0,
+      "_origin": "semantic",
       "source": "handoff_offline_selftest",
       "target": "playbook_three_assertion_rule"
     },
@@ -3059,6 +3372,7 @@
       "source_file": "PLAYBOOK.md",
       "source_location": null,
       "weight": 1.0,
+      "_origin": "semantic",
       "source": "playbook_wave_mechanism",
       "target": "templates__golangci_cleanup_queue"
     },
@@ -3069,6 +3383,7 @@
       "source_file": "HANDOFF.md",
       "source_location": null,
       "weight": 1.0,
+      "_origin": "semantic",
       "source": "handoff_incoming_reports",
       "target": "playbook_second_engine_review"
     },
@@ -3079,6 +3394,7 @@
       "source_file": "PLAYBOOK.md",
       "source_location": null,
       "weight": 1.0,
+      "_origin": "semantic",
       "source": "playbook_second_engine_review",
       "target": "playbook_final_write_timeout_bug"
     },
@@ -3089,6 +3405,7 @@
       "source_file": "PLAYBOOK.md",
       "source_location": null,
       "weight": 1.0,
+      "_origin": "semantic",
       "source": "playbook_second_engine_review",
       "target": "playbook_security_findings"
     },
@@ -3099,6 +3416,7 @@
       "source_file": "PLAYBOOK.md",
       "source_location": null,
       "weight": 1.0,
+      "_origin": "semantic",
       "source": "playbook_context_cancellability",
       "target": "templates__golangci_config"
     },
@@ -3109,6 +3427,7 @@
       "source_file": "PLAYBOOK.md",
       "source_location": null,
       "weight": 1.0,
+      "_origin": "semantic",
       "source": "playbook_final_write_timeout_bug",
       "target": "playbook_context_cancellability"
     },
@@ -3119,6 +3438,7 @@
       "source_file": "PLAYBOOK.md",
       "source_location": null,
       "weight": 1.0,
+      "_origin": "semantic",
       "source": "playbook_unchecked_errors",
       "target": "templates__golangci_config"
     },
@@ -3129,6 +3449,7 @@
       "source_file": "templates/.golangci.yml",
       "source_location": null,
       "weight": 1.0,
+      "_origin": "semantic",
       "source": "templates__golangci_gosec_excludes",
       "target": "playbook_security_findings"
     },
@@ -3139,6 +3460,7 @@
       "source_file": "PLAYBOOK.md",
       "source_location": null,
       "weight": 1.0,
+      "_origin": "semantic",
       "source": "playbook_deferral_rules",
       "target": "playbook_suppression_discipline"
     },
@@ -3149,6 +3471,7 @@
       "source_file": "templates/.golangci.yml",
       "source_location": null,
       "weight": 1.0,
+      "_origin": "semantic",
       "source": "templates__golangci_exhaustive",
       "target": "playbook_suppression_discipline"
     },
@@ -3159,6 +3482,7 @@
       "source_file": "templates/.golangci.yml",
       "source_location": null,
       "weight": 1.0,
+      "_origin": "semantic",
       "source": "templates__golangci_nolintlint",
       "target": "playbook_suppression_discipline"
     },
@@ -3169,6 +3493,7 @@
       "source_file": "HANDOFF.md",
       "source_location": null,
       "weight": 1.0,
+      "_origin": "semantic",
       "source": "handoff_parallel_commit_race",
       "target": "playbook_commit_discipline"
     },
@@ -3179,6 +3504,7 @@
       "source_file": "PLAYBOOK.md",
       "source_location": null,
       "weight": 1.0,
+      "_origin": "semantic",
       "source": "playbook_bisectable_signature_commit",
       "target": "playbook_commit_discipline"
     },
@@ -3189,6 +3515,7 @@
       "source_file": "templates/.golangci.yml",
       "source_location": null,
       "weight": 1.0,
+      "_origin": "semantic",
       "source": "templates__golangci_modernize_disable",
       "target": "playbook_modernize_breaking_autofixes"
     },
@@ -3199,6 +3526,7 @@
       "source_file": "templates/.golangci.yml",
       "source_location": null,
       "weight": 1.0,
+      "_origin": "semantic",
       "source": "templates__golangci_config",
       "target": "playbook_taint_rules_nondeterminism"
     },
@@ -3209,6 +3537,7 @@
       "source_file": "HANDOFF.md",
       "source_location": null,
       "weight": 1.0,
+      "_origin": "semantic",
       "source": "handoff_cherry_pick_revert_uncovered",
       "target": "handoff_hook_coverage_matrix"
     },
@@ -3219,6 +3548,7 @@
       "source_file": "templates/lefthook.yml",
       "source_location": null,
       "weight": 1.0,
+      "_origin": "semantic",
       "source": "templates_lefthook_config",
       "target": "handoff_hook_coverage_matrix"
     },
@@ -3229,6 +3559,7 @@
       "source_file": "HANDOFF.md",
       "source_location": null,
       "weight": 1.0,
+      "_origin": "semantic",
       "source": "handoff_cherry_pick_revert_uncovered",
       "target": "handoff_chosen_boundaries"
     },
@@ -3239,6 +3570,7 @@
       "source_file": "templates/lefthook.yml",
       "source_location": null,
       "weight": 1.0,
+      "_origin": "semantic",
       "source": "templates_lefthook_config",
       "target": "handoff_cherry_pick_revert_uncovered"
     },
@@ -3249,6 +3581,7 @@
       "source_file": ".github/ISSUE_TEMPLATE/gate-bug.md",
       "source_location": null,
       "weight": 1.0,
+      "_origin": "semantic",
       "source": "_github_issue_template_gate_bug_template",
       "target": "handoff_incoming_reports"
     },
@@ -3259,6 +3592,7 @@
       "source_file": "templates/.golangci.yml",
       "source_location": null,
       "weight": 1.0,
+      "_origin": "semantic",
       "source": "templates__golangci_path_exclusions",
       "target": "templates__golangci_config"
     },
@@ -3269,6 +3603,7 @@
       "source_file": "templates/.golangci.yml",
       "source_location": null,
       "weight": 1.0,
+      "_origin": "semantic",
       "source": "templates__golangci_shadow_rejected",
       "target": "templates__golangci_config"
     },
@@ -3279,6 +3614,7 @@
       "source_file": "templates/ci.yml",
       "source_location": null,
       "weight": 1.0,
+      "_origin": "semantic",
       "source": "templates_ci_workflow",
       "target": "templates_ci_detect_stacks_step"
     },
@@ -3289,6 +3625,7 @@
       "source_file": "templates/ci.yml",
       "source_location": null,
       "weight": 1.0,
+      "_origin": "semantic",
       "source": "templates_ci_workflow",
       "target": "templates_ci_qg_ref_pin"
     },
@@ -3299,6 +3636,7 @@
       "source_file": "templates/lefthook.yml",
       "source_location": null,
       "weight": 1.0,
+      "_origin": "semantic",
       "source": "templates_lefthook_exit_code_trap",
       "target": "templates_lefthook_config"
     },
@@ -3309,6 +3647,7 @@
       "source_file": "templates/lefthook.yml",
       "source_location": null,
       "weight": 1.0,
+      "_origin": "semantic",
       "source": "templates_lefthook_quality_gate_job",
       "target": "templates_lefthook_cmd_shim"
     },
@@ -3319,6 +3658,7 @@
       "source_file": "templates/lefthook.yml",
       "source_location": null,
       "weight": 1.0,
+      "_origin": "semantic",
       "source": "templates_lefthook_quality_gate_job",
       "target": "templates_lefthook_command_v_trap"
     },
@@ -3329,6 +3669,7 @@
       "source_file": "templates/lefthook.yml",
       "source_location": null,
       "weight": 1.0,
+      "_origin": "semantic",
       "source": "templates_lefthook_quality_gate_job",
       "target": "templates_lefthook_quote_stripping_trap"
     }
@@ -3381,5 +3722,5 @@
       "source_file": "HANDOFF.md"
     }
   ],
-  "built_at_commit": "c2a7f4a2f944b2a9ba035422762c1e248f4531b2"
+  "built_at_commit": "c20db8a3e4b11507b3e77629600668a72386efde"
 }

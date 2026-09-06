@@ -9,3 +9,8 @@ node_modules/
 !graphify-out/
 graphify-out/.graphify_python
 graphify-out/.graphify_root
+# per-machine extraction cache (mtimes, AST by content hash), label signature,
+# and the dated backups the post-commit rebuild leaves behind
+graphify-out/cache/
+graphify-out/*.sig
+graphify-out/20??-??-??/

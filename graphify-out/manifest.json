@@ -128,5 +128,25 @@
     "mtime": 1788292730.575076,
     "ast_hash": "957fd2736ca0600cfb23f54fe623fe9f",
     "semantic_hash": "957fd2736ca0600cfb23f54fe623fe9f"
+  },
+  ".claude/settings.json": {
+    "mtime": 1788685274.8818831,
+    "ast_hash": "23dc24546b5c1db25815765a37b2cae3",
+    "semantic_hash": ""
+  },
+  "testdata/dotnet-fixture/Fixture.csproj": {
+    "mtime": 1788685476.7554038,
+    "ast_hash": "e3fd8bdfa27cda8f2e1fe2da97fb8387",
+    "semantic_hash": ""
+  },
+  "testdata/dotnet-fixture/Greeter.cs": {
+    "mtime": 1788685478.343632,
+    "ast_hash": "95241ae73399a8bfa5aa558d6249dac7",
+    "semantic_hash": ""
+  },
+  "CLAUDE.md": {
+    "mtime": 1788685274.876047,
+    "ast_hash": "8a6643a420fdad6bfb583523bc6cef16",
+    "semantic_hash": ""
   }
 }
