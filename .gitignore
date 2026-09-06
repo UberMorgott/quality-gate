@@ -3,3 +3,9 @@
 target/
 node_modules/
 .godot/
+
+# The knowledge graph is tracked in this repository (overrides the user-level
+# ignore of graphify-out/); these two files hold machine-local absolute paths.
+!graphify-out/
+graphify-out/.graphify_python
+graphify-out/.graphify_root

@@ -17,3 +17,4 @@ templates/pre-commit text eol=lf
 # `* text=auto` above it is checked out CRLF wherever core.autocrlf=true, so without
 # this line the gate hands a CRLF file to repositories that enforce LF.
 templates/lefthook.yml text eol=lf
+graphify-out/graph.json merge=graphify

@@ -1,0 +1,1 @@
+{"nodes": [{"id": "pkg_gatefixture", "label": "gatefixture", "file_type": "code", "type": "package", "ecosystem": "go", "source_file": "testdata/go-fixture/go.mod", "source_location": "L1"}], "edges": []}

@@ -1,0 +1,132 @@
+{
+  "bin/qgate.ps1": {
+    "mtime": 1788426990.8944128,
+    "ast_hash": "0fd26d5df002bbf900724e4c15c71035",
+    "semantic_hash": "0fd26d5df002bbf900724e4c15c71035"
+  },
+  "bootstrap.ps1": {
+    "mtime": 1788292367.6663332,
+    "ast_hash": "62d33444524bbb0fad207269e646e699",
+    "semantic_hash": "62d33444524bbb0fad207269e646e699"
+  },
+  "gate/check.ps1": {
+    "mtime": 1788625029.4180956,
+    "ast_hash": "7411b9a76724293c624aa211bf915229",
+    "semantic_hash": "7411b9a76724293c624aa211bf915229"
+  },
+  "gate/detect.ps1": {
+    "mtime": 1788622663.1675806,
+    "ast_hash": "67ce0aa63b63680b76ebc82e02e78be9",
+    "semantic_hash": "67ce0aa63b63680b76ebc82e02e78be9"
+  },
+  "gate/outdated.ps1": {
+    "mtime": 1788360767.6914916,
+    "ast_hash": "034ffbabc5737f06a08c43a12344e82d",
+    "semantic_hash": "034ffbabc5737f06a08c43a12344e82d"
+  },
+  "gate/stop-hook.ps1": {
+    "mtime": 1788334396.817514,
+    "ast_hash": "e724ea899447135164037779e7eb5931",
+    "semantic_hash": "e724ea899447135164037779e7eb5931"
+  },
+  "install.ps1": {
+    "mtime": 1788573391.344669,
+    "ast_hash": "cac3b5cd43de6caac4481a6a9d2259e5",
+    "semantic_hash": "cac3b5cd43de6caac4481a6a9d2259e5"
+  },
+  "selftest.ps1": {
+    "mtime": 1788624297.7040124,
+    "ast_hash": "275f010e28364f23459dac1b15a2f58d",
+    "semantic_hash": "275f010e28364f23459dac1b15a2f58d"
+  },
+  "templates/.stylelintrc.json": {
+    "mtime": 1788289302.756651,
+    "ast_hash": "3b2b0071b817fe57837112c487eeb102",
+    "semantic_hash": "3b2b0071b817fe57837112c487eeb102"
+  },
+  "templates/eslint.config.js": {
+    "mtime": 1788289301.180493,
+    "ast_hash": "d2422edc74f298cf10f2fa0c4800031e",
+    "semantic_hash": "d2422edc74f298cf10f2fa0c4800031e"
+  },
+  "templates/pre-commit": {
+    "mtime": 1788336036.9312005,
+    "ast_hash": "d0bf5497084b9138451fe2ce5a51be54",
+    "semantic_hash": "d0bf5497084b9138451fe2ce5a51be54"
+  },
+  "testdata/go-fixture/go.mod": {
+    "mtime": 1788282166.3608816,
+    "ast_hash": "db5875b80c0fe4049707b10124d5dffa",
+    "semantic_hash": "db5875b80c0fe4049707b10124d5dffa"
+  },
+  "testdata/go-fixture/main.go": {
+    "mtime": 1788282168.3832605,
+    "ast_hash": "0dfa89559d0c072fb56fed041329af09",
+    "semantic_hash": "0dfa89559d0c072fb56fed041329af09"
+  },
+  "testdata/go-fixture/main_test.go": {
+    "mtime": 1788282169.9019108,
+    "ast_hash": "06fc9c254d4bd250391d132c549128e8",
+    "semantic_hash": "06fc9c254d4bd250391d132c549128e8"
+  },
+  "testdata/python-fixture/pyproject.toml": {
+    "mtime": 1788360871.5586984,
+    "ast_hash": "c110629616d1636d9cdf80c597276966",
+    "semantic_hash": "c110629616d1636d9cdf80c597276966"
+  },
+  "testdata/rust-fixture/src/main.rs": {
+    "mtime": 1788291324.8126793,
+    "ast_hash": "ab5813497c86ee1ba00d734d5aae428f",
+    "semantic_hash": "ab5813497c86ee1ba00d734d5aae428f"
+  },
+  "testdata/web-fixture/package.json": {
+    "mtime": 1788282171.3823385,
+    "ast_hash": "baf93aab7dc722836d643230a60eb109",
+    "semantic_hash": "baf93aab7dc722836d643230a60eb109"
+  },
+  "testdata/web-fixture/vite.config.js": {
+    "mtime": 1788282172.9178329,
+    "ast_hash": "973f23c294c2a88e23e803ef9b126e25",
+    "semantic_hash": "973f23c294c2a88e23e803ef9b126e25"
+  },
+  ".github/ISSUE_TEMPLATE/gate-bug.md": {
+    "mtime": 1788289339.0226643,
+    "ast_hash": "161a228b349177c69a50830c41a729b8",
+    "semantic_hash": "161a228b349177c69a50830c41a729b8"
+  },
+  "HANDOFF.md": {
+    "mtime": 1788645311.619478,
+    "ast_hash": "7dc74ef52da7778942498e55d594db10",
+    "semantic_hash": ""
+  },
+  "PLAYBOOK.md": {
+    "mtime": 1788366504.5229585,
+    "ast_hash": "95af656e0dd8b458d943a5b06dd99b55",
+    "semantic_hash": "95af656e0dd8b458d943a5b06dd99b55"
+  },
+  "README.md": {
+    "mtime": 1788624887.3521938,
+    "ast_hash": "90d10d29160ffb4deb90050a0abce60c",
+    "semantic_hash": "90d10d29160ffb4deb90050a0abce60c"
+  },
+  "templates/.golangci.yml": {
+    "mtime": 1788425698.1952028,
+    "ast_hash": "fef2fe8d46bea34b7221a6e4756be690",
+    "semantic_hash": "fef2fe8d46bea34b7221a6e4756be690"
+  },
+  "templates/ci.yml": {
+    "mtime": 1788292476.3454013,
+    "ast_hash": "f8a1547d449589ad3dc9777b880af789",
+    "semantic_hash": "f8a1547d449589ad3dc9777b880af789"
+  },
+  "templates/lefthook.yml": {
+    "mtime": 1788572251.3345509,
+    "ast_hash": "1ef63c79a316a19f066e47599895544f",
+    "semantic_hash": "1ef63c79a316a19f066e47599895544f"
+  },
+  "testdata/proto-fixture/buf.yaml": {
+    "mtime": 1788292730.575076,
+    "ast_hash": "957fd2736ca0600cfb23f54fe623fe9f",
+    "semantic_hash": "957fd2736ca0600cfb23f54fe623fe9f"
+  }
+}
