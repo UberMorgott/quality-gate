@@ -1,16 +1,71 @@
-# HANDOFF — состояние на 2026-09-05
+# HANDOFF — состояние на 2026-09-06
 
 Записка для следующей сессии. Цель — не перепроверять заново то, что уже замерено.
 Всё ниже **измерено на этой машине**, а не выведено рассуждением; где важно, указан
 инструмент и версия.
 
-- `origin/main` = `54edc59`, дерево чистое.
-- Самопроверка: **121/121** онлайн, **115/115** офлайн (остальные `[skip]` с причиной).
-- Открытых пунктов нет.
+- `origin/main` = `54edc59`; локальный `main` ушёл вперёд на 13 коммитов, **не запушен**
+  (push — только по явной просьбе).
+- Самопроверка: **143/143** онлайн (офлайн — часть `[skip]` с причиной, число не замерялось
+  в этой сессии).
+- Открытый пункт один: **обкатка стека dotnet на соседних репозиториях** (§1.3).
 
 ---
 
-## 1. Что сделано в сессии 2026-09-05
+## 1. Что сделано в сессии 2026-09-06
+
+### 1.1 Стек `dotnet` (C#-моды): `5097e04 … ce3929a`
+
+Целевые репозитории пользователя — `E:\DEV\PhoenixPoint\Multiplayer2` и
+`E:\DEV\PhoenixPoint\ContentTool` (Harmony-моды, `net472`, `<Reference>` с `HintPath`
+в `D:\Steam\steamapps\common\Phoenix Point`), плюс `E:\DEV\Valheim` (BepInEx, `net48`).
+Ни `.sln`, ни `.editorconfig`; по нескольку `csproj` на репозиторий (ContentTool — 13).
+
+Форма стека, всё по замеру (SDK 8.0.420, `dotnet format` 8.3):
+
+- маркер `*.csproj`, один стек на файл проекта; `bin/`, `obj/` уже в `$SkipDirs`;
+- `refs` — `dotnet msbuild -getProperty:TargetFramework,TargetFrameworks
+  -getItem:Reference` (0 с, таргеты не выполняются, `<Error>` из `Directory.Build.props`
+  не срабатывает). Отсутствующий файл по `HintPath` (относительный резолвится от каталога
+  csproj) → `[SKIP] … reference(s) missing` для build/test, **не** FAIL: игра не
+  установлена — это среда, а не код; TFM новее установленного SDK → `[SKIP] … needs .NET
+  SDK N.x`. Поле `FullPath` у Reference — ложь (`<dir>\<Identity>` без расширения), не
+  использовать;
+- `format` — `dotnet format whitespace <csproj> --verify-no-changes --no-restore`, 3–4 с.
+  Быстрая полоса — только staged `.cs` через `--include` с путями **относительно текущего
+  каталога** (абсолютный путь молча не совпадает ни с чем, exit 0 — замерено);
+- `build` — `dotnet build -nologo -v q -clp:NoSummary`, 2–3 с, инкрементально 1–2 с;
+  `net48/net472` собирается на SDK 8 без Visual Studio (reference assemblies тянет
+  restore). Предупреждения компилятора — `[WARN] N compiler warning(s)`, не отказ;
+- `test` (`-Full`) — только при `Microsoft.NET.Test.Sdk` в csproj; в целевых репо тестовые
+  проекты — `Exe`-раннеры, фаза не появляется;
+- `vuln` (`-Full`, после build) — `dotnet list package --vulnerable --include-transitive
+  --format json --output-version 1`. `frameworks` в JSON **отсутствует**, когда уязвимостей
+  нет; недоступный источник печатает `error:` без JSON, нересторенный проект — `problems[]`;
+  оба → `[UNKNOWN]`.
+
+### 1.2 Граф знаний теперь в git: `c20db8a`, `212da7e`, `da8479a`
+
+См. §5 — правила изменились.
+
+### 1.3 Открыто: обкатка на соседних репозиториях
+
+- В обоих целевых репо `dotnet format whitespace` находит **1396** (Multiplayer2) и **447**
+  (ContentTool) нарушений. `-All`/`-Full` там красные до однократного
+  `dotnet format whitespace <csproj>` — это решение владельца репо, гейт его не принимает.
+  Быстрая полоса трогает только staged `.cs`, поэтому коммит без правок `.cs` проходит.
+- Первый упавший стек снимает остальные (`an earlier stack failed, not run`) — штатное
+  поведение гейта; в ContentTool это 12 `[SKIP]` после одного `[FAIL] format`.
+- В Multiplayer2 уже стоит свой `core.hooksPath=.githooks` с `pre-commit`
+  (`tools/law-integrity.ps1` + RailCheck). `qgate wire` туда ещё не запускался;
+  lefthook и существующий хук надо совместить осознанно, а не затирать.
+- Известная ловушка из их хука: первый `dotnet` в PATH бывает x86-хостом без SDK
+  (`No .NET SDKs were found`) — гейт трактует пустой `dotnet --list-sdks` как отсутствие
+  инструмента.
+- Не покрыто и не планируется: несколько `csproj` в **одном** каталоге (общий `obj/`);
+  статическая проверка целей Harmony-патчей; `net9.0` без SDK 9 (cosmoteer) — `[SKIP]`.
+
+## 1a. Что сделано в сессии 2026-09-05
 
 Одиннадцать коммитов, `2230e54 → 54edc59`. Поводом были отчёты от агентских сессий
 в других репозиториях (`Morgward`, `CodeDungeon`).
@@ -123,14 +178,30 @@ PowerShell не даёт. Отсюда exit-коды, а для godot — мем
 
 ## 5. Граф знаний — читать ДО того, как открывать код
 
-В `graphify-out/` лежит собранный граф репозитория: **147 узлов, 148 рёбер, 26
-сообществ**. Он существует ровно затем, чтобы не перечитывать весь репозиторий
-заново.
+В `graphify-out/` лежит собранный граф репозитория (~150 узлов, 27 сообществ). Он
+существует ровно затем, чтобы не перечитывать весь репозиторий заново.
 
-**Его нет в git и не будет:** `graphify-out/` исключён глобальным ignore
-(`C:\Users\Morgott\.config\git\ignore`), это настройка уровня пользователя. Граф
-машинно-локальный. Если каталога нет — собрать заново командой `/graphify`
-(эта сборка обошлась в 128k входных токенов на 26 файлах, ~4 минуты).
+**С 2026-09-06 граф в git этого репозитория.** Глобальный ignore
+(`C:\Users\Morgott\.config\git\ignore: graphify-out/`) перебит строкой `!graphify-out/`
+в `.gitignore`; вне git остаются `.graphify_python`, `.graphify_root` (абсолютные пути
+машины), `cache/` (mtime-индекс и AST-кэш), `*.sig` и датированные бэкапы `20??-??-??/`.
+Следствие: push унесёт граф на GitHub вместе с `main` — так и задумано пользователем.
+
+**Обвязка graphify** (`graphify hook install`, `graphify claude install`):
+
+- `.git/hooks/post-commit` и `post-checkout` (машинно-локальные) пересобирают граф в фоне
+  после каждого коммита, кроме коммитов, трогающих только `graphify-out/`. Лог —
+  `~/.cache/graphify-rebuild.log`. Замерено: после коммита граф обновился (149 узлов),
+  дерево после этого **грязное** на пять файлов графа — граф отстаёт на один коммит;
+  закрывать `git commit -m "chore(graph): refresh" -- graphify-out`.
+- `CLAUDE.md` с правилами «сначала `graphify query`» и `.claude/settings.json` с
+  PreToolUse-хуком `graphify hook-guard` (140 мс на вызов, не блокирует, только
+  подсказывает). Путь к `graphify.EXE` в settings абсолютный — на другой машине
+  перезапустить `graphify claude install`.
+- `graphify update` работает (exit 0, инкрементально). Что граф **не видит**: `.gd`,
+  `.tscn`, `.godot`, `.proto`, `.toml`, `.cmd` — их нет в `CODE_EXTENSIONS` graphify
+  0.9.33, поэтому фикстуры godot/proto/rust в графе отсутствуют. Это ограничение
+  инструмента, не поломка.
 
 - `graphify-out/wiki/index.md` — **точка входа**, 36 статей по сообществам. Начинать
   отсюда, а не с `README.md` (66 КБ) и не с обхода `gate/*.ps1`.
@@ -163,8 +234,9 @@ graphify explain "Test-GitIgnored"
 pwsh -NoProfile -File .\selftest.ps1
 ```
 
-Онлайн ждать `all checks passed (121/121)`. Офлайн — 115/115 и `[skip]` с причиной;
-это норма, а не регрессия.
+Онлайн ждать `all checks passed (143/143)`. Офлайн — меньше и `[skip]` с причиной;
+это норма, а не регрессия. Блок dotnet требует SDK 8.x (`dotnet --list-sdks`), иначе
+весь блок — `[skip]`.
 
 Правило набора (его же заголовок, §0.1 PLAYBOOK): отрицательная проверка обязана
 утверждать исход, сработавшую причину через `-match` **и** отсутствие
