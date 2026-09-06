@@ -280,7 +280,12 @@ if ($env:GIT_INDEX_FILE) {
 }
 
 function Phase {
-    param([string]$Name, [scriptblock]$Body, [switch]$FailIfOutput)
+    # -Elapsed: seconds the TOOL took, for a phase whose command ran before the block.
+    # `dotnet msbuild` and `dotnet format` run ahead of their Phase (their output has to
+    # be classified before it can be a verdict), so the stopwatch here wrapped nothing
+    # and printed `(0.0s)` for a phase that cost six seconds -- a time that says the
+    # opposite of the truth is worse than no time at all.
+    param([string]$Name, [scriptblock]$Body, [switch]$FailIfOutput, [double]$Elapsed = -1)
     if ($script:Failed) { return }
     $script:Phases++
     $sw = [Diagnostics.Stopwatch]::StartNew()
@@ -290,7 +295,8 @@ function Phase {
     # InvariantCulture, not '{0:N1}': under a comma-decimal locale (ru-RU here) every
     # phase printed `0,0s`, so the timings the report exists to show were unreadable to
     # anything that parses them and inconsistent between machines.
-    $sec = $sw.Elapsed.TotalSeconds.ToString('0.0', [Globalization.CultureInfo]::InvariantCulture)
+    $secs = if ($Elapsed -ge 0) { $Elapsed } else { $sw.Elapsed.TotalSeconds }
+    $sec = $secs.ToString('0.0', [Globalization.CultureInfo]::InvariantCulture)
     if (($LASTEXITCODE -ne 0) -or ($FailIfOutput -and $out)) {
         $script:Lines += "[FAIL] $Name (${sec}s)"
         if ($out) { $script:Lines += $out }
@@ -466,11 +472,13 @@ function Invoke-DotnetStack($s) {
     # and no `vuln` phase at all, while `dotnet test --no-build` on the same project found
     # the failing test and exited 1. Evaluation sees every import; a regex over one file
     # sees one file.
+    $refsSw = [Diagnostics.Stopwatch]::StartNew()
     $q = (& dotnet msbuild $proj -getProperty:TargetFramework -getProperty:TargetFrameworks `
             -getProperty:IsTestProject -getItem:Reference -getItem:PackageReference -nologo 2>&1 | Out-String).Trim()
     $qCode = $LASTEXITCODE
+    $refsSw.Stop()
     # A csproj msbuild cannot even evaluate IS a defect, so this one is a real phase.
-    Phase 'refs' { if ($qCode -ne 0) { $q; $global:LASTEXITCODE = 1 } }
+    Phase 'refs' { if ($qCode -ne 0) { $q; $global:LASTEXITCODE = 1 } } -Elapsed $refsSw.Elapsed.TotalSeconds
     if ($script:Failed) { return }
     $info = try { $q | ConvertFrom-Json } catch { $null }
 
@@ -542,8 +550,10 @@ function Invoke-DotnetStack($s) {
         }
     }
     if ($runFormat) {
+        $fmtSw = [Diagnostics.Stopwatch]::StartNew()
         $fmtOut = (& dotnet format whitespace @fmtArgs 2>&1 | Out-String).TrimEnd()
         $fmtCode = $LASTEXITCODE
+        $fmtSw.Stop()
         if ($fmtCode -ne 0 -and $fmtOut -notmatch 'error WHITESPACE') {
             # dotnet format loads the project through MSBuild before it reads a single
             # character of whitespace, and a workspace it cannot load exits non-zero with
@@ -560,7 +570,7 @@ function Invoke-DotnetStack($s) {
                 # Every line already names file(line,col); what none of them says is the
                 # one command that fixes all of them.
                 if ($fmtCode -ne 0) { "fix: dotnet format whitespace $proj"; $global:LASTEXITCODE = 1 }
-            }
+            } -Elapsed $fmtSw.Elapsed.TotalSeconds
         }
     }
 
