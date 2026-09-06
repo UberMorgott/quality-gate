@@ -551,11 +551,30 @@ function Invoke-DotnetStack($s) {
     # See the govulncheck note above: a known vulnerability is a defect, it lives on the
     # network, and a project with no PackageReference has nothing to ask about.
     if ((Get-Content $proj -Raw) -match 'PackageReference') {
-        Phase 'vuln' {
-            $o = (& dotnet list $proj package --vulnerable --include-transitive 2>&1 | Out-String).Trim()
-            # The command exits 0 whether or not it found anything, so the report is
-            # the verdict.
-            if ($o -match 'has the following vulnerable packages') { $o; $global:LASTEXITCODE = 1 }
+        # Neither the exit code nor the human table is readable: it exits 0 whether or
+        # not it found anything, exits 1 when the source was merely unreachable, and
+        # prints the table in the machine's display language. JSON is the only answer
+        # that means the same thing everywhere. It needs the assets file, which is why
+        # this runs after `build` restored one.
+        $vo = (& dotnet list $proj package --vulnerable --include-transitive --format json --output-version 1 2>&1 | Out-String).Trim()
+        $vj = try { $vo | ConvertFrom-Json } catch { $null }
+        if (-not $vj -or $vj.problems) {
+            # An unreachable source prints plain `error:` lines and no JSON at all; a
+            # project problem lands in problems[]. Either way nobody asked the advisory
+            # database anything, and "not asked" is not "clean" -- same UNKNOWN the
+            # offline outdated check reports.
+            $script:Lines += "[UNKNOWN] ${proj}: could not check for vulnerable packages -- offline, the source failed or the project is not restored"
+        }
+        else {
+            $vulnerable = @(foreach ($f in @($vj.projects.frameworks)) {
+                    @($f.topLevelPackages) + @($f.transitivePackages) | Where-Object { $_.vulnerabilities }
+                })
+            Phase 'vuln' {
+                foreach ($p in $vulnerable) {
+                    foreach ($v in $p.vulnerabilities) { "$($p.id) $($p.resolvedVersion): $($v.severity) -- $($v.advisoryurl)" }
+                }
+                if ($vulnerable) { $global:LASTEXITCODE = 1 }
+            }
         }
     }
 }
