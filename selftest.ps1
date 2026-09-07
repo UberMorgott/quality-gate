@@ -1486,6 +1486,106 @@ $wireRoot = (& pwsh -NoProfile -File $installer -Root $nm -NoHook 2>&1 | Out-Str
 Check 'wire accepts -Root as the repository to wire' `
     (($LASTEXITCODE -eq 0) -and ($wireRoot -match [regex]::Escape($nm))) "code=$LASTEXITCODE $wireRoot"
 
+# 35. Custom checks the repository declares in its own qgate.json. They are arbitrary
+# command lines out of a file in the working tree, so the whole feature stands on the
+# trust gate: nothing runs until somebody on this machine has read the commands. The
+# store is a per-user file, so LOCALAPPDATA is redirected for the whole block -- a
+# self-test that wrote into the developer's real trust store would be doing to them
+# exactly what the trust gate exists to prevent.
+$cust = Join-Path $tmp 'custom'
+New-Item -ItemType Directory -Path $cust | Out-Null
+$custJson = Join-Path $cust 'qgate.json'
+$priorLocal = $env:LOCALAPPDATA
+$env:LOCALAPPDATA = Join-Path $tmp 'trusthome'
+function Invoke-Trust([string]$Repo, [switch]$Remove) {
+    (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\trust.ps1') -Root $Repo -Remove:$Remove 2>&1 | Out-String)
+}
+try {
+    # `fast` runs at both levels, `full` (the default) only under -Full -- the same
+    # split every other phase uses.
+    [IO.File]::WriteAllText($custJson,
+        '{"checks":[{"name":"quick","run":"exit 0","level":"fast"},{"name":"heavy","run":"exit 0"}]}')
+    $r = Invoke-Gate $cust
+    Check 'a declared check does not run until the repo is trusted' `
+        (($r.Code -eq 0) -and ($r.Out -match '\[SKIP\] custom -- untrusted qgate\.json checks \(run: qgate trust\)')) $r.Out
+    # The absence half, and it is the whole rule: an untrusted repo is a [SKIP], never a
+    # [FAIL]. Refusing to run a command is not a verdict on the code, and a repository
+    # nobody has trusted yet must not be one nobody can commit to -- including through
+    # the zero-phase invariant, which this is the third documented exemption from.
+    Check 'an untrusted repo is skipped, not failed' ($r.Out -notmatch '\[FAIL\]') $r.Out
+
+    # `qgate trust` is the one place the exact command is shown to the person allowing
+    # it, so printing a summary instead of the string would defeat the whole gate.
+    $t = Invoke-Trust $cust
+    Check 'qgate trust prints every check and the store it writes' `
+        (($t -match '(?m)^\s+quick\b') -and ($t -match '(?m)^\s+exit 0\s*$') -and ($t -match 'trusted\.json')) $t
+    $r = Invoke-Gate $cust
+    Check 'a trusted check runs and passes' (($r.Code -eq 0) -and ($r.Out -match '\[PASS\] quick')) $r.Out
+    Check 'a full-level check is not run in the fast lane' `
+        (($r.Out -match '\[SKIP\] heavy -- level full') -and ($r.Out -notmatch '\[PASS\] heavy')) $r.Out
+    $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $cust -All -Full 2>&1 | Out-String)
+    Check 'a full-level check runs at the full level' `
+        (($LASTEXITCODE -eq 0) -and ($out -match '\[PASS\] heavy')) $out
+    # `custom` is a stack like any other, or -Only would be a documented flag that
+    # cannot name it.
+    $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $cust -Only 'custom' -Full 2>&1 | Out-String)
+    Check '-Only custom selects the stack' (($LASTEXITCODE -eq 0) -and ($out -match '\[PASS\] custom')) $out
+
+    # Trust is a hash of the checks, so editing the command re-arms the gate. This is
+    # the case the feature exists to survive: a pull, a branch switch or a teammate
+    # changing `run` under a repo that was trusted yesterday.
+    [IO.File]::WriteAllText($custJson,
+        '{"checks":[{"name":"quick","run":"exit 1","level":"fast"},{"name":"heavy","run":"exit 0"}]}')
+    $r = Invoke-Gate $cust
+    Check 'editing the run string of a trusted check revokes the trust' `
+        (($r.Code -eq 0) -and ($r.Out -match 'untrusted qgate\.json checks')) $r.Out
+    # ...and the edited command really did not run: a revocation that still executed it
+    # would satisfy the line above and be worth nothing.
+    Check 'the edited command is not executed' ($r.Out -notmatch '\[(PASS|FAIL)\] quick') $r.Out
+
+    # A non-zero exit is the finding, and the output plus the command line is what a
+    # reader acts on -- no other phase's output has to name the tool that produced it.
+    [IO.File]::WriteAllText($custJson,
+        '{"checks":[{"name":"boom","run":"Write-Output the-real-reason; exit 3","level":"fast"}]}')
+    Invoke-Trust $cust | Out-Null
+    $r = Invoke-Gate $cust
+    Check 'a check that exits non-zero fails the gate under its own name' `
+        (($r.Code -ne 0) -and ($r.Out -match '\[FAIL\] boom') -and ($r.Out -match 'the-real-reason') -and
+            ($r.Out -match 'run: Write-Output the-real-reason; exit 3')) $r.Out
+
+    # A command that never comes back is not a command that failed, and the raw output
+    # cannot tell them apart: a killed process usually printed nothing at all.
+    [IO.File]::WriteAllText($custJson,
+        '{"checks":[{"name":"hang","run":"Start-Sleep 30","level":"fast","timeoutSec":1}]}')
+    Invoke-Trust $cust | Out-Null
+    $r = Invoke-Gate $cust
+    Check 'a check that outruns its timeout is killed and named as a timeout' `
+        (($r.Code -ne 0) -and ($r.Out -match '\[FAIL\] hang -- timeout after 1s')) $r.Out
+
+    # Malformed checks are a [FAIL] with the specific reason, never a silent absence:
+    # a config that reads as enforcement and does nothing is the oldest defect in this
+    # file. Trusted first, so the verdict cannot be standing on the trust gate instead.
+    foreach ($case in @(
+            @{ Json = '{"checks":[{"name":"Bad Name","run":"exit 0"}]}'; Match = 'no usable name' },
+            @{ Json = '{"checks":[{"name":"a","run":"exit 0"},{"name":"a","run":"exit 0"}]}'; Match = "two checks named 'a'" },
+            @{ Json = '{"checks":[{"name":"a"}]}'; Match = 'needs a non-empty' },
+            @{ Json = '{"checks":[{"name":"a","run":"exit 0","level":"sometimes"}]}'; Match = 'must be fast or full' },
+            @{ Json = '{"checks":"not an array"}'; Match = 'must be an array' })) {
+        [IO.File]::WriteAllText($custJson, $case.Json)
+        Invoke-Trust $cust | Out-Null
+        $r = Invoke-Gate $cust
+        Check "malformed checks fail with the reason: $($case.Match)" `
+            (($r.Code -ne 0) -and ($r.Out -match '\[FAIL\] custom') -and ($r.Out -match [regex]::Escape($case.Match))) $r.Out
+    }
+
+    # ...and the two shapes that are simply absence, or every repository that pins a
+    # tool version would grow a stack it never asked for.
+    [IO.File]::WriteAllText($custJson, '{"tools":{"go":"1.0.0"},"checks":[]}')
+    $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $cust -All -Why 2>&1 | Out-String)
+    Check 'an empty checks array is no stack at all' `
+        (($out -match '\[WHY\] custom -- absent') -and ($out -notmatch '\[FAIL\] custom')) $out
+} finally { $env:LOCALAPPDATA = $priorLocal }
+
 Remove-Item $tmp -Recurse -Force
 if ($script:Fails) { Write-Output "`n$($script:Fails) of $($script:Total) check(s) failed"; exit 1 }
 Write-Output "`nall checks passed ($($script:Total)/$($script:Total))"

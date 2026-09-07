@@ -1,7 +1,7 @@
 {
   "bin/qgate.ps1": {
-    "mtime": 1788685745.4807975,
-    "ast_hash": "2bef1a002e098d56cc6442f169d0d0fc",
+    "mtime": 1788766538.2463002,
+    "ast_hash": "19f2b94b2a097e2f7adc4457f0ca436e",
     "semantic_hash": ""
   },
   "bootstrap.ps1": {
@@ -10,13 +10,13 @@
     "semantic_hash": "62d33444524bbb0fad207269e646e699"
   },
   "gate/check.ps1": {
-    "mtime": 1788710413.5585046,
-    "ast_hash": "2e0b44d49dad9990429ac17a23227234",
+    "mtime": 1788766640.69869,
+    "ast_hash": "627391a919b0c3b4a53364b58ca6b403",
     "semantic_hash": ""
   },
   "gate/detect.ps1": {
-    "mtime": 1788685681.4553816,
-    "ast_hash": "046cc90b6139f19ace6d95f65725d4d0",
+    "mtime": 1788766457.210551,
+    "ast_hash": "0a0f58513d0e441c86d39c55f3d234e7",
     "semantic_hash": ""
   },
   "gate/outdated.ps1": {
@@ -30,13 +30,13 @@
     "semantic_hash": "e724ea899447135164037779e7eb5931"
   },
   "install.ps1": {
-    "mtime": 1788573391.344669,
-    "ast_hash": "cac3b5cd43de6caac4481a6a9d2259e5",
-    "semantic_hash": "cac3b5cd43de6caac4481a6a9d2259e5"
+    "mtime": 1788766546.2014124,
+    "ast_hash": "f041662deddab33108cb64b83cc79892",
+    "semantic_hash": ""
   },
   "selftest.ps1": {
-    "mtime": 1788710072.7161157,
-    "ast_hash": "cfce30b5133689f832e43b5d5cae29eb",
+    "mtime": 1788766890.1475112,
+    "ast_hash": "98eb2a56e5f9fba8eb96f66d108760ad",
     "semantic_hash": ""
   },
   "templates/.stylelintrc.json": {
@@ -95,8 +95,8 @@
     "semantic_hash": "161a228b349177c69a50830c41a729b8"
   },
   "HANDOFF.md": {
-    "mtime": 1788707545.01047,
-    "ast_hash": "de7fc5d9e0f8602e0d7b6545ed1633be",
+    "mtime": 1788710612.8152776,
+    "ast_hash": "8a07f2c16c9b96049308e8dce8b9602e",
     "semantic_hash": ""
   },
   "PLAYBOOK.md": {
@@ -105,8 +105,8 @@
     "semantic_hash": "95af656e0dd8b458d943a5b06dd99b55"
   },
   "README.md": {
-    "mtime": 1788707183.3162315,
-    "ast_hash": "24dbc4df02928793daa445fd170c1ef4",
+    "mtime": 1788767197.4191988,
+    "ast_hash": "a2c8c3e5e17453363bc4e2247775f768",
     "semantic_hash": ""
   },
   "templates/.golangci.yml": {
@@ -147,6 +147,11 @@
   "CLAUDE.md": {
     "mtime": 1788685274.876047,
     "ast_hash": "8a6643a420fdad6bfb583523bc6cef16",
+    "semantic_hash": ""
+  },
+  "gate/trust.ps1": {
+    "mtime": 1788766515.113534,
+    "ast_hash": "207c13cc4877f4815097a6772108b876",
     "semantic_hash": ""
   }
 }

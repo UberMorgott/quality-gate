@@ -70,6 +70,13 @@ foreach ($s in $stacks) {
     } elseif ($s.Stack -eq 'web') {
         Write-Output "web       $where -- enabled"
         Install-WebConfigs $s.Dir $where
+    } elseif ($s.Stack -eq 'custom') {
+        # Wiring a repository is not reading the commands it declares, so this reports
+        # the state and never changes it: trusting is a separate, deliberate command.
+        $cc = Get-CustomChecks $s.Dir
+        Write-Output "custom    $where -- $(if ($cc.Error) { "malformed: $($cc.Error)" }
+            elseif (Test-ChecksTrusted $s.Dir $cc.Checks) { "$($cc.Checks.Count) trusted check(s)" }
+            else { "$($cc.Checks.Count) check(s), NOT trusted here -- read them with: qgate trust" })"
     } else {
         Write-Output "$($s.Stack.PadRight(9)) $where -- enabled"
     }

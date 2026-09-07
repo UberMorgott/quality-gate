@@ -11,7 +11,7 @@
 # With no stack switch the changed side is auto-detected from git status.
 [CmdletBinding(PositionalBinding = $false)]
 param(
-    [string[]]$Only,      # go | web | rust | proto | godot | dotnet -- restrict to these stacks (one value: -Only go,web)
+    [string[]]$Only,      # go | web | rust | proto | godot | dotnet | custom -- restrict to these stacks (one value: -Only go,web)
     [switch]$All,         # every detected stack, ignore git status
     [switch]$Fast,
     [switch]$Full,
@@ -250,6 +250,10 @@ if ($Baseline) {
 
 $script:Failed = $false
 $script:Lines = @()
+# Set when the custom stack deliberately ran nothing: the checks are not trusted here,
+# or every one of them is full-level and this is the fast lane. Read once, by the
+# zero-phase invariant at the bottom of this file.
+$script:CustomDeferred = $false
 # How many check phases actually executed. The one number the green verdict at the
 # bottom of this file is not allowed to ignore.
 $script:Phases = 0
@@ -1071,6 +1075,72 @@ function Invoke-GodotStack($s) {
     } -FailIfOutput
 }
 
+# --- custom: the commands the repository declares in its own qgate.json ----
+# Arbitrary command lines out of a file in the working tree, which a clone, a pull or
+# a branch switch can change under the reader. So they run only for a repo somebody
+# read and trusted by hand: `qgate trust` records a hash of the checks, and any edit
+# to a name, a command, a level or a timeout invalidates it.
+#
+# Untrusted is a [SKIP], never a [FAIL]: refusing to execute a command is not a
+# verdict on the code, and a repository nobody has trusted yet must not be a repo
+# nobody can commit to.
+function Invoke-CustomStack($s) {
+    $custom = Get-CustomChecks $Root
+    if (-not $custom) { return }
+    if ($custom.Error) { Fail "custom -- $($custom.Error)"; return }
+    if (-not (Test-ChecksTrusted $Root $custom.Checks)) {
+        $script:Lines += '[SKIP] custom -- untrusted qgate.json checks (run: qgate trust)'
+        $script:CustomDeferred = $true
+        return
+    }
+    # From the repository root, whatever -Root said: a command written in qgate.json
+    # is written against the repository, not against wherever the shell stood.
+    Set-Location $Root
+    foreach ($c in $custom.Checks) {
+        # The same fast/full split every other phase uses: `full` is the level that
+        # guards a commit and CI, `fast` also runs on every agent turn.
+        if ($c.Level -eq 'full' -and -not $Full) {
+            $script:Lines += "[SKIP] $($c.Name) -- level full, not run in the fast lane"
+            # `full` is the DEFAULT, so a repo whose only stack is custom would meet the
+            # zero-phase invariant on every fast run and block every agent turn over
+            # work it explicitly deferred to the level that guards the commit.
+            $script:CustomDeferred = $true
+            continue
+        }
+        # Redirected to files, not read from pipes: a process that fills a pipe nobody
+        # is draining blocks forever, and the whole reason there is a timeout here is
+        # that this command may not come back. Keyed by check AND process, like the Go
+        # build directory: two agents in one repo must not write over each other.
+        $outFile = Join-Path ([IO.Path]::GetTempPath()) "quality-gate-custom-$(Get-PathKey "$Root|$($c.Name)")-$PID.out"
+        $errFile = "$outFile.err"
+        $sw = [Diagnostics.Stopwatch]::StartNew()
+        $p = Start-Process pwsh -ArgumentList '-NoProfile', '-Command', $c.Run `
+            -WorkingDirectory $Root -NoNewWindow -PassThru `
+            -RedirectStandardOutput $outFile -RedirectStandardError $errFile
+        $done = $p.WaitForExit($c.TimeoutSec * 1000)
+        $sw.Stop()
+        # Kill the tree, not the shell: `pwsh -Command` is a parent, and the build it
+        # started is what is actually hanging.
+        if (-not $done) { try { $p.Kill($true) } catch { } ; [void]$p.WaitForExit(5000) }
+        $code = if ($done) { $p.ExitCode } else { 1 }
+        $text = ((@((Get-Content $outFile -Raw -ErrorAction SilentlyContinue),
+                    (Get-Content $errFile -Raw -ErrorAction SilentlyContinue)) -join '') -as [string]).TrimEnd()
+        Remove-Item $outFile, $errFile -Force -ErrorAction SilentlyContinue
+        # The timeout goes in the NAME. "the command never came back" and "it exited 1"
+        # are different findings, and the raw output cannot tell them apart -- a killed
+        # command usually printed nothing at all.
+        $name = if ($done) { $c.Name } else { "$($c.Name) -- timeout after $($c.TimeoutSec)s" }
+        Phase $name {
+            # Only when there is any: a killed command usually printed nothing at all,
+            # and an empty line above the reason is not output, it is a gap.
+            if ($text) { $text }
+            # Every other phase's output names the tool that produced it; this one's
+            # does not, and the command is the only thing here a reader can act on.
+            if ($code -ne 0) { "run: $($c.Run)"; $global:LASTEXITCODE = 1 }
+        } -Elapsed $sw.Elapsed.TotalSeconds
+    }
+}
+
 # --- run -------------------------------------------------------------------
 $cwd = (Get-Location).Path
 $report = @()
@@ -1096,6 +1166,7 @@ foreach ($s in $stacks) {
             'proto' { Invoke-ProtoStack $s }
             'godot' { Invoke-GodotStack $s }
             'dotnet' { Invoke-DotnetStack $s }
+            'custom' { Invoke-CustomStack $s }
         }
     } catch {
         # Fail closed: a crash in the gate is a failure, never a silent pass.
@@ -1148,7 +1219,12 @@ if ($script:FmtSlnDir) { Remove-Item $script:FmtSlnDir -Recurse -Force -ErrorAct
 # The two runs that legitimately verify nothing say so and exit long before this
 # point: `[SKIP] no changes` on a clean fast lane, and `[SKIP] no known stack found`
 # in a repo the gate was never given a marker file for.
-if (-not $script:Failed -and $script:Phases -eq 0) {
+# The third one is the custom stack declining to run: nobody on this machine has read
+# those commands yet, or they are full-level and this is the fast lane. Both are
+# decisions of the gate's own rather than a repository that verifies nothing, and both
+# say so on the record -- failing them would make an untrusted repo one nobody can
+# commit to, and a repo whose checks are full-level one no agent turn can finish.
+if (-not $script:Failed -and $script:Phases -eq 0 -and -not $script:CustomDeferred) {
     $names = @($stacks | ForEach-Object { $_.Stack }) -join ', '
     $report += "[FAIL] no check phase ran -- nothing was verified$(if ($names) { " ($names)" }), so this run is not green"
     $script:Failed = $true

@@ -15,6 +15,7 @@ $script:KnownMarkers = [ordered]@{
     python = 'pyproject.toml or requirements.txt'
     rust   = 'Cargo.toml'
     dotnet = '*.csproj'
+    custom = 'qgate.json with a non-empty "checks" array'
 }
 
 # Directories that never hold a project we own.
@@ -145,6 +146,106 @@ function Get-GodotBin {
     return $null
 }
 
+# --- repo-declared custom checks -------------------------------------------
+# qgate.json may carry a "checks" array: commands this repository wants run as part
+# of the gate. Parsed here rather than in check.ps1 because the presence of a
+# non-empty array is what creates the `custom` stack, and detection is what answers
+# that question.
+#
+# Returns $null when nothing is declared -- no qgate.json, no `checks` key, or an
+# empty array -- so a repo without one simply has no custom stack. Otherwise an
+# object with .Checks (Name/Run/Level/TimeoutSec, in file order) and .Error: the
+# FIRST reason the array is unusable, or ''. A malformed array is never silently
+# ignored -- a check nobody notices reads exactly like a check that passes.
+function Get-CustomChecks([string]$Root) {
+    $file = Join-Path $Root 'qgate.json'
+    if (-not (Test-Path $file)) { return $null }
+    # Same rule the tool pins already follow: a qgate.json that is not JSON declares
+    # nothing. It cannot declare a malformed `checks` either -- there is no `checks`
+    # to read -- so this is absence, not a verdict.
+    $json = try { Get-Content $file -Raw | ConvertFrom-Json } catch { $null }
+    if ($null -eq $json -or $json.PSObject.Properties.Name -notcontains 'checks') { return $null }
+    $bad = { param($m) [pscustomobject]@{ Checks = @(); Error = $m } }
+    $raw = $json.checks
+    if ($raw -isnot [Array]) { return (& $bad 'qgate.json "checks" must be an array') }
+    if ($raw.Count -eq 0) { return $null }
+
+    $checks = @()
+    for ($i = 0; $i -lt $raw.Count; $i++) {
+        $c = $raw[$i]
+        $n = $i + 1
+        # A missing name, a name that is not a string and an element that is not an
+        # object at all all land here, which is the honest answer: none of them names
+        # a check. Lowercase because the name is printed in [PASS]/[FAIL] lines beside
+        # phase names the gate itself owns.
+        $name = [string]$c.name
+        if ($name -cnotmatch '^[a-z0-9][a-z0-9._-]*$') {
+            return (& $bad "qgate.json check #${n} has no usable name ('$name') -- must match ^[a-z0-9][a-z0-9._-]*$")
+        }
+        if ($checks.Name -contains $name) { return (& $bad "qgate.json declares two checks named '$name'") }
+        $run = $c.run
+        if ($run -isnot [string] -or -not $run.Trim()) {
+            return (& $bad "qgate.json check '$name' needs a non-empty `"run`" string")
+        }
+        $level = if ($null -eq $c.level) { 'full' } else { [string]$c.level }
+        if ($level -cnotin 'fast', 'full') {
+            return (& $bad "qgate.json check '$name' has level '$level' -- must be fast or full")
+        }
+        $sec = 600
+        if ($null -ne $c.timeoutSec) {
+            if (($c.timeoutSec -is [string]) -or (($c.timeoutSec -as [int]) -le 0)) {
+                return (& $bad "qgate.json check '$name' has timeoutSec '$($c.timeoutSec)' -- must be a positive number of seconds")
+            }
+            $sec = [int]$c.timeoutSec
+        }
+        $checks += [pscustomobject]@{ Name = $name; Run = $run; Level = $level; TimeoutSec = $sec }
+    }
+    [pscustomobject]@{ Checks = $checks; Error = '' }
+}
+
+# Where this machine remembers which repositories may run their own commands. Per
+# user, never inside the repository: a trust marker a clone can carry is not trust.
+function Get-TrustStore {
+    if ($env:LOCALAPPDATA) { Join-Path $env:LOCALAPPDATA 'qgate\trusted.json' }
+    else { Join-Path $HOME '.config/qgate/trusted.json' }
+}
+
+function Get-TrustKey([string]$Root) { (Resolve-Path $Root).Path.TrimEnd('\', '/') }
+
+# The checks, re-serialised deterministically: sorted by name, the four known fields
+# only, no whitespace. So reformatting qgate.json, reordering the array or adding a
+# comment field does not cost the user their trust, while any change to a name, a
+# command, a level or a timeout does -- which is the only thing the hash is for.
+# Sorted ORDINALLY: a culture-aware sort of '.', '-' and '_' is not the same order on
+# every machine, and a hash that depends on the locale is not a hash.
+function Get-ChecksHash($Checks) {
+    $byName = @{}
+    foreach ($c in $Checks) { $byName[$c.Name] = $c }
+    $names = [string[]]@($byName.Keys)
+    [Array]::Sort($names, [StringComparer]::Ordinal)
+    $canon = '[' + (@($names | ForEach-Object {
+                $c = $byName[$_]
+                '{"name":' + (ConvertTo-Json $c.Name -Compress) + ',"run":' + (ConvertTo-Json $c.Run -Compress) +
+                ',"level":' + (ConvertTo-Json $c.Level -Compress) + ',"timeoutSec":' + $c.TimeoutSec + '}'
+            }) -join ',') + ']'
+    [BitConverter]::ToString(
+        [Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($canon))).Replace('-', '').ToLowerInvariant()
+}
+
+function Get-TrustedHash([string]$Root) {
+    $f = Get-TrustStore
+    if (-not (Test-Path $f)) { return $null }
+    $j = try { Get-Content $f -Raw | ConvertFrom-Json } catch { $null }
+    if (-not $j) { return $null }
+    # Property lookup is case-insensitive, which is what a Windows path needs.
+    $j.(Get-TrustKey $Root)
+}
+
+function Test-ChecksTrusted([string]$Root, $Checks) {
+    $have = Get-TrustedHash $Root
+    [bool]($have -and $have -eq (Get-ChecksHash $Checks))
+}
+
 function Test-AnyFile([string]$Dir, [string[]]$Patterns) {
     foreach ($p in $Patterns) {
         if (Get-ChildItem -Path $Dir -Filter $p -File -Force -ErrorAction SilentlyContinue) { return $true }
@@ -228,6 +329,14 @@ function Get-Stacks([string]$Root) {
             $warn = 'no Godot binary -- set GODOT_BIN; the gate cannot verify this stack until then'
         }
         $stacks += [pscustomobject]@{ Stack = 'godot'; Dir = $dir; Rel = (& $rel $dir); Marker = 'project.godot'; Implemented = $true; Warn = $warn }
+    }
+
+    # The one stack whose marker is not a file the language brought with it: the
+    # repository declares it. Root only -- qgate.json is the gate's own config file
+    # and the gate has exactly one per repository. A malformed `checks` still creates
+    # the stack, because the alternative is a broken config that reads as absence.
+    if (Get-CustomChecks $Root) {
+        $stacks += [pscustomobject]@{ Stack = 'custom'; Dir = $Root; Rel = ''; Marker = 'qgate.json'; Implemented = $true; Warn = '' }
     }
 
     # Declared, detected, NOT checked. Reported so nobody mistakes silence for a
