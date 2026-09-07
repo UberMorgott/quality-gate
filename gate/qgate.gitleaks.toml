@@ -1,0 +1,37 @@
+# gitleaks configuration for the gate's `secrets` phase.
+#
+# `[extend] useDefault = true` starts from gitleaks' own rule set and takes rules AWAY
+# by id; nothing here adds a rule or weakens a pattern. Passed as `-c` and only when
+# the repository has no gitleaks config of its own -- a repo that already tuned its own
+# rules has thought about this harder than the gate has.
+#
+# Why by configuration and not by dropping the RuleID after the fact: a post-filter
+# still pays for the rule (gitleaks matches, computes entropy and redacts every hit
+# before the gate ever sees the JSON), and it silently disagrees with what a developer
+# gets running `gitleaks` by hand in the same tree. Disabling the rule is the same
+# answer from both.
+#
+# Measured across nine repositories: 51 of 51 findings the gate reported were false,
+# and after the gitignore filter the three rules below were every one that remained.
+[extend]
+useDefault = true
+
+disabledRules = [
+  # `"key": <hex>` / `Key = <string>` with no other evidence. Sampled hits, all of them:
+  # Phoenix Point asset GUIDs in ppcontent.json and the docs that quote them, a content
+  # digest printed in a test log, an OAuth response pasted into an API reference, and
+  # `Key = "L323probe-tac"` -- a probe label, not a key at all. The rule's own signal is
+  # "a long high-entropy string near the word key", which is what a content-addressed
+  # asset id looks like. Nothing distinguishes them, so it cannot be scoped to
+  # documentation and manifests either: it fired in .json, .md and .cs alike.
+  "generic-api-key",
+
+  # `curl -H "Authorization: ..."` and `curl -u user:pass`. Every sampled hit was an
+  # example in API documentation -- 75 of them in one reference file, one of which
+  # matched nothing but the markdown line `**curl:**`. A real credential in a real
+  # script is still caught by the provider rules (github-pat, aws-access-token,
+  # slack-*, and the rest of the default set), which key off the token's own shape
+  # rather than off the command that carries it.
+  "curl-auth-header",
+  "curl-auth-user",
+]

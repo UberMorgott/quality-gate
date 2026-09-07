@@ -1752,6 +1752,12 @@ try {
 # the way the gdtoolkit ones above are.
 $cpp = Join-Path $tmp 'cpp'
 Copy-Item (Join-Path $PSScriptRoot 'testdata\cpp-fixture') $cpp -Recurse
+# A cmake run against this repository leaves testdata/cpp-fixture/build/ behind. It is
+# gitignored, Copy-Item -Recurse does not care, and CMakeCache.txt records the ABSOLUTE
+# path it was generated for -- so the copy failed `configure` with "the current
+# CMakeCache.txt directory is different", on a fixture nobody had touched. Invisible
+# until cmake was on PATH, which is the machine this suite is supposed to be honest on.
+Remove-Item (Join-Path $cpp 'build') -Recurse -Force -ErrorAction SilentlyContinue
 
 # A build tree is CMake's own output -- it carries a CMakeLists.txt for every
 # dependency it fetched, and the next configure run deletes the lot. A CMakeLists.txt
@@ -1847,6 +1853,7 @@ Check 'build trees and paths outside the stack are not analysed' `
 # reporting "not run" -- which is not what these checks are about.
 $cppAn = Join-Path $tmp 'cpp-analysis'
 Copy-Item (Join-Path $PSScriptRoot 'testdata\cpp-fixture') $cppAn -Recurse
+Remove-Item (Join-Path $cppAn 'build') -Recurse -Force -ErrorAction SilentlyContinue
 # bugprone-incorrect-roundings in the stack's own source, bugprone-branch-clone in a
 # dependency the build compiles: one has to be reported and the other has to not be.
 [IO.File]::WriteAllText((Join-Path $cppAn 'src\rounding.cpp'), "int qgate_round(double x) { return (int)(x + 0.5); }`n")
@@ -2022,6 +2029,56 @@ if (Get-Command typos -ErrorAction SilentlyContinue) {
         (($LASTEXITCODE -ne 0) -and ($txNone -match '\[FAIL\] typos')) "code=$LASTEXITCODE $txNone"
 } else {
     Write-Output '[skip] typos not on PATH -- its fast/full scoping cannot be judged here'
+}
+
+# 38. secrets. Measured across nine real repositories, the phase reported 51 findings
+# and every one was false -- so the two questions here are "does it still catch a real
+# secret" and "has it stopped failing repositories over files git cannot commit".
+#
+# The planted token is assembled from two halves for the same reason the typo above is:
+# written out whole it is a real finding in THIS repository, and the gate's own base
+# stack goes red on its own test fixture.
+if (Get-Command gitleaks -ErrorAction SilentlyContinue) {
+    $sec = Join-Path $tmp 'secrets'
+    New-Item -ItemType Directory -Path (Join-Path $sec 'vendor') -Force | Out-Null
+    git -C $sec init -q 2>$null
+    $pat = 'ghp_' + 'S8kQ2mVx7bTnR4wLzYe1CdHu6JaGpF0iNoBq'
+    # A file named by .gitignore inside a TRACKED directory. This is the case that made
+    # the gate unusable: GOwebserver ignores `config.json` by name, that file holds a
+    # real jwt_secret, and the run failed over it -- red, correct about the string, and
+    # green-able by no action anyone could take. Filtering by directory could never see
+    # it, because the directory is the repository root.
+    [IO.File]::WriteAllText((Join-Path $sec '.gitignore'), "config.json`nvendor/`n")
+    [IO.File]::WriteAllText((Join-Path $sec 'config.json'), "{ `"github_token`": `"$pat`" }`n")
+    # ...and the directory case the phase already handled, kept asserted so the new
+    # filter is not a regression of the old one.
+    [IO.File]::WriteAllText((Join-Path $sec 'vendor\dump.json'), "{ `"github_token`": `"$pat`" }`n")
+    # Documentation quoting a curl example, and a manifest whose ids look like keys.
+    # 51 of the 51 false findings were one of these two shapes.
+    [IO.File]::WriteAllText((Join-Path $sec 'API.md'),
+        "curl -H `"Authorization: Bearer 0af1c39b7e5d24a8f6b013ce97d5a2b4`" https://example.test/v1`n")
+    [IO.File]::WriteAllText((Join-Path $sec 'assets.json'), "{ `"key`": `"c7a9f1d24b6e4a3c8f5b7d1e9a2c4b60`" }`n")
+    $out = (& pwsh -NoProfile -File $gate -Root $sec -Only base -Full 2>&1 | Out-String)
+    $secCode = $LASTEXITCODE
+    Check 'a secret in a gitignored FILE inside a tracked directory does not fail the gate' `
+        (($secCode -eq 0) -and ($out -notmatch 'config\.json') -and ($out -notmatch 'dump\.json')) `
+        "code=$secCode $out"
+    Check 'a curl example and an asset manifest are not secrets' `
+        (($out -notmatch 'API\.md') -and ($out -notmatch 'assets\.json')) $out
+    # The green above must be the filter's doing, not a phase that stopped looking. The
+    # same token, same repository, in a file nothing ignores.
+    [IO.File]::WriteAllText((Join-Path $sec 'app.env'), "GITHUB_TOKEN=$pat`n")
+    $out = (& pwsh -NoProfile -File $gate -Root $sec -Only base -Full 2>&1 | Out-String)
+    $secCode = $LASTEXITCODE
+    Check 'a real token in a tracked file still fails the gate' `
+        (($secCode -ne 0) -and ($out -match '\[FAIL\] secrets') -and ($out -match 'app\.env') -and
+            ($out -match 'github-pat')) "code=$secCode $out"
+    # ...and it names only that file: the ignored copies of the identical token must not
+    # ride along on a run that was going to be red anyway.
+    Check 'the failing run still says nothing about the ignored copies' `
+        (($out -notmatch 'config\.json') -and ($out -notmatch 'dump\.json')) $out
+} else {
+    Write-Output '[skip] gitleaks not on PATH -- the secrets filter cannot be judged here'
 }
 
 Remove-Item $tmp -Recurse -Force

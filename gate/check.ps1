@@ -1299,6 +1299,16 @@ function Invoke-CppStack($s) {
 # because a phase that did not run must never read like a phase that passed.
 function Invoke-BaseStack($s) {
     Set-Location $Root
+    # The gate's own rule set: gitleaks' default, minus three rules that were 51 of 51
+    # false positives across nine repositories (the reasoning is in the .toml itself).
+    # NOT applied over a repository that ships a gitleaks config of its own -- `-c`
+    # REPLACES that file rather than adding to it, and a repo that already tuned its own
+    # rules has thought about them harder than the gate has. Both lanes get the same
+    # argument: a fast lane and a full lane disagreeing about one file is the divergence
+    # the typos phase already had to be taught not to grow.
+    $glCfg = @(if (-not (@('.gitleaks.toml', 'gitleaks.toml') |
+                Where-Object { Test-Path -LiteralPath (Join-Path $Root $_) })) {
+            '-c'; (Join-Path $PSScriptRoot 'qgate.gitleaks.toml') })
     if (-not (Have 'gitleaks')) {
         $script:Lines += '[SKIP] secrets -- gitleaks not on PATH (https://github.com/gitleaks/gitleaks)'
         $script:BaseDeferred = $true
@@ -1314,18 +1324,25 @@ function Invoke-BaseStack($s) {
         # nothing about .gitignore. Measured on a real repository -- 108 MB of generated
         # graphify cache under an ignored directory, untracked, not that repo's code, and
         # a red gate over a `generic-api-key` inside it. Same rule gofmt and the Godot
-        # scanner already follow: what a repo ignores is not part of that repo. Asked per
-        # DIRECTORY and cached, which is what Test-GitIgnoredDir is for.
+        # scanner already follow: what a repo ignores is not part of that repo.
+        #
+        # Asked per FILE, not per directory: GOwebserver ignores `config.json` by name in
+        # a tracked directory, that file holds a real jwt_secret, and the gate hard-failed
+        # the repository over a file git can never commit -- a red gate that no correct
+        # action makes green. One batched `check-ignore` for every distinct path a finding
+        # named, which is a handful even when the findings are in the hundreds.
         $sw = [Diagnostics.Stopwatch]::StartNew()
         # 2>$null, not 2>&1: the progress and summary lines go to stderr and would make
         # the report unparseable JSON. Exit 1 is "leaks found" and 0 is "none"; anything
         # else is gitleaks failing, which is not a verdict about the code.
-        $raw = (& gitleaks dir --redact --no-banner --no-color -f json -r - $Root 2>$null | Out-String)
+        $raw = (& gitleaks dir @glCfg --redact --no-banner --no-color -f json -r - $Root 2>$null | Out-String)
         $glCode = $LASTEXITCODE
         $sw.Stop()
         $hits = @(if ($glCode -eq 1) { try { $raw | ConvertFrom-Json } catch { $null } })
-        $hits = @($hits | Where-Object { $_.File -and
-                -not (Test-GitIgnoredDir $Root ([IO.Path]::GetDirectoryName(($_.File -replace '/', '\')))) })
+        # gitleaks reports absolute paths with forward slashes; git check-ignore takes
+        # them as they are, verified on Windows.
+        $ignored = Get-GitIgnoredSet $Root @($hits | ForEach-Object { $_.File } | Where-Object { $_ } | Sort-Object -Unique)
+        $hits = @($hits | Where-Object { $_.File -and -not $ignored[$_.File] })
         Phase 'secrets' {
             if ($glCode -gt 1) { "gitleaks exited $glCode -- the scan did not complete"; $global:LASTEXITCODE = 1; return }
             foreach ($h in $hits) { "$($h.File):$($h.StartLine): $($h.RuleID) -- $($h.Fingerprint)" }
@@ -1339,7 +1356,7 @@ function Invoke-BaseStack($s) {
         # scanned, and gitleaks answers that with exit 0 -- a green line standing for
         # an empty scan is the one thing this report must not print.
         $staged = @(& git -C $Root diff --cached --name-only 2>$null | Where-Object { $_ })
-        if ($staged) { Phase 'secrets' { gitleaks git --staged --redact --no-banner --no-color -v $Root } }
+        if ($staged) { Phase 'secrets' { gitleaks git --staged @glCfg --redact --no-banner --no-color -v $Root } }
         else {
             $script:Lines += '[SKIP] secrets -- nothing staged (the full level scans the working tree)'
             $script:BaseDeferred = $true

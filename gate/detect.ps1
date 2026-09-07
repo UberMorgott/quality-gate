@@ -100,6 +100,37 @@ function Test-GitIgnoredDir([string]$Root, [string]$Dir) {
     return $script:IgnoredDirs[$Dir]
 }
 
+# Which of these paths does the repo ignore? One git process for the whole batch.
+# `check-ignore -v --non-matching` prints exactly one line per path, in the order given,
+# and the line for a path git does NOT ignore begins with `::`. Only that two-character
+# prefix is read, so git's C-quoting of the echoed path -- the reason the --stdin form
+# above was rejected -- cannot corrupt the answer.
+#
+# Paths go as ARGUMENTS, never through stdin: PowerShell terminates a piped string with
+# CRLF, and the trailing CR became part of the last path. Measured, and it lied in both
+# directions -- `config.json\r` read as NOT ignored, `docs/api/autograph-public.md\r`
+# read as ignored because the CR also defeated the `!` line that re-included it.
+#
+# Chunked, because the whole batch is one command line and Windows caps that at 32 KB.
+function Get-GitIgnoredSet([string]$Root, [string[]]$Paths) {
+    $set = @{}
+    $prev = $global:LASTEXITCODE
+    for ($i = 0; $i -lt $Paths.Count; $i += 200) {
+        $chunk = @($Paths[$i..([Math]::Min($i + 199, $Paths.Count - 1))])
+        $out = @(& git -C $Root check-ignore -v --non-matching -- @chunk 2>$null)
+        # A short answer is git refusing the batch, not an answer about these paths.
+        # Ignore nothing rather than drop findings on a reply nobody can align.
+        if ($out.Count -ne $chunk.Count) { continue }
+        for ($j = 0; $j -lt $chunk.Count; $j++) {
+            if (-not "$($out[$j])".StartsWith('::')) { $set[$chunk[$j]] = $true }
+        }
+    }
+    # Same reason as Test-GitIgnored: --non-matching exits 1 when nothing matched, and
+    # check.ps1's Phase fails a phase on a non-zero $LASTEXITCODE.
+    $global:LASTEXITCODE = $prev
+    return $set
+}
+
 function Find-Marker([string]$Root, [string[]]$Names, [int]$Depth = 3) {
     Get-ChildItem -Path $Root -Recurse -Depth $Depth -File -Force -ErrorAction SilentlyContinue |
         Where-Object {
