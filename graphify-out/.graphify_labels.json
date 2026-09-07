@@ -5,7 +5,7 @@
   "3": "quality_gate job anchor shared by both hooks",
   "4": "Greeter.cs",
   "5": "selftest.ps1",
-  "6": "qgate wire (repo wiring, config only)",
+  "6": "Claude Code Stop hook (exit code 2)",
   "7": "ignoreFiles",
   "8": "package.json",
   "9": "check.ps1",
@@ -29,5 +29,6 @@
   "27": "Fixture.csproj",
   "28": "\"Gate is wrong\" issue template",
   "29": "install.ps1",
-  "30": "trust.ps1"
+  "30": "trust.ps1",
+  "31": "string"
 }

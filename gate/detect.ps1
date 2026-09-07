@@ -15,11 +15,21 @@ $script:KnownMarkers = [ordered]@{
     python = 'pyproject.toml or requirements.txt'
     rust   = 'Cargo.toml'
     dotnet = '*.csproj'
+    cpp    = 'CMakeLists.txt'
     custom = 'qgate.json with a non-empty "checks" array'
 }
 
 # Directories that never hold a project we own.
 $script:SkipDirs = @('node_modules', '.git', 'vendor', 'dist', 'build', '.cache', '.venv', 'target', 'bin', 'obj')
+
+# CMake's own output, not anybody's source. A configured build tree carries a
+# CMakeLists.txt for every dependency it fetched (under `_deps/`) plus generated ones
+# of its own, and an IDE names its tree `cmake-build-debug`. Detecting those would gate
+# generated code, in a directory the next configure run deletes. $SkipDirs above covers
+# the exact names it knows; these are the ones it cannot spell -- a PREFIX
+# (cmake-build-*) and names it does not carry. Used for the marker search AND for the
+# source sweep the format phase does, so both answer the same question.
+$script:CppSkipDir = '(?i)[\\/](build|out|_deps|cmake-build[^\\/]*|node_modules|\.git)[\\/]'
 
 function Get-RepoRoot([string]$StartDir) {
     $top = (& git -C $StartDir rev-parse --show-toplevel 2>$null)
@@ -254,7 +264,7 @@ function Test-AnyFile([string]$Dir, [string[]]$Patterns) {
 }
 
 # Returns one object per detected stack:
-#   Stack       go | web | godot | proto | python | rust
+#   Stack       go | web | godot | proto | python | rust | dotnet | cpp | custom
 #   Dir         absolute directory holding the marker
 #   Rel         path relative to the repo root, forward slashes, '' for the root
 #   Marker      the file whose presence created this phase (provenance)
@@ -311,6 +321,24 @@ function Get-Stacks([string]$Root) {
             $warn = 'dotnet not on PATH -- the gate cannot verify this stack until it is'
         }
         $stacks += [pscustomobject]@{ Stack = 'dotnet'; Dir = $dir; Rel = (& $rel $dir); Marker = $m.Name; Implemented = $true; Warn = $warn }
+    }
+
+    # One stack per TREE, not per marker: a CMakeLists.txt inside a project that
+    # already has one is add_subdirectory() material -- configuring the top one
+    # configures it too, so detecting both would configure and build the same code
+    # twice, into two build trees. Shortest directory first, so a parent is always
+    # recorded before the children it swallows.
+    $cppDirs = @()
+    foreach ($m in Find-Marker $Root @('CMakeLists.txt') | Sort-Object { $_.DirectoryName.Length }) {
+        $dir = $m.DirectoryName
+        if ($m.FullName.Substring($Root.Length) -match $script:CppSkipDir) { continue }
+        if ($cppDirs | Where-Object { $dir.StartsWith("$_\") -or $dir.StartsWith("$_/") }) { continue }
+        $cppDirs += $dir
+        $warn = ''
+        if (-not (Get-Command cmake -ErrorAction SilentlyContinue)) {
+            $warn = 'cmake not on PATH -- the gate cannot verify this stack until it is'
+        }
+        $stacks += [pscustomobject]@{ Stack = 'cpp'; Dir = $dir; Rel = (& $rel $dir); Marker = 'CMakeLists.txt'; Implemented = $true; Warn = $warn }
     }
 
     foreach ($m in Find-Marker $Root @('buf.yaml')) {

@@ -70,6 +70,15 @@ foreach ($s in $stacks) {
     } elseif ($s.Stack -eq 'web') {
         Write-Output "web       $where -- enabled"
         Install-WebConfigs $s.Dir $where
+    } elseif ($s.Stack -eq 'cpp') {
+        Write-Output "cpp       $where -- enabled"
+        # No template for this one: .clang-format is a house style, and writing one
+        # into somebody else's repository is not wiring it -- it is a diff over every
+        # source file they have. Said out loud, because without the file the format
+        # phase is simply absent and absence reads like a pass.
+        if (-not (Test-Path (Join-Path $s.Dir '.clang-format')) -and -not (Test-Path (Join-Path $root '.clang-format'))) {
+            Write-Output '  next:   no .clang-format -- format is skipped until there is one (clang-format --style=llvm -dump-config > .clang-format)'
+        }
     } elseif ($s.Stack -eq 'custom') {
         # Wiring a repository is not reading the commands it declares, so this reports
         # the state and never changes it: trusting is a separate, deliberate command.

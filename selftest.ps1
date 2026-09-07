@@ -52,6 +52,7 @@ Check 'detects godot stack' ([bool]($stacks | Where-Object { $_.Stack -eq 'godot
 # repo carries several of them. The marker recorded has to be the file, not the glob.
 Check 'detects dotnet stack by its csproj name' `
     ([bool]($stacks | Where-Object { $_.Stack -eq 'dotnet' -and $_.Marker -eq 'Fixture.csproj' -and $_.Implemented }))
+Check 'detects cpp stack' ([bool]($stacks | Where-Object { $_.Stack -eq 'cpp' -and $_.Marker -eq 'CMakeLists.txt' -and $_.Implemented }))
 Check 'detects python stack as not implemented' ([bool]($stacks | Where-Object { $_.Stack -eq 'python' -and -not $_.Implemented }))
 # A stack with no marker file does not exist at all. testdata/ now holds a python
 # fixture (check 28 needs one), so this has to be asked of a tree that has no python
@@ -1585,6 +1586,82 @@ try {
     Check 'an empty checks array is no stack at all' `
         (($out -match '\[WHY\] custom -- absent') -and ($out -notmatch '\[FAIL\] custom')) $out
 } finally { $env:LOCALAPPDATA = $priorLocal }
+
+# 36. The C/C++ CMake stack. Its two halves ask different tools -- clang-format for the
+# format phase, cmake for configure and build -- and neither is on every machine, so
+# every check here either asserts what the gate does WITHOUT the tool, or is guarded
+# the way the gdtoolkit ones above are.
+$cpp = Join-Path $tmp 'cpp'
+Copy-Item (Join-Path $PSScriptRoot 'testdata\cpp-fixture') $cpp -Recurse
+
+# A build tree is CMake's own output -- it carries a CMakeLists.txt for every
+# dependency it fetched, and the next configure run deletes the lot. A CMakeLists.txt
+# BELOW one that was already detected is add_subdirectory() material: the top one
+# configures it too, so a second stack would configure and build the same code twice.
+$cppTree = Join-Path $tmp 'cpp-tree'
+foreach ($sub in '', 'build', 'out', '_deps', 'cmake-build-debug', 'src\engine') {
+    $d = if ($sub) { Join-Path $cppTree $sub } else { $cppTree }
+    New-Item -ItemType Directory -Path $d -Force | Out-Null
+    Set-Content (Join-Path $d 'CMakeLists.txt') 'project(x)'
+}
+$cppStacks = @(Get-Stacks $cppTree | Where-Object { $_.Stack -eq 'cpp' })
+Check 'only the topmost CMakeLists.txt of a tree is a stack' `
+    (($cppStacks.Count -eq 1) -and ($cppStacks[0].Rel -eq '')) `
+    (($cppStacks | ForEach-Object { "cpp '$($_.Rel)'" }) -join ' | ')
+# ...and "topmost per TREE" is not "one per repository". Without this half, a rule that
+# detected nothing at all below the root would satisfy the check above.
+$cppTwo = Join-Path $tmp 'cpp-two'
+foreach ($sub in 'a', 'b') {
+    New-Item -ItemType Directory -Path (Join-Path $cppTwo $sub) -Force | Out-Null
+    Set-Content (Join-Path $cppTwo "$sub\CMakeLists.txt") 'project(x)'
+}
+$cppRels = @(Get-Stacks $cppTwo | Where-Object { $_.Stack -eq 'cpp' }).Rel
+Check 'two sibling CMake projects are two stacks' `
+    ((($cppRels | Sort-Object) -join ',') -eq 'a,b') "got: $($cppRels -join ',')"
+
+# No .clang-format: the gate has no style to check the sources against, and it neither
+# invents one nor stays quiet about the phase it therefore did not run.
+$r = Invoke-Gate $cpp
+Check 'format is skipped when there is no .clang-format' `
+    ($r.Out -match '\[SKIP\] format -- no \.clang-format') $r.Out
+
+$out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $cpp -Only cpp 2>&1 | Out-String)
+Check '-Only cpp selects the stack' `
+    (($out -notmatch 'no such stack detected') -and ($out -match 'cpp \(CMakeLists\.txt\)')) $out
+
+Set-Content (Join-Path $cpp '.clang-format') 'BasedOnStyle: LLVM'
+[IO.File]::WriteAllText((Join-Path $cpp 'src\ugly.cpp'), "int  ugly( ) {return    0;}`n")
+$r = Invoke-Gate $cpp
+if (Get-Command clang-format -ErrorAction SilentlyContinue) {
+    Check 'clang-format fails the gate on a misformatted source' `
+        (($r.Code -ne 0) -and ($r.Out -match '\[FAIL\] format') -and ($r.Out -match 'ugly\.cpp')) $r.Out
+} else {
+    # Nothing was checked, and "not checked" must never read as "clean" -- the same
+    # rule the [UNKNOWN] lines elsewhere in this gate exist for.
+    Check 'a missing clang-format is named, not silently passed' `
+        ($r.Out -match '\[SKIP\] format -- clang-format not found') $r.Out
+}
+
+# cmake is on this machine or it is not, and the gate's answer has to be the same
+# either way -- so it is hidden from PATH for the two runs below instead of the suite
+# skipping itself on half the machines. Same split the .NET SDK and the Godot binary
+# follow: the full level is what guards a commit and CI, so it fails there; the fast
+# lane never reaches configure or build, so it only warns.
+$priorPath = $env:PATH
+$sep = [IO.Path]::PathSeparator
+$env:PATH = @($priorPath -split $sep | Where-Object {
+        $_ -and -not (Test-Path -LiteralPath (Join-Path $_ 'cmake.exe') -ErrorAction SilentlyContinue) -and
+        -not (Test-Path -LiteralPath (Join-Path $_ 'cmake') -ErrorAction SilentlyContinue)
+    }) -join $sep
+try {
+    $fast = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $cpp -All 2>&1 | Out-String)
+    $full = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $cpp -All -Full 2>&1 | Out-String)
+    $fullCode = $LASTEXITCODE
+    Check 'no cmake warns on the fast level, it does not fail there' `
+        (($fast -match '\[WARN\] cpp .*cmake not on PATH') -and ($fast -notmatch 'required at the full level')) $fast
+    Check 'no cmake fails the full level, with the reason' `
+        (($fullCode -ne 0) -and ($full -match 'cmake not on PATH -- required at the full level')) $full
+} finally { $env:PATH = $priorPath }
 
 Remove-Item $tmp -Recurse -Force
 if ($script:Fails) { Write-Output "`n$($script:Fails) of $($script:Total) check(s) failed"; exit 1 }

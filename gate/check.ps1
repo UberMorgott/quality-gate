@@ -11,7 +11,7 @@
 # With no stack switch the changed side is auto-detected from git status.
 [CmdletBinding(PositionalBinding = $false)]
 param(
-    [string[]]$Only,      # go | web | rust | proto | godot | dotnet | custom -- restrict to these stacks (one value: -Only go,web)
+    [string[]]$Only,      # go | web | rust | proto | godot | dotnet | cpp | custom -- restrict to these stacks (one value: -Only go,web)
     [switch]$All,         # every detected stack, ignore git status
     [switch]$Fast,
     [switch]$Full,
@@ -1075,6 +1075,70 @@ function Invoke-GodotStack($s) {
     } -FailIfOutput
 }
 
+# --- cpp: clang-format on the sources, cmake configure and build -----------
+function Invoke-CppStack($s) {
+    Set-Location $s.Dir
+    $exts = '*.c', '*.cc', '*.cpp', '*.cxx', '*.h', '*.hh', '*.hpp', '*.hxx'
+    # The repo root first: a native subdirectory inside a bigger repository keeps its
+    # style at the top, which is also where clang-format's own upward search finds it.
+    $cfg = @($Root, $s.Dir) | Where-Object { Test-Path (Join-Path $_ '.clang-format') } | Select-Object -First 1
+    if (-not $cfg) {
+        # There is no house style to check against, and inventing one would make the
+        # gate the author of a diff nobody asked for. Said out loud: a phase that did
+        # not run must never read like a phase that passed.
+        $script:Lines += '[SKIP] format -- no .clang-format'
+    } elseif (-not (Have 'clang-format')) {
+        $script:Lines += '[SKIP] format -- clang-format not found'
+    } else {
+        $src = @(Get-ChildItem $s.Dir -Recurse -File -Include $exts -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName.Substring($s.Dir.Length) -notmatch $script:CppSkipDir })
+        # -All means "every detected stack, ignore git status", so it ignores it here
+        # too -- the same rule the Godot runner follows, and for the reason measured
+        # there: narrowing under -All left the phase out of a run that asked for
+        # everything while the stack line still said [PASS].
+        if (-not $Full -and -not $All) {
+            $changed = Get-ChangedPaths $Root
+            if ($null -ne $changed) {
+                $want = @($changed | ForEach-Object { Join-Path $Root ($_ -replace '/', '\') })
+                $src = @($src | Where-Object { $want -contains $_.FullName })
+            }
+        }
+        if ($src.Count -gt 0) {
+            $paths = @($src.FullName)
+            # --Werror is what turns the diagnostic into an exit code; without it
+            # clang-format prints the complaint and exits 0.
+            Phase 'format' { clang-format --dry-run --Werror @paths }
+        } else {
+            $script:Lines += '[SKIP] format -- no changed C/C++ sources'
+        }
+    }
+
+    # Both phases below need cmake and both are full-level only, so the verdict about
+    # a missing one comes AFTER the format phase rather than instead of it -- exactly
+    # where the Godot binary's does, and for the same reason: failing every agent turn
+    # over a tool that turn was never going to invoke is not a gate. The fast lane
+    # still says it, as the detection [WARN] on the stack line.
+    if (-not $Full) { return }
+    if (-not (Have 'cmake')) {
+        Fail 'cpp: cmake not on PATH -- required at the full level (https://cmake.org/download/)'
+        return
+    }
+    # An existing cache is reused, never wiped: a configure from scratch re-runs every
+    # compiler probe and re-fetches every FetchContent dependency, and this phase runs
+    # on a commit.
+    $build = Join-Path $s.Dir 'build'
+    Phase 'configure' {
+        # -A x64 is the generator PLATFORM, which only the Visual Studio generators
+        # take -- and one of those is the default on Windows. Everywhere else the
+        # generator is single-config, so the build type is a configure-time answer.
+        if ($IsWindows) { cmake -S $s.Dir -B $build -A x64 }
+        else { cmake -S $s.Dir -B $build -DCMAKE_BUILD_TYPE=Release }
+    }
+    # --config on both platforms: a multi-config generator needs it and a single-config
+    # one ignores it, so one code path covers the two.
+    Phase 'build' { cmake --build $build --config Release }
+}
+
 # --- custom: the commands the repository declares in its own qgate.json ----
 # Arbitrary command lines out of a file in the working tree, which a clone, a pull or
 # a branch switch can change under the reader. So they run only for a repo somebody
@@ -1166,6 +1230,7 @@ foreach ($s in $stacks) {
             'proto' { Invoke-ProtoStack $s }
             'godot' { Invoke-GodotStack $s }
             'dotnet' { Invoke-DotnetStack $s }
+            'cpp' { Invoke-CppStack $s }
             'custom' { Invoke-CustomStack $s }
         }
     } catch {
