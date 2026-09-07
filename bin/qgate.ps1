@@ -76,7 +76,7 @@ switch ($cmd) {
         . (Join-Path $home_ 'gate\detect.ps1')
         Write-Output "install   $home_  $(git -C $home_ rev-parse --short HEAD 2>$null)"
         Write-Output "resolved  $((Get-Command qgate -ErrorAction SilentlyContinue).Source)"
-        foreach ($t in 'go', 'golangci-lint', 'govulncheck', 'node', 'npm', 'cargo', 'dotnet', 'cmake', 'clang-format', 'gitleaks', 'typos', 'osv-scanner', 'lefthook', 'buf', 'gdformat', 'gdlint') {
+        foreach ($t in 'go', 'golangci-lint', 'govulncheck', 'node', 'npm', 'cargo', 'dotnet', 'cmake', 'clang-format', 'clang-tidy', 'cppcheck', 'gitleaks', 'typos', 'osv-scanner', 'lefthook', 'buf', 'gdformat', 'gdlint') {
             $exe = Get-Command $t -ErrorAction SilentlyContinue
             # An absent tool is reported, not skipped: "what does the gate think it
             # has right now" is the whole question this command answers.
@@ -108,6 +108,10 @@ switch ($cmd) {
                 # Both already print their own name, and both print more than one line.
                 'cmake' { (& cmake --version) }
                 'clang-format' { (& clang-format --version) }
+                # clang-tidy leads with `LLVM (http://llvm.org/):` and puts the number on
+                # the line after it, so the first line alone would say nothing at all.
+                'clang-tidy' { "clang-tidy $(((& clang-tidy --version) -match 'LLVM version') -replace '.*LLVM version ', '')" }
+                'cppcheck' { (& cppcheck --version) }
                 # The three base-stack tools. gitleaks prints a bare string and an
                 # official build prints `version is set by build process` for it, so
                 # the name has to come from here or the line reads as nothing.

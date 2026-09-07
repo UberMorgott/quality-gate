@@ -1759,6 +1759,11 @@ if (Get-Command clang-format -ErrorAction SilentlyContinue) {
     Check 'a missing clang-format is named, not silently passed' `
         ($r.Out -match '\[SKIP\] format -- clang-format not found') $r.Out
 }
+# It has served its purpose, and every later run over this fixture is about something
+# else -- a stack the gate selects, a tool it cannot find. Left in place, on a machine
+# that HAS clang-format those runs came back `[FAIL] format` and the checks below read
+# a red report for a question they never asked.
+Remove-Item (Join-Path $cpp 'src\ugly.cpp') -Force
 
 # cmake is on this machine or it is not, and the gate's answer has to be the same
 # either way -- so it is hidden from PATH for the two runs below instead of the suite
@@ -1780,6 +1785,77 @@ try {
     Check 'no cmake fails the full level, with the reason' `
         (($fullCode -ne 0) -and ($full -match 'cmake not on PATH -- required at the full level')) $full
 } finally { $env:PATH = $priorPath }
+
+# The two static-analysis phases read their file list out of a compile database, which
+# is CMake's answer: it names every translation unit the BUILD compiles, dependencies
+# included, and the findings arrive from wherever the preprocessor reached. Both
+# conditions of the filter, because either alone lets one of those through -- measured
+# on a real repository, half the cppcheck findings came out of SDK headers two
+# directories above the project.
+$owner = Join-Path $tmp 'cpp'
+Check 'the stack own sources are what the analysis phases see' `
+    ((Test-CppOwn (Join-Path $owner 'src\greeting.cpp') $owner) -and
+    (Test-CppOwn (($owner -replace '\\', '/') + '/src/greeting.cpp') $owner))
+Check 'build trees and paths outside the stack are not analysed' `
+    (-not ((Test-CppOwn (Join-Path $owner 'build\_deps\zlib\z.c') $owner) -or
+        (Test-CppOwn (Join-Path $owner '_deps\zlib\z.c') $owner) -or
+        (Test-CppOwn (Join-Path $tmp 'elsewhere\sdk\ngx.h') $owner)))
+
+# A clean copy: the fixture above now carries a .clang-format and a deliberately
+# misformatted source, and a failed format phase would leave every phase after it
+# reporting "not run" -- which is not what these checks are about.
+$cppAn = Join-Path $tmp 'cpp-analysis'
+Copy-Item (Join-Path $PSScriptRoot 'testdata\cpp-fixture') $cppAn -Recurse
+# bugprone-incorrect-roundings in the stack's own source, bugprone-branch-clone in a
+# dependency the build compiles: one has to be reported and the other has to not be.
+[IO.File]::WriteAllText((Join-Path $cppAn 'src\rounding.cpp'), "int qgate_round(double x) { return (int)(x + 0.5); }`n")
+New-Item -ItemType Directory -Path (Join-Path $cppAn '_deps\vendor') -Force | Out-Null
+[IO.File]::WriteAllText((Join-Path $cppAn '_deps\vendor\vendor.cpp'), "int qgate_pick(int c) { if (c) { return 7; } else { return 7; } }`n")
+# Leading newline: the fixture's last line has none, and cmake answers an appended
+# command with `Parse error. Expected a newline`.
+Add-Content (Join-Path $cppAn 'CMakeLists.txt') "`ntarget_sources(qgate_fixture PRIVATE src/rounding.cpp _deps/vendor/vendor.cpp)"
+
+# Neither phase runs on the fast lane. They cost tens of seconds on a real tree (26.7s
+# for clang-tidy over 22 translation units), and a fast lane that pays that on every
+# commit is a fast lane people stop running -- the same split configure and build take.
+$r = Invoke-Gate $cppAn
+Check 'tidy and cppcheck are full-level only' `
+    (($r.Out -notmatch '\btidy\b') -and ($r.Out -notmatch '\bcppcheck\b')) $r.Out
+
+# Neither tool is on every machine, and "not checked" must never read as "clean".
+$priorPath = $env:PATH
+$env:PATH = @($priorPath -split $sep | Where-Object {
+        $_ -and -not (Test-Path -LiteralPath (Join-Path $_ 'clang-tidy.exe') -ErrorAction SilentlyContinue) -and
+        -not (Test-Path -LiteralPath (Join-Path $_ 'clang-tidy') -ErrorAction SilentlyContinue) -and
+        -not (Test-Path -LiteralPath (Join-Path $_ 'cppcheck.exe') -ErrorAction SilentlyContinue) -and
+        -not (Test-Path -LiteralPath (Join-Path $_ 'cppcheck') -ErrorAction SilentlyContinue)
+    }) -join $sep
+try {
+    $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $cppAn -All -Full 2>&1 | Out-String)
+    Check 'a missing clang-tidy is named, not silently passed' `
+        ($out -match '\[SKIP\] tidy -- clang-tidy not found') $out
+    Check 'a missing cppcheck is named, not silently passed' `
+        ($out -match '\[SKIP\] cppcheck -- cppcheck not found') $out
+} finally { $env:PATH = $priorPath }
+
+# The findings themselves, where the tools exist. clang-tidy needs a compile database,
+# and on Windows the default generator is a Visual Studio one, which ignores
+# CMAKE_EXPORT_COMPILE_COMMANDS -- the gate configures a throwaway Ninja tree with
+# clang-cl to get one, so this needs those two as well.
+$cdbOk = (Get-Command ninja -ErrorAction SilentlyContinue) -and (Get-Command clang-cl -ErrorAction SilentlyContinue)
+if ((Get-Command clang-tidy -ErrorAction SilentlyContinue) -and ($cdbOk -or -not $IsWindows)) {
+    $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $cppAn -All -Full 2>&1 | Out-String)
+    $code = $LASTEXITCODE
+    # First pass over these repositories, exactly as the Roslyn analyzers got in 379f39d:
+    # the volume is reported and nothing goes red on it. A rule that fails a commit
+    # before anybody has read it is a rule people route around.
+    Check 'clang-tidy findings warn, they do not fail the phase' `
+        (($code -eq 0) -and ($out -match '\[WARN\] tidy: \d+ finding\(s\).*bugprone-incorrect-roundings') -and
+        ($out -match '\[PASS\] tidy')) "code=$code $out"
+    # ...and the dependency's own defect is the build's business, not this repository's.
+    Check 'a _deps source the build compiles is not analysed' `
+        ($out -notmatch 'bugprone-branch-clone') $out
+}
 
 # 37. The base stack: the one with no marker file. Every git work tree has it, all
 # three of its tools are optional external binaries, and none of them is on every

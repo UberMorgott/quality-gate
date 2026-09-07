@@ -1125,6 +1125,29 @@ function Invoke-GodotStack($s) {
     } -FailIfOutput
 }
 
+# The compile database, when the configure above did not write one. The Visual Studio
+# generators ignore CMAKE_EXPORT_COMPILE_COMMANDS -- cmake's own documentation says so
+# ("implemented only by Makefile Generators and the Ninja generator"), and 4.3.2 here
+# writes no file for a VS build tree. That generator is the DEFAULT on Windows, so
+# without this both analysis phases would be permanently [SKIP] on the platform this
+# gate mostly runs on. A second configure with Ninja and clang-cl answers the same
+# question -- which sources, with which flags -- and nothing else: it never builds, it
+# writes inside the build tree the gate already owns, and it took 1.1s on Renderforge.
+# clang-cl finds the MSVC toolchain and the Windows SDK by itself, so no developer
+# shell is needed. The database is a LIST OF FLAGS, not a verdict: the build phase above
+# is still the compiler's answer, this only tells the analysers where to look.
+# No ninja, no clang-cl, or a project that clang-cl cannot configure -> no database, and
+# the phases say so out loud rather than reading as though they had run.
+function Get-CppCompileDb([string]$Dir, [string]$Build) {
+    if (-not ((Have 'ninja') -and (Have 'clang-cl'))) { return $null }
+    $out = Join-Path $Build 'qgate-cdb'
+    & cmake -S $Dir -B $out -G Ninja -DCMAKE_CXX_COMPILER=clang-cl -DCMAKE_C_COMPILER=clang-cl `
+        -DCMAKE_BUILD_TYPE=Release -DCMAKE_EXPORT_COMPILE_COMMANDS=ON 2>&1 | Out-Null
+    $db = Join-Path $out 'compile_commands.json'
+    if (Test-Path $db) { return $db }
+    return $null
+}
+
 # --- cpp: clang-format on the sources, cmake configure and build -----------
 function Invoke-CppStack($s) {
     Set-Location $s.Dir
@@ -1181,12 +1204,91 @@ function Invoke-CppStack($s) {
         # -A x64 is the generator PLATFORM, which only the Visual Studio generators
         # take -- and one of those is the default on Windows. Everywhere else the
         # generator is single-config, so the build type is a configure-time answer.
-        if ($IsWindows) { cmake -S $s.Dir -B $build -A x64 }
-        else { cmake -S $s.Dir -B $build -DCMAKE_BUILD_TYPE=Release }
+        # CMAKE_EXPORT_COMPILE_COMMANDS is what the two analysis phases below are
+        # driven by; it costs nothing where it works and is ignored where it does not.
+        if ($IsWindows) { cmake -S $s.Dir -B $build -A x64 -DCMAKE_EXPORT_COMPILE_COMMANDS=ON }
+        else { cmake -S $s.Dir -B $build -DCMAKE_BUILD_TYPE=Release -DCMAKE_EXPORT_COMPILE_COMMANDS=ON }
     }
     # --config on both platforms: a multi-config generator needs it and a single-config
     # one ignores it, so one code path covers the two.
     Phase 'build' { cmake --build $build --config Release }
+
+    $cdb = Join-Path $build 'compile_commands.json'
+    if (-not (Test-Path $cdb)) { $cdb = Get-CppCompileDb $s.Dir $build }
+
+    # clang-tidy, driven by that database. Every finding is a [WARN] and none of them
+    # fails the phase -- the same first pass the Roslyn analyzers got in 379f39d: the
+    # volume comes first, and a rule that goes red before anybody has read it is a rule
+    # people route around. The check list is judged the way b98e67d judged those, by
+    # sampled hits over a real repository (Renderforge, 22 translation units):
+    #   misc-include-cleaner 664, misc-non-private-member-variables-in-classes 478,
+    #   misc-const-correctness 296, performance-enum-size 105, misc-use-anonymous-
+    #   namespace 69, bugprone-easily-swappable-parameters 58
+    # are 1670 of 1837 findings and not one of them reads as a bug -- "windows.h is not
+    # used directly", "member variable 'color' has public visibility", "consider uint8_t
+    # for this enum". They are off. What is left is 167, and it includes the ones worth
+    # the phase: D3D12_HEAP_TYPE zero-initialised when that enum has no zero value,
+    # (int)(x + 0.5) instead of lround, an increment inside a compound condition.
+    # clang-diagnostic-* is off too: the analysis compiler here is not the build
+    # compiler (see Get-CppCompileDb), so its opinion of the code is not this gate's --
+    # `build` above already ran the one that is.
+    $checks = 'bugprone-*,clang-analyzer-*,cert-*,performance-*,misc-*' +
+    ',-modernize-*,-readability-*,-fuchsia-*,-llvmlibc-*,-altera-*,-cppcoreguidelines-avoid-magic-numbers' +
+    ',-clang-diagnostic-*,-misc-include-cleaner,-misc-non-private-member-variables-in-classes' +
+    ',-misc-const-correctness,-misc-use-anonymous-namespace,-performance-enum-size' +
+    ',-bugprone-easily-swappable-parameters'
+    if (-not (Have 'clang-tidy')) {
+        $script:Lines += '[SKIP] tidy -- clang-tidy not found'
+    } elseif (-not $cdb) {
+        $script:Lines += '[SKIP] tidy -- no compile database'
+    } else {
+        $files = @((Get-Content $cdb -Raw | ConvertFrom-Json).file | Sort-Object -Unique |
+            Where-Object { Test-CppOwn $_ $s.Dir })
+        if ($files.Count -eq 0) {
+            $script:Lines += '[SKIP] tidy -- no sources of this stack in the compile database'
+        } else {
+            Phase 'tidy' {
+                $o = (& clang-tidy -p (Split-Path $cdb) --quiet "--checks=$checks" @files 2>&1 | Out-String)
+                $code = $LASTEXITCODE
+                $hits = @([regex]::Matches($o, '(?m)^(.+?):\d+:\d+: warning: .*\[([a-z0-9-]+)\]\s*$') |
+                    Where-Object { Test-CppOwn $_.Groups[1].Value $s.Dir })
+                # A translation unit clang could not parse produced no findings and is not
+                # therefore clean. It is also not a verdict on the code: the file compiles,
+                # with the compiler the build phase used. Counted and named, never silent.
+                $errs = @([regex]::Matches($o, '(?m)^.+?:\d+:\d+: error: ')).Count
+                if ($code -ne 0 -and $hits.Count -eq 0 -and $errs -eq 0) { $o; return }
+                if ($hits.Count) {
+                    $top = (@($hits | Group-Object { $_.Groups[2].Value } | Sort-Object Count, Name -Descending |
+                            Select-Object -First 5 | ForEach-Object { "$($_.Name) x$($_.Count)" }) -join ', ')
+                    $script:Lines += "[WARN] tidy: $($hits.Count) finding(s) -- $top"
+                }
+                if ($errs) { $script:Lines += "[WARN] tidy: $errs diagnostic(s) clang rejected that the build compiler accepts -- not analysed" }
+                $global:LASTEXITCODE = 0
+            }
+        }
+    }
+
+    # cppcheck over the same database. Same first pass, same reason, and the same path
+    # filter -- its findings arrive from wherever the preprocessor reached.
+    if (-not (Have 'cppcheck')) {
+        $script:Lines += '[SKIP] cppcheck -- cppcheck not found'
+    } elseif (-not $cdb) {
+        $script:Lines += '[SKIP] cppcheck -- no compile database'
+    } else {
+        Phase 'cppcheck' {
+            $o = (& cppcheck --project=$cdb --enable=warning,performance,portability --inline-suppr --error-exitcode=1 2>&1 | Out-String)
+            $code = $LASTEXITCODE
+            $hits = @([regex]::Matches($o, '(?m)^(.+?):\d+:\d+: [a-z]+: .*\[(\w+)\]\s*$') |
+                Where-Object { Test-CppOwn $_.Groups[1].Value $s.Dir })
+            if ($code -ne 0 -and $hits.Count -eq 0 -and $o -notmatch '(?m):\d+:\d+: ') { $o; return }
+            if ($hits.Count) {
+                $top = (@($hits | Group-Object { $_.Groups[2].Value } | Sort-Object Count, Name -Descending |
+                        Select-Object -First 5 | ForEach-Object { "$($_.Name) x$($_.Count)" }) -join ', ')
+                $script:Lines += "[WARN] cppcheck: $($hits.Count) finding(s) -- $top"
+            }
+            $global:LASTEXITCODE = 0
+        }
+    }
 }
 
 # --- base: the checks that ask nothing about a language --------------------

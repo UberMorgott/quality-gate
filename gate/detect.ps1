@@ -34,6 +34,21 @@ $script:SkipDirs = @('node_modules', '.git', 'vendor', 'dist', 'build', '.cache'
 # source sweep the format phase does, so both answer the same question.
 $script:CppSkipDir = '(?i)[\\/](build|out|_deps|cmake-build[^\\/]*|node_modules|\.git)[\\/]'
 
+# Is this file the stack's OWN source? The two static-analysis phases read their file
+# list out of a compile database, which is CMake's answer and not the gate's: it names
+# every translation unit the build compiles, including the ones a FetchContent
+# dependency brought in, and every header they reach -- measured on Renderforge, 85 of
+# 173 cppcheck findings came out of SDK headers two directories above the project, code
+# nobody in that repository can fix. Two conditions, because either alone lets one of
+# those through: under the stack directory, and not in a build tree inside it.
+function Test-CppOwn([string]$Path, [string]$Dir) {
+    if (-not $Path) { return $false }
+    $p = ($Path -replace '/', '\')
+    $d = $Dir.TrimEnd('\')
+    if (-not $p.StartsWith("$d\", [StringComparison]::OrdinalIgnoreCase)) { return $false }
+    return ($p.Substring($d.Length) -notmatch $script:CppSkipDir)
+}
+
 function Get-RepoRoot([string]$StartDir) {
     $top = (& git -C $StartDir rev-parse --show-toplevel 2>$null)
     if ($LASTEXITCODE -eq 0 -and $top) { return (Resolve-Path ($top -replace '/', '\')).Path }
