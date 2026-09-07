@@ -4,6 +4,13 @@ target/
 node_modules/
 .godot/
 
+# What a gate run on THIS repository leaves inside its own fixtures. The cpp
+# build tree also carries a CMakeCache.txt pinned to the original source dir,
+# so a copied fixture inherits a stale path; the other stacks' artifacts are
+# already covered above or by testdata/dotnet-fixture/.gitignore.
+testdata/cpp-fixture/build/
+testdata/godot-fixture/*.uid
+
 # The knowledge graph is tracked in this repository (overrides the user-level
 # ignore of graphify-out/); these two files hold machine-local absolute paths.
 !graphify-out/
