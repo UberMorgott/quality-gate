@@ -81,11 +81,8 @@
     KEPT ON PURPOSE, including the ones still loud: MA0084 (a local hiding a field is the
     classic "assigned the wrong one" bug, 57 hits), CA1806 (an ignored return value, 18),
     MA0004 (missing ConfigureAwait), MA0134 (fire and forget), CA5350 (SHA1), CA2101
-    (marshalling), and above all CA1001: a type owning IDisposable fields and not
-    disposing them found the one unambiguous .NET bug in the whole sweep.
-    Renderforge/src/DlssDriver.cs:21 creates three Unity CommandBuffers at :345-348 and
-    disposes none of them, leaked on every teardown. It also fires on a MemoryStream
-    field, which is harmless. A rule that finds a real leak has earned its noise.
+    (marshalling), and CA1001 (a type owning IDisposable fields and not disposing them),
+    which is kept for ordinary C# and switched off for Unity below.
 
     299 to 253: Renderforge 21 to 16, ContentTool 133 to 101, Multiplayer2 145 to 136.
   -->
@@ -98,6 +95,24 @@
     <NoWarn>$(NoWarn);MA0002;MA0046;MA0069;MA0006;MA0051;MA0048;MA0047;MA0008;MA0016;MA0015</NoWarn>
     <NoWarn>$(NoWarn);MA0023;MA0005;MA0011;MA0074;MA0009</NoWarn>
     <NoWarn>$(NoWarn);CA1310;CA1852;CA5351</NoWarn>
+  </PropertyGroup>
+
+  <!--
+    CA1001 under Unity only. A MonoBehaviour cannot meaningfully implement IDisposable:
+    Unity owns the lifecycle and calls OnDestroy, so the rule fires on every component
+    that holds a disposable field and can never be satisfied. It stays ON everywhere
+    else, where an undisposed IDisposable field is a real bug class.
+
+    This retracts the earlier justification for keeping it: the "real leak" it was
+    credited with, Renderforge/src/DlssDriver.cs:21 with three Unity CommandBuffers
+    created at :345-348, is not a leak. DlssDriver.cs:459 calls Release() on all three
+    inside TeardownResources(), reached from TryRetire at :443 on every release path.
+    Read in the source, not reasoned about. Across the nine-repository sweep CA1001
+    scored zero true positives: that one, and a harmless MemoryStream field in
+    ContentTool/src/Bake/GlbCodec.cs:778.
+  -->
+  <PropertyGroup Condition="'$(QGateUnity)' == 'true'">
+    <NoWarn>$(NoWarn);CA1001</NoWarn>
   </PropertyGroup>
 
   <ItemGroup Condition="!Exists('$(MSBuildProjectDirectory)\.qgate-no-analyzers')">

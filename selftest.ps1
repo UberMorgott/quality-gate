@@ -687,10 +687,10 @@ if ($dnSdks) {
     Copy-Item (Join-Path $PSScriptRoot 'testdata\dotnet-fixture') $dnAna -Recurse
     # CA1001 (SDK) and MA0084 (Meziantou) in one file: two diagnostics prove both the
     # properties and the injected package arrived. The SDK half has been CA1310 and, before
-    # that, MA0074; both are now silenced, and CA1001 is the better witness anyway -- it is
-    # the rule that found the only unambiguous bug of the live sweep (three Unity
-    # CommandBuffers created and never disposed), so a run that stops reporting it has lost
-    # something that matters rather than something that was loud.
+    # that, MA0074; both are now silenced. CA1001 is silenced too, but only under
+    # QGateUnity, and this fixture references no UnityEngine -- the assets check below is
+    # the same fact from the other side -- so it is still a live SDK rule here, and it
+    # doubles as the proof that the Unity suppression did not go global.
     # Prefix() is a Harmony patch, spelled the only way Harmony accepts -- the leading
     # underscores are the injector's API, and CA1707 asking for them to be renamed is the
     # single loudest false positive this gate can produce on a game mod.
