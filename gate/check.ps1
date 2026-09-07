@@ -1360,8 +1360,16 @@ function Invoke-BaseStack($s) {
             $changed = Get-ChangedPaths $Root
             if ($null -eq $changed) { $narrow = $false }
             else {
-                $paths = @($changed | ForEach-Object { Join-Path $Root ($_ -replace '/', '\') } |
-                    Where-Object { Test-Path -LiteralPath $_ -PathType Leaf })
+                # RELATIVE to the repository root, which Set-Location above made the
+                # current directory. An absolute path is matched against the exclude
+                # globs in _typos.toml AS GIVEN, so `E:\repo\locale\fr.txt` matches
+                # `locale/*.txt` in nothing at all and the exclusion is lost -- the same
+                # trap the dotnet --include pass already documents. Existence is still
+                # asked of the absolute path: a path git lists but that no longer exists
+                # is a deletion, and handing one to typos is an error about a file
+                # nobody can fix.
+                $paths = @($changed | ForEach-Object { $_ -replace '/', '\' } |
+                    Where-Object { Test-Path -LiteralPath (Join-Path $Root $_) -PathType Leaf })
             }
         }
         if ($narrow -and -not $paths) {
@@ -1371,7 +1379,19 @@ function Invoke-BaseStack($s) {
             # No path argument at all means the current directory, which Set-Location
             # above made the repository root. `brief` is one line per typo,
             # file:line:col -- the long default repeats the line and underlines it.
-            Phase 'typos' { typos --format brief @paths }
+            #
+            # --force-exclude, and ONLY when paths are named: typos applies the repo's
+            # own [files] extend-exclude to a tree walk and ignores it for any path
+            # handed to it on the command line, so the two lanes disagreed about the
+            # same file. Measured on a repo excluding workshop/locale/*.txt: the file
+            # named explicitly reported 20 errors and exited 2, and exited 0 with the
+            # flag, while the full lane never looked at it at all. The flag is half the
+            # fix -- the paths above had to become relative too, or there is nothing for
+            # the globs to match. The full lane passes no paths, so there the flag would
+            # have nothing to force.
+            $targs = @('--format', 'brief')
+            if ($paths) { $targs += '--force-exclude' }
+            Phase 'typos' { typos @targs @paths }
         }
     }
 

@@ -1952,6 +1952,33 @@ if (Get-Command typos -ErrorAction SilentlyContinue) {
     $tyFullCode = $LASTEXITCODE
     Check 'typos at the full level judges the whole tree' `
         (($tyFullCode -ne 0) -and ($out -match '\[FAIL\] typos') -and ($out -match 'committed\.txt')) "code=$tyFullCode $out"
+
+    # The invariant the scoping above cannot state on its own: the two lanes must
+    # reach the SAME verdict about the same file. typos applies the repository's own
+    # _typos.toml excludes when it walks the tree and ignores them for any path named
+    # on the command line, so the fast lane -- which narrows to changed paths -- was
+    # red on a file the full lane never looked at. Asked as an equality rather than as
+    # "the flag is present", because any phase that narrows to changed paths can grow
+    # this same divergence with a different tool.
+    $tx = Join-Path $tmp 'typos-exclude'
+    New-Item -ItemType Directory -Path (Join-Path $tx 'locale') -Force | Out-Null
+    git -C $tx init -q 2>$null
+    [IO.File]::WriteAllText((Join-Path $tx '_typos.toml'), "[files]`nextend-exclude = [`"locale/*.txt`"]`n")
+    [IO.File]::WriteAllText((Join-Path $tx 'locale\fr.txt'), "you will $typo this line`n")
+    $txFast = (& pwsh -NoProfile -File $gate -Root $tx -Only base 2>&1 | Out-String)
+    $txFastCode = $LASTEXITCODE
+    $txFull = (& pwsh -NoProfile -File $gate -Root $tx -Only base -Full 2>&1 | Out-String)
+    $txFullCode = $LASTEXITCODE
+    Check 'an excluded file gets the same typos verdict on the fast lane and the full one' `
+        (($txFastCode -eq $txFullCode) -and ($txFastCode -eq 0) -and
+            ($txFast -notmatch $typo) -and ($txFull -notmatch $typo)) `
+        "fast=$txFastCode $txFast full=$txFullCode $txFull"
+    # ...and the agreement above is not the boring kind. Without the exclusion the same
+    # fixture reddens the same lane, so the file really does carry a finding.
+    Remove-Item (Join-Path $tx '_typos.toml')
+    $txNone = (& pwsh -NoProfile -File $gate -Root $tx -Only base 2>&1 | Out-String)
+    Check 'the excluded fixture is green because of the exclusion, not because it is clean' `
+        (($LASTEXITCODE -ne 0) -and ($txNone -match '\[FAIL\] typos')) "code=$LASTEXITCODE $txNone"
 } else {
     Write-Output '[skip] typos not on PATH -- its fast/full scoping cannot be judged here'
 }
