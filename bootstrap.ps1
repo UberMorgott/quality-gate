@@ -3,11 +3,16 @@
 #
 #   irm https://raw.githubusercontent.com/UberMorgott/quality-gate/main/bootstrap.ps1 | iex
 #
-# Override the install directory by setting $env:QUALITY_GATE_HOME first.
+# Override the install directory by setting $env:QUALITY_GATE_HOME first. With only
+# $env:QGATE_HOME set -- the state directory the trust store also lives in -- the
+# install lands under it rather than on the system drive, which is the whole point of
+# setting it. The documented variable still wins.
 $ErrorActionPreference = 'Stop'
 
 $repo = 'https://github.com/UberMorgott/quality-gate.git'
-$dir = if ($env:QUALITY_GATE_HOME) { $env:QUALITY_GATE_HOME } else { Join-Path $env:LOCALAPPDATA 'quality-gate' }
+$dir = if ($env:QUALITY_GATE_HOME) { $env:QUALITY_GATE_HOME }
+elseif ($env:QGATE_HOME) { Join-Path $env:QGATE_HOME 'quality-gate' }
+else { Join-Path $env:LOCALAPPDATA 'quality-gate' }
 
 if ($PSVersionTable.PSVersion.Major -lt 7) { throw 'PowerShell 7+ required: winget install Microsoft.PowerShell' }
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) { throw 'git required and not on PATH' }

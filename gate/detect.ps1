@@ -233,9 +233,29 @@ function Get-CustomChecks([string]$Root) {
 
 # Where this machine remembers which repositories may run their own commands. Per
 # user, never inside the repository: a trust marker a clone can carry is not trust.
-function Get-TrustStore {
+function Get-DefaultTrustStore {
     if ($env:LOCALAPPDATA) { Join-Path $env:LOCALAPPDATA 'qgate\trusted.json' }
     else { Join-Path $HOME '.config/qgate/trusted.json' }
+}
+
+# QGATE_HOME moves the whole state directory wherever the owner keeps state -- off the
+# system drive, so a Windows reinstall does not take it. Unset, nothing changes.
+function Get-TrustStore {
+    if (-not $env:QGATE_HOME) { return (Get-DefaultTrustStore) }
+    $store = Join-Path $env:QGATE_HOME 'trusted.json'
+    # First use of a fresh QGATE_HOME carries the old store across. Starting empty is
+    # not a neutral state: every repository trusted yesterday silently stops running
+    # its own checks, and a check that stopped running looks exactly like a check that
+    # passed. Said once on stderr, because after the copy the file is there.
+    if (-not (Test-Path $store)) {
+        $legacy = Get-DefaultTrustStore
+        if (Test-Path $legacy) {
+            New-Item -ItemType Directory -Path $env:QGATE_HOME -Force | Out-Null
+            Copy-Item -LiteralPath $legacy -Destination $store
+            [Console]::Error.WriteLine("qgate: copied the trust store to $store (from $legacy)")
+        }
+    }
+    $store
 }
 
 function Get-TrustKey([string]$Root) { (Resolve-Path $Root).Path.TrimEnd('\', '/') }

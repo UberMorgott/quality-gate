@@ -1616,6 +1616,11 @@ New-Item -ItemType Directory -Path $cust | Out-Null
 $custJson = Join-Path $cust 'qgate.json'
 $priorLocal = $env:LOCALAPPDATA
 $env:LOCALAPPDATA = Join-Path $tmp 'trusthome'
+# ...and QGATE_HOME, which OVERRIDES that redirect: on a machine where it is set, every
+# check below would otherwise be writing into the developer's real trust store, which
+# is precisely what redirecting LOCALAPPDATA exists to prevent.
+$priorQGate = $env:QGATE_HOME
+$env:QGATE_HOME = $null
 function Invoke-Trust([string]$Repo, [switch]$Remove) {
     (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\trust.ps1') -Root $Repo -Remove:$Remove 2>&1 | Out-String)
 }
@@ -1703,7 +1708,43 @@ try {
     $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $cust -All -Why 2>&1 | Out-String)
     Check 'an empty checks array is no stack at all' `
         (($out -match '\[WHY\] custom -- absent') -and ($out -notmatch '\[FAIL\] custom')) $out
-} finally { $env:LOCALAPPDATA = $priorLocal }
+
+    # QGATE_HOME: the state directory moves off the system drive, so reinstalling the
+    # machine does not take what it trusts with it. Redirected here for the same reason
+    # LOCALAPPDATA above is.
+    $priorQHome = $env:QGATE_HOME
+    try {
+        [IO.File]::WriteAllText($custJson, '{"checks":[{"name":"quick","run":"exit 0","level":"fast"}]}')
+        $legacyStore = Join-Path $env:LOCALAPPDATA 'qgate\trusted.json'
+        $env:QGATE_HOME = $null
+        $t = Invoke-Trust $cust
+        Check 'without QGATE_HOME the trust store stays at the platform default' `
+            ($t -match [regex]::Escape($legacyStore)) $t
+
+        # An empty new store is not a neutral starting point: every repository trusted
+        # yesterday silently stops running its own checks, and a phase that stopped
+        # running reads exactly like a phase that passed. So the legacy file is copied
+        # across on first use, and said out loud.
+        $qh = Join-Path $tmp 'qgatehome'
+        New-Item -ItemType Directory -Path $qh | Out-Null
+        $env:QGATE_HOME = $qh
+        $newStore = Join-Path $qh 'trusted.json'
+        $r = Invoke-Gate $cust
+        Check 'a QGATE_HOME with no store yet inherits the legacy one instead of dropping the trust' `
+            ((Test-Path $newStore) -and
+                ((Get-Content $newStore -Raw) -eq (Get-Content $legacyStore -Raw)) -and
+                ($r.Out -match 'copied the trust store') -and ($r.Out -match '\[PASS\] quick')) $r.Out
+
+        # ...and from there on QGATE_HOME is the store, not a copy nobody writes to.
+        [IO.File]::WriteAllText($custJson,
+            '{"checks":[{"name":"quick","run":"exit 0","level":"fast"},{"name":"moved","run":"exit 0","level":"fast"}]}')
+        $t = Invoke-Trust $cust
+        $r = Invoke-Gate $cust
+        Check 'QGATE_HOME is where the trust store is read and written' `
+            (($t -match [regex]::Escape($newStore)) -and ($r.Out -match '\[PASS\] moved') -and
+                ((Get-Content $newStore -Raw) -ne (Get-Content $legacyStore -Raw))) "$t $($r.Out)"
+    } finally { $env:QGATE_HOME = $priorQHome }
+} finally { $env:LOCALAPPDATA = $priorLocal; $env:QGATE_HOME = $priorQGate }
 
 # 36. The C/C++ CMake stack. Its two halves ask different tools -- clang-format for the
 # format phase, cmake for configure and build -- and neither is on every machine, so
