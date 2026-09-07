@@ -43,6 +43,11 @@ function Invoke-Gate([string]$Root) {
 
 # 1. Detection by file presence.
 $stacks = @(Get-Stacks (Join-Path $PSScriptRoot 'testdata'))
+# ...except the one whose marker is the repository itself. testdata/ is inside this
+# work tree, so base is there beside every stack a marker file created. Section 37
+# asserts the rest of it: alone in a bare repo, and absent outside a work tree.
+Check 'detects base stack with no marker file' `
+    ([bool]($stacks | Where-Object { $_.Stack -eq 'base' -and $_.Marker -eq 'git work tree' -and $_.Implemented }))
 Check 'detects go stack'   ([bool]($stacks | Where-Object { $_.Stack -eq 'go' -and $_.Implemented }))
 Check 'detects web stack'  ([bool]($stacks | Where-Object { $_.Stack -eq 'web' -and $_.Implemented }))
 Check 'detects rust stack'  ([bool]($stacks | Where-Object { $_.Stack -eq 'rust' -and $_.Implemented }))
@@ -1285,7 +1290,12 @@ Check '-Quiet prints nothing at all on a clean pass' `
 # implement>` printed [SKIP] not implemented and exited 0 -- a green pipeline over
 # zero checks, which is the exact thing `-Only nonsense` was made fatal for. It has
 # no branch of its own any more; the zero-phase invariant below is what fails it.
-$py = Join-Path $PSScriptRoot 'testdata\python-fixture'
+# Copied OUT of this repository on purpose. The fixture directory itself sits inside a
+# git work tree, which is the base stack's marker -- base would then run real phases
+# here and the run would no longer be the empty one these checks are about. The
+# invariant is what is under test; base has its own section below.
+$py = Join-Path $tmp 'python'
+Copy-Item (Join-Path $PSScriptRoot 'testdata\python-fixture') $py -Recurse
 $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $py -Only 'python' 2>&1 | Out-String)
 $pyCode = $LASTEXITCODE
 Check '-Only on a detected but unimplemented stack fails the run' ($pyCode -ne 0) "code=$pyCode $out"
@@ -1405,11 +1415,21 @@ Check '-Only in a repo with no stack at all fails' `
     (($bareCode -ne 0) -and ($out -match '\[FAIL\] -Only go -- no such stack detected here')) "code=$bareCode $out"
 Check '-Only is not waved through as a repo the gate knows nothing about' `
     ($out -notmatch 'no known stack found') $out
-# ...and the free pass itself stays: no marker file and no -Only is still a silent,
-# green, zero-cost run, which is the documented behaviour for a repo with no stack.
-$out = (& pwsh -NoProfile -File $gate -Root $bare -Full 2>&1 | Out-String)
-Check 'a repo with no marker file is still skipped, not failed' `
+# ...and the free pass itself stays -- but it is now about a directory that is not a
+# git work tree. A repo with no marker file has the base stack (section 37), whose
+# marker IS the repository, so `no known stack found` there would be a lie.
+$bareNoGit = Join-Path $tmp 'nostack-nogit'
+New-Item -ItemType Directory -Path $bareNoGit | Out-Null
+$out = (& pwsh -NoProfile -File $gate -Root $bareNoGit -Full 2>&1 | Out-String)
+Check 'a directory with no marker file is still skipped, not failed' `
     (($LASTEXITCODE -eq 0) -and ($out -match '\[SKIP\] no known stack found')) $out
+# In a repository the same absence of markers is the base stack instead, and a green,
+# zero-cost run there is a run that named every phase it did not perform.
+# -All, because $bare is clean and the fast lane's own `[SKIP] no changes` would exit
+# before any stack ran -- which would prove nothing about which stacks are there.
+$out = (& pwsh -NoProfile -File $gate -Root $bare -All -Full 2>&1 | Out-String)
+Check 'a repo with no marker file gets base, not "no known stack"' `
+    (($LASTEXITCODE -eq 0) -and ($out -match 'base \(git work tree\)') -and ($out -notmatch 'no known stack found')) $out
 
 # 32. A tool binary older than the module's go directive. Both failures are opaque:
 # golangci-lint refuses to load its config, govulncheck names every file in the repo
@@ -1662,6 +1682,105 @@ try {
     Check 'no cmake fails the full level, with the reason' `
         (($fullCode -ne 0) -and ($full -match 'cmake not on PATH -- required at the full level')) $full
 } finally { $env:PATH = $priorPath }
+
+# 37. The base stack: the one with no marker file. Every git work tree has it, all
+# three of its tools are optional external binaries, and none of them is on every
+# machine -- so every check here either strips the tools from PATH itself or asserts
+# something true whether or not they are installed.
+$baseRepo = Join-Path $tmp 'base'
+New-Item -ItemType Directory -Path $baseRepo | Out-Null
+git -C $baseRepo init -q 2>$null
+$baseStacks = @(Get-Stacks $baseRepo)
+# Both halves: base is there with no marker file of any kind, and it is the ONLY
+# thing there -- "detects every stack everywhere" would satisfy the first half alone.
+Check 'base exists in a repo with no marker file at all' `
+    ((($baseStacks | ForEach-Object { $_.Stack }) -join ',') -eq 'base') `
+    "got: $(($baseStacks | ForEach-Object { $_.Stack }) -join ',')"
+# ...and the condition really is the work tree, not "always": a directory that is not
+# a repository has no index for the fast secrets scan to read, and it is still the
+# documented free pass that section 31 asserts.
+$baseNoGit = Join-Path $tmp 'base-nogit'
+New-Item -ItemType Directory -Path $baseNoGit | Out-Null
+Check 'base does not exist outside a git work tree' `
+    (-not (@(Get-Stacks $baseNoGit) | Where-Object { $_.Stack -eq 'base' }))
+
+$gate = Join-Path $PSScriptRoot 'gate\check.ps1'
+$out = (& pwsh -NoProfile -File $gate -Root $baseRepo -Only base -Full 2>&1 | Out-String)
+$baseOnlyCode = $LASTEXITCODE
+Check '-Only base selects the stack' `
+    (($out -notmatch 'no such stack detected') -and ($out -match 'base \(git work tree\)')) $out
+# ...and a machine with none of the three tools must not turn every repository on it
+# into one nobody can commit to. base has no marker file, so it is in EVERY run: the
+# zero-phase invariant is exempted only when base was the whole run.
+Check 'base alone with nothing to run is not a failed run' ($baseOnlyCode -eq 0) "code=$baseOnlyCode $out"
+
+# ...but -Only cpp must not drag it along. The cpp fixture is made a work tree first,
+# or the absence proved here would only be the absence of a git repository.
+git -C $cpp init -q 2>$null
+$out = (& pwsh -NoProfile -File $gate -Root $cpp -Only cpp 2>&1 | Out-String)
+Check '-Only cpp does not run base' (($out -match 'cpp \(CMakeLists\.txt\)') -and ($out -notmatch 'base')) $out
+
+# Each phase names the tool it is missing. Stripped from PATH here rather than skipped
+# on half the machines: "the tool is absent" is the gate's answer, and it has to be the
+# same answer everywhere. A [SKIP] carrying the name, never a [FAIL] -- the gate does
+# not install toolchains.
+$priorPath = $env:PATH
+$sep = [IO.Path]::PathSeparator
+$env:PATH = @($priorPath -split $sep | Where-Object {
+        $d = $_
+        $d -and -not (@('gitleaks', 'typos', 'osv-scanner') | Where-Object {
+                (Test-Path -LiteralPath (Join-Path $d "$_.exe") -ErrorAction SilentlyContinue) -or
+                (Test-Path -LiteralPath (Join-Path $d $_) -ErrorAction SilentlyContinue) })
+    }) -join $sep
+try {
+    $out = (& pwsh -NoProfile -File $gate -Root $baseRepo -Only base -Full 2>&1 | Out-String)
+    $noToolCode = $LASTEXITCODE
+    Check 'a missing gitleaks is named, not silently passed' `
+        ($out -match '\[SKIP\] secrets -- gitleaks not on PATH') $out
+    Check 'a missing typos is named, not silently passed' `
+        ($out -match '\[SKIP\] typos -- typos not on PATH') $out
+    Check 'a missing osv-scanner is named, not silently passed' `
+        ($out -match '\[SKIP\] vuln -- osv-scanner not on PATH') $out
+    Check 'an absent optional tool is a skip, not a failed run' `
+        (($noToolCode -eq 0) -and ($out -notmatch '\[FAIL\]')) "code=$noToolCode $out"
+} finally { $env:PATH = $priorPath }
+
+# The vulnerability database lives on the network, so vuln is full-level only -- the
+# same rule govulncheck and `npm audit` follow. Asserted on the LINE, not on a verdict:
+# whether it passes, skips for a missing binary or skips for an osv-scanner v1 that has
+# no `scan source`, the full level says something about vuln and the fast lane does not.
+$fast = (& pwsh -NoProfile -File $gate -Root $baseRepo -Only base 2>&1 | Out-String)
+$full = (& pwsh -NoProfile -File $gate -Root $baseRepo -Only base -Full 2>&1 | Out-String)
+Check 'vuln does not run on the fast lane' ($fast -notmatch 'vuln') $fast
+Check 'vuln runs at the full level' ($full -match 'vuln') $full
+
+# typos scopes itself the way every other fast phase does: the whole tree at the full
+# level, only what git says changed on the fast lane. Both halves, because "never
+# reports anything" would satisfy the fast one on its own.
+if (Get-Command typos -ErrorAction SilentlyContinue) {
+    $ty = Join-Path $tmp 'typos'
+    New-Item -ItemType Directory -Path $ty | Out-Null
+    git -C $ty init -q 2>$null
+    # Assembled from two halves so the misspelling is never a literal in this file:
+    # written out whole it is a real finding in THIS repository, and the gate's own
+    # base stack fails on its own test fixture. Silencing it in _typos.toml instead
+    # would switch off the word everywhere, which is the opposite of the point.
+    $typo = 'rec' + 'ieve'
+    [IO.File]::WriteAllText((Join-Path $ty 'committed.txt'), "you will $typo this line`n")
+    git -C $ty add -A 2>$null
+    git -C $ty -c user.email=selftest@local -c user.name=selftest commit -qm init 2>$null
+    [IO.File]::WriteAllText((Join-Path $ty 'touched.txt'), "this one is spelled correctly`n")
+    $out = (& pwsh -NoProfile -File $gate -Root $ty -Only base 2>&1 | Out-String)
+    $tyFastCode = $LASTEXITCODE
+    Check 'typos on the fast lane judges only the changed files' `
+        (($tyFastCode -eq 0) -and ($out -notmatch $typo)) "code=$tyFastCode $out"
+    $out = (& pwsh -NoProfile -File $gate -Root $ty -Only base -Full 2>&1 | Out-String)
+    $tyFullCode = $LASTEXITCODE
+    Check 'typos at the full level judges the whole tree' `
+        (($tyFullCode -ne 0) -and ($out -match '\[FAIL\] typos') -and ($out -match 'committed\.txt')) "code=$tyFullCode $out"
+} else {
+    Write-Output '[skip] typos not on PATH -- its fast/full scoping cannot be judged here'
+}
 
 Remove-Item $tmp -Recurse -Force
 if ($script:Fails) { Write-Output "`n$($script:Fails) of $($script:Total) check(s) failed"; exit 1 }

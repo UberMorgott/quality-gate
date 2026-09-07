@@ -8,6 +8,9 @@
 # Used for provenance output: `check.ps1 -Why` names the marker behind every
 # phase that ran and every stack that does not exist here.
 $script:KnownMarkers = [ordered]@{
+    # The one stack with no marker file: its tools ask nothing about a language, so
+    # every repository has it and the marker is the repository itself.
+    base   = 'git work tree'
     go     = 'go.mod'
     web    = 'package.json + vite/next/webpack/rollup.config.*'
     godot  = 'project.godot'
@@ -264,7 +267,7 @@ function Test-AnyFile([string]$Dir, [string[]]$Patterns) {
 }
 
 # Returns one object per detected stack:
-#   Stack       go | web | godot | proto | python | rust | dotnet | cpp | custom
+#   Stack       base | go | web | godot | proto | python | rust | dotnet | cpp | custom
 #   Dir         absolute directory holding the marker
 #   Rel         path relative to the repo root, forward slashes, '' for the root
 #   Marker      the file whose presence created this phase (provenance)
@@ -276,6 +279,22 @@ function Get-Stacks([string]$Root) {
         param($d)
         $r = $d.Substring($Root.Length).Trim('\').Replace('\', '/')
         $r
+    }
+
+    # First, and unconditional: gitleaks, typos and osv-scanner ask nothing about a
+    # language, so there is no marker file to find -- the repository IS the marker. A
+    # git work tree is the whole condition, because the fast secrets scan reads the
+    # index and a directory that is not a repository has none. A non-git directory
+    # therefore still reports `[SKIP] no known stack found`, exactly as before.
+    # Ordered first so a leaked secret stops the run before anything compiles.
+    $prev = $global:LASTEXITCODE
+    & git -C $Root rev-parse --is-inside-work-tree *> $null
+    $isRepo = ($LASTEXITCODE -eq 0)
+    # Same rule as Test-GitIgnored: `rev-parse` answering "not a repository" is a
+    # non-zero exit, and leaking it would fail the first phase that reads it.
+    $global:LASTEXITCODE = $prev
+    if ($isRepo) {
+        $stacks += [pscustomobject]@{ Stack = 'base'; Dir = $Root; Rel = ''; Marker = 'git work tree'; Implemented = $true; Warn = '' }
     }
 
     foreach ($m in Find-Marker $Root @('go.mod')) {

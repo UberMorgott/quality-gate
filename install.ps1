@@ -58,7 +58,14 @@ foreach ($s in $stacks) {
         Write-Output "skipped   $($s.Stack) at $where -- not implemented, nothing will be checked there"
         continue
     }
-    if ($s.Stack -eq 'go') {
+    if ($s.Stack -eq 'base') {
+        Write-Output "base      $where -- enabled (no marker file: every git work tree has it)"
+        # Nothing to install and no template to write: all three are external binaries.
+        # Named anyway, because each absent one is a phase that quietly does not run,
+        # and a phase nobody notices reads exactly like a phase that passes.
+        $absent = @('gitleaks', 'typos', 'osv-scanner' | Where-Object { -not (Get-Command $_ -ErrorAction SilentlyContinue) })
+        if ($absent) { Write-Output "  next:   not on PATH: $($absent -join ', ') -- those phases stay skipped until they are" }
+    } elseif ($s.Stack -eq 'go') {
         $cfg = Join-Path $s.Dir '.golangci.yml'
         if (Test-Path $cfg) {
             Write-Output "go        $where -- kept existing .golangci.yml"

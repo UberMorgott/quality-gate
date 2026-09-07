@@ -38,7 +38,8 @@ Gate flags: -All  -Fast  -Full  -Only <stack[,stack]>  -Quiet  -Why  -Baseline <
   -Quiet prints nothing on a green run and the whole report on a red one
        (what the generated pre-commit hook uses; CI wants the [PASS] lines).
        A [WARN] about the gate's own unreadable config is not silenced.
-  -Only takes go web rust proto godot dotnet cpp custom: -Only go,web ("go,web" and `go web` are the same)
+  -Only takes base go web rust proto godot dotnet cpp custom: -Only go,web ("go,web" and `go web` are the same)
+       base has no marker file -- it is every git work tree, and -Only base runs it alone
        python is detected but not checked, so a run that names it alone checks
        nothing and FAILS (-All flags it only when a real stack ran too)
 A run that executed zero check phases is never green.
@@ -75,7 +76,7 @@ switch ($cmd) {
         . (Join-Path $home_ 'gate\detect.ps1')
         Write-Output "install   $home_  $(git -C $home_ rev-parse --short HEAD 2>$null)"
         Write-Output "resolved  $((Get-Command qgate -ErrorAction SilentlyContinue).Source)"
-        foreach ($t in 'go', 'golangci-lint', 'govulncheck', 'node', 'npm', 'cargo', 'dotnet', 'cmake', 'clang-format', 'lefthook', 'buf', 'gdformat', 'gdlint') {
+        foreach ($t in 'go', 'golangci-lint', 'govulncheck', 'node', 'npm', 'cargo', 'dotnet', 'cmake', 'clang-format', 'gitleaks', 'typos', 'osv-scanner', 'lefthook', 'buf', 'gdformat', 'gdlint') {
             $exe = Get-Command $t -ErrorAction SilentlyContinue
             # An absent tool is reported, not skipped: "what does the gate think it
             # has right now" is the whole question this command answers.
@@ -107,6 +108,14 @@ switch ($cmd) {
                 # Both already print their own name, and both print more than one line.
                 'cmake' { (& cmake --version) }
                 'clang-format' { (& clang-format --version) }
+                # The three base-stack tools. gitleaks prints a bare string and an
+                # official build prints `version is set by build process` for it, so
+                # the name has to come from here or the line reads as nothing.
+                # osv-scanner's major version is what decides whether the vuln phase
+                # runs at all -- v1 has no `scan source` -- and it prints three lines.
+                'gitleaks' { "gitleaks $(& gitleaks version)" }
+                'typos' { (& typos --version) }
+                'osv-scanner' { (& osv-scanner --version) }
                 # gdformat/gdlint already print their own name.
                 'gdformat' { (& gdformat --version) }
                 'gdlint' { (& gdlint --version) }

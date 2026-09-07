@@ -1,0 +1,5 @@
+# typos' dictionary is not a style guide. A word mapped to itself is declared correct,
+# which is how a repository silences a false positive without switching the check off.
+[default.extend-words]
+# Both spellings are English; this is the one the prose in gate/outdated.ps1 uses.
+unparseable = "unparseable"

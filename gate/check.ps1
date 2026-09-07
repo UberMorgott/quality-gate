@@ -11,7 +11,7 @@
 # With no stack switch the changed side is auto-detected from git status.
 [CmdletBinding(PositionalBinding = $false)]
 param(
-    [string[]]$Only,      # go | web | rust | proto | godot | dotnet | cpp | custom -- restrict to these stacks (one value: -Only go,web)
+    [string[]]$Only,      # base | go | web | rust | proto | godot | dotnet | cpp | custom -- restrict to these stacks (one value: -Only go,web)
     [switch]$All,         # every detected stack, ignore git status
     [switch]$Fast,
     [switch]$Full,
@@ -209,6 +209,10 @@ if ($onlyGiven) {
     } else {
         $selected = @()
         $widenedBy = $null
+        # base is always-on and owns no directory of its own, so no changed path can
+        # ever select it -- it is added back below rather than left out of every
+        # narrowed run, which is every agent turn.
+        $baseStack = @($stacks | Where-Object { $_.Stack -eq 'base' })
         foreach ($p in $changed) {
             # Longest match wins: with nested modules a/go.mod and a/b/go.mod, a
             # file under a/b belongs to a/b alone.
@@ -219,7 +223,9 @@ if ($onlyGiven) {
             if (-not $owner) { $selected = $stacks; $widenedBy = $p; break }
             $selected += $owner
         }
-        $stacks = @($selected | Sort-Object Stack, Rel -Unique)
+        # -Unique over the sort keys, so the widening branch above -- which already
+        # took every stack, base included -- does not list it twice.
+        $stacks = @(@($selected) + $baseStack | Sort-Object Stack, Rel -Unique)
         # Generated code crosses stack boundaries: a .proto edit produces Go and
         # GDScript that nobody touched, so narrowing to the schema directory would
         # report green on a break. Conservative and cheap: re-check everything.
@@ -254,6 +260,10 @@ $script:Lines = @()
 # or every one of them is full-level and this is the fast lane. Read once, by the
 # zero-phase invariant at the bottom of this file.
 $script:CustomDeferred = $false
+# The same thing for the base stack: one of its phases declined because the tool it
+# needs is not installed here, or there was nothing staged for it to read. Read once,
+# by the zero-phase invariant, and only when base is the whole run -- see there.
+$script:BaseDeferred = $false
 # How many check phases actually executed. The one number the green verdict at the
 # bottom of this file is not allowed to ignore.
 $script:Phases = 0
@@ -1139,6 +1149,135 @@ function Invoke-CppStack($s) {
     Phase 'build' { cmake --build $build --config Release }
 }
 
+# --- base: the checks that ask nothing about a language --------------------
+# Every repository has this stack; there is no marker file to find. All three tools are
+# optional external binaries, so a missing one is a [SKIP] carrying its name and never
+# a failure -- the gate does not install toolchains, and turning every repository on a
+# machine red over a tool nobody asked for is not a gate. Said out loud each time,
+# because a phase that did not run must never read like a phase that passed.
+function Invoke-BaseStack($s) {
+    Set-Location $Root
+    if (-not (Have 'gitleaks')) {
+        $script:Lines += '[SKIP] secrets -- gitleaks not on PATH (https://github.com/gitleaks/gitleaks)'
+        $script:BaseDeferred = $true
+    } elseif ($Full -or $All) {
+        # The working tree, untracked files included. NOT `gitleaks git`, which reads
+        # commits: a secret sitting in a file nobody has committed yet is exactly the
+        # one still worth catching. --redact, so the secret never reaches this log or
+        # the agent's context. v8 renamed the old `gitleaks protect`; `git` and `dir`
+        # are the current subcommands.
+        #
+        # JSON to stdout rather than the human `-v` output, because the findings have to
+        # be FILTERED before they can be a verdict: `dir` walks the filesystem and knows
+        # nothing about .gitignore. Measured on a real repository -- 108 MB of generated
+        # graphify cache under an ignored directory, untracked, not that repo's code, and
+        # a red gate over a `generic-api-key` inside it. Same rule gofmt and the Godot
+        # scanner already follow: what a repo ignores is not part of that repo. Asked per
+        # DIRECTORY and cached, which is what Test-GitIgnoredDir is for.
+        $sw = [Diagnostics.Stopwatch]::StartNew()
+        # 2>$null, not 2>&1: the progress and summary lines go to stderr and would make
+        # the report unparseable JSON. Exit 1 is "leaks found" and 0 is "none"; anything
+        # else is gitleaks failing, which is not a verdict about the code.
+        $raw = (& gitleaks dir --redact --no-banner --no-color -f json -r - $Root 2>$null | Out-String)
+        $glCode = $LASTEXITCODE
+        $sw.Stop()
+        $hits = @(if ($glCode -eq 1) { try { $raw | ConvertFrom-Json } catch { $null } })
+        $hits = @($hits | Where-Object { $_.File -and
+                -not (Test-GitIgnoredDir $Root ([IO.Path]::GetDirectoryName(($_.File -replace '/', '\')))) })
+        Phase 'secrets' {
+            if ($glCode -gt 1) { "gitleaks exited $glCode -- the scan did not complete"; $global:LASTEXITCODE = 1; return }
+            foreach ($h in $hits) { "$($h.File):$($h.StartLine): $($h.RuleID) -- $($h.Fingerprint)" }
+            # The finding itself is redacted, so the only thing a reader can act on is
+            # the location and, for a false positive, the fingerprint above.
+            if ($hits) { 'fix: remove the secret, or record the fingerprint in .gitleaksignore'; $global:LASTEXITCODE = 1 }
+        } -Elapsed $sw.Elapsed.TotalSeconds
+    } else {
+        # The fast lane is the pre-commit shape: the index, which is what the next
+        # commit would publish. Asked first, because nothing staged means nothing
+        # scanned, and gitleaks answers that with exit 0 -- a green line standing for
+        # an empty scan is the one thing this report must not print.
+        $staged = @(& git -C $Root diff --cached --name-only 2>$null | Where-Object { $_ })
+        if ($staged) { Phase 'secrets' { gitleaks git --staged --redact --no-banner --no-color -v $Root } }
+        else {
+            $script:Lines += '[SKIP] secrets -- nothing staged (the full level scans the working tree)'
+            $script:BaseDeferred = $true
+        }
+    }
+
+    if (-not (Have 'typos')) {
+        $script:Lines += '[SKIP] typos -- typos not on PATH (https://github.com/crate-ci/typos)'
+        $script:BaseDeferred = $true
+    } else {
+        # -Full and -All judge the whole tree; the fast lane judges what changed,
+        # narrowed by the same git question every other stack uses. A path git still
+        # lists but that no longer exists is a deletion, and handing one to typos is an
+        # error about a file nobody can fix.
+        $paths = @()
+        $narrow = (-not $Full -and -not $All)
+        if ($narrow) {
+            $changed = Get-ChangedPaths $Root
+            if ($null -eq $changed) { $narrow = $false }
+            else {
+                $paths = @($changed | ForEach-Object { Join-Path $Root ($_ -replace '/', '\') } |
+                    Where-Object { Test-Path -LiteralPath $_ -PathType Leaf })
+            }
+        }
+        if ($narrow -and -not $paths) {
+            $script:Lines += '[SKIP] typos -- no changed files'
+            $script:BaseDeferred = $true
+        } else {
+            # No path argument at all means the current directory, which Set-Location
+            # above made the repository root. `brief` is one line per typo,
+            # file:line:col -- the long default repeats the line and underlines it.
+            Phase 'typos' { typos --format brief @paths }
+        }
+    }
+
+    # Full level only: the advisory database lives on the network, and no agent turn
+    # should pay for that -- the same rule govulncheck and `npm audit` already follow.
+    if (-not $Full) { return }
+    if (-not (Have 'osv-scanner')) {
+        $script:Lines += '[SKIP] vuln -- osv-scanner not on PATH (https://github.com/google/osv-scanner)'
+        $script:BaseDeferred = $true
+        return
+    }
+    # `scan source` is a v2 spelling. v1 has no such subcommand and reads the word as a
+    # DIRECTORY NAME instead, exiting 127 with "cannot find the file specified: source"
+    # -- a defensible failure standing on a reason about a path that was never in the
+    # command, the same shape as the stale Go tool binary above.
+    # Out-String, because it prints THREE lines (version, commit, built at) and -match
+    # over an array returns the matching elements without ever setting $Matches -- the
+    # version then read as $null and the guard below never fired.
+    $osvMajor = if (((& osv-scanner --version 2>$null) | Out-String) -match '(\d+)\.\d+') { [int]$Matches[1] }
+    if ($osvMajor -and $osvMajor -lt 2) {
+        $script:Lines += "[SKIP] vuln -- osv-scanner $osvMajor.x on PATH, 'scan source' needs v2 (https://github.com/google/osv-scanner/releases)"
+        $script:BaseDeferred = $true
+        return
+    }
+    # --licenses=false: the flag is a GenericFlag whose IsBoolFlag() is true, so false
+    # clears the allowlist. A licence is a policy question, not a defect, and this
+    # phase exists to report defects.
+    #
+    # Exit 128 is documented as "no packages found", which is not a finding and not an
+    # error: a repository with no manifest or lockfile anywhere has nothing to ask the
+    # advisory database about. Run before the Phase, because that has to be classified
+    # before it can be a verdict -- the same shape as the dotnet vuln phase, which says
+    # `[SKIP] vuln -- no package references` for the same reason. 0 is clean, 1 is
+    # findings, 127 and everything else is the tool failing.
+    $sw = [Diagnostics.Stopwatch]::StartNew()
+    $osvOut = (& osv-scanner scan source -r $Root --licenses=false 2>&1 | Out-String).TrimEnd()
+    $osvCode = $LASTEXITCODE
+    $sw.Stop()
+    if ($osvCode -eq 128) {
+        $script:Lines += '[SKIP] vuln -- no package sources found (osv-scanner)'
+        $script:BaseDeferred = $true
+        return
+    }
+    Phase 'vuln' {
+        if ($osvCode -ne 0) { $osvOut; $global:LASTEXITCODE = 1 }
+    } -Elapsed $sw.Elapsed.TotalSeconds
+}
+
 # --- custom: the commands the repository declares in its own qgate.json ----
 # Arbitrary command lines out of a file in the working tree, which a clone, a pull or
 # a branch switch can change under the reader. So they run only for a repo somebody
@@ -1224,6 +1363,7 @@ foreach ($s in $stacks) {
     $before = $script:Phases
     try {
         switch ($s.Stack) {
+            'base' { Invoke-BaseStack $s }
             'go' { Invoke-GoStack $s }
             'web' { Invoke-WebStack $s }
             'rust' { Invoke-RustStack $s }
@@ -1289,7 +1429,14 @@ if ($script:FmtSlnDir) { Remove-Item $script:FmtSlnDir -Recurse -Force -ErrorAct
 # decisions of the gate's own rather than a repository that verifies nothing, and both
 # say so on the record -- failing them would make an untrusted repo one nobody can
 # commit to, and a repo whose checks are full-level one no agent turn can finish.
-if (-not $script:Failed -and $script:Phases -eq 0 -and -not $script:CustomDeferred) {
+# The fourth is the base stack declining: all three of its tools are optional external
+# binaries, and a machine without them must not turn every repository on it into one
+# nobody can commit to. But base has no marker file, so it is in EVERY run -- an
+# unconditional exemption here would quietly cover the web stack whose every phase is
+# conditional, which is one of the doors this invariant was built to close. So it holds
+# only when base was the whole run: beside any other stack, the count is the run's.
+$baseOnly = $script:BaseDeferred -and -not @($stacks | Where-Object { $_.Stack -ne 'base' })
+if (-not $script:Failed -and $script:Phases -eq 0 -and -not $script:CustomDeferred -and -not $baseOnly) {
     $names = @($stacks | ForEach-Object { $_.Stack }) -join ', '
     $report += "[FAIL] no check phase ran -- nothing was verified$(if ($names) { " ($names)" }), so this run is not green"
     $script:Failed = $true
