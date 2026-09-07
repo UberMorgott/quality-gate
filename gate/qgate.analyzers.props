@@ -1,0 +1,30 @@
+<!--
+  Roslyn analyzers, injected into a build WITHOUT touching the repository.
+
+  `dotnet build -p:CustomBeforeMicrosoftCommonProps=<this file>` imports it at the top of
+  Microsoft.Common.props, ahead of Directory.Build.props and of NuGet's generated props,
+  which is early enough that restore collects these PackageReference items. Verified on the
+  fixture: obj/project.assets.json lists Meziantou.Analyzer/3.0.224 and the build reports
+  MA0074 beside the SDK's own CA1310. DirectoryBuildPropsPath was the alternative and is
+  wrong here: it REPLACES a repository's own Directory.Build.props instead of adding to it.
+
+  PrivateAssets=all: analyzers are a build-time opinion, never a dependency of the output.
+
+  Opt out: create an empty `.qgate-no-analyzers` file next to the csproj. The build then runs
+  exactly as it did before, because the properties on the command line are inert with no
+  analyzer packages behind them.
+
+  (No double hyphen anywhere in these comments: XML forbids it inside a comment, and MSBuild
+  answers with MSB4024 on an import it cannot even parse.)
+-->
+<Project>
+  <ItemGroup Condition="!Exists('$(MSBuildProjectDirectory)\.qgate-no-analyzers')">
+    <PackageReference Include="Meziantou.Analyzer" Version="3.0.224"
+                      PrivateAssets="all" IncludeAssets="runtime;build;native;contentfiles;analyzers;buildtransitive" />
+    <!-- Unity rules on a non-Unity project are noise, so the gate decides: it already reads
+         the evaluated Reference/PackageReference list in the `refs` phase and passes
+         -p:QGateUnity=true only when something there is called UnityEngine*. -->
+    <PackageReference Include="Microsoft.Unity.Analyzers" Version="1.27.0" Condition="'$(QGateUnity)' == 'true'"
+                      PrivateAssets="all" IncludeAssets="runtime;build;native;contentfiles;analyzers;buildtransitive" />
+  </ItemGroup>
+</Project>

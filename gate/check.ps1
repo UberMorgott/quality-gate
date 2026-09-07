@@ -768,11 +768,51 @@ function Invoke-DotnetStack($s) {
     # commit, and its warning count is a note beside a verdict that does not depend on it.
     $buildArgs = @($proj, '-nologo', '-v', 'q', '-clp:NoSummary')
     if ($Full) { $buildArgs += '--no-incremental' }
+    # Roslyn analyzers, injected into THIS build and nowhere else: no repository here edits
+    # its csproj to get static analysis, so the gate brings the packages with it. See
+    # gate/qgate.analyzers.props for why that property and not DirectoryBuildPropsPath.
+    # Full level only -- a fast lane that pays for an analyzer build on every commit is a
+    # fast lane people stop running. Unity rules only where UnityEngine actually is: the
+    # refs above already evaluated both item lists, so this costs nothing extra.
+    $anaArgs = @()
+    if ($Full) {
+        $anaArgs = @("-p:CustomBeforeMicrosoftCommonProps=$(Join-Path $PSScriptRoot 'qgate.analyzers.props')",
+            '-p:EnableNETAnalyzers=true', '-p:AnalysisLevel=latest-Recommended',
+            '-p:AnalysisMode=Recommended', '-p:EnforceCodeStyleInBuild=true')
+        if (@($refs.Identity) + @($pkgs.Identity) | Where-Object { $_ -like 'UnityEngine*' }) {
+            $anaArgs += '-p:QGateUnity=true'
+        }
+    }
     Phase 'build' {
-        $o = (& dotnet build @buildArgs 2>&1 | Out-String).Trim()
+        $o = (& dotnet build @buildArgs @anaArgs 2>&1 | Out-String).Trim()
+        # Injecting PackageReferences forces a restore, and a restore has its own ways to
+        # fail that have nothing to do with the code: no network, a private feed, a lock
+        # file the new items do not match. A repository must never become unbuildable
+        # because the gate wanted analyzers, so the build is repeated without them and the
+        # verdict is the one the repository itself would get. `error CS` is what tells the
+        # two apart -- the compiler ran and rejected the code, and that IS the verdict.
+        if ($LASTEXITCODE -ne 0 -and $anaArgs -and $o -notmatch '(?m):\s+error\s+CS') {
+            $reason = [regex]::Match($o, '(?m)error\s+(?:NU|MSB)\d+[^\r\n]{0,60}').Value
+            if (-not $reason) { $reason = 'the build failed with the analyzers injected' }
+            $o = (& dotnet build @buildArgs 2>&1 | Out-String).Trim()
+            $anaArgs = @()
+            $script:Lines += "[WARN] analyzers -- injection failed, built without them ($reason)"
+        }
         if ($LASTEXITCODE -ne 0) { $o; return }
-        $w = @([regex]::Matches($o, '(?m):\s+warning\s')).Count
+        # Analyzer diagnostics are counted apart from the compiler's own: they are new, they
+        # are loud on code nobody wrote against them, and a single number would make it look
+        # as though csc suddenly disliked 300 things. No -warnaserror on either -- the owner
+        # asked to see the volume first, and a rule that goes red before anyone has read it
+        # is a rule people route around. Top offenders by rule id, capped like `format` above.
+        $codes = @([regex]::Matches($o, '(?m):\s+warning\s+([A-Z]+\d+)') | ForEach-Object { $_.Groups[1].Value })
+        $ana = @($codes | Where-Object { $_ -match '^(CA|MA|IDE|UNT)\d+$' })
+        $w = $codes.Count - $ana.Count
         if ($w) { $script:Lines += "[WARN] ${proj}: $w compiler warning(s)" }
+        if ($ana) {
+            $top = (@($ana | Group-Object | Sort-Object Count, Name -Descending |
+                    Select-Object -First 5 | ForEach-Object { "$($_.Name) x$($_.Count)" }) -join ', ')
+            $script:Lines += "[WARN] ${proj}: $($ana.Count) analyzer diagnostic(s) -- $top"
+        }
     }
     if (-not $Full) { return }
 

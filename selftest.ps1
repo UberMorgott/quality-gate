@@ -676,6 +676,87 @@ if ($dnSdks) {
     } else {
         Write-Output '[skip] no NuGet source reachable -- the Directory.Build.props package checks cannot run'
     }
+
+    # Roslyn analyzers, injected through -p:CustomBeforeMicrosoftCommonProps: not one of
+    # these repositories edits its csproj to get static analysis, so the gate carries the
+    # packages into the build and leaves the work tree alone. Four questions: does anything
+    # come out at all, does the fast lane stay out of it, do the Unity rules stay away from
+    # a project that has never heard of UnityEngine, and -- the one that matters -- does a
+    # diagnostic stay a warning instead of reddening a build that compiles.
+    $dnAna = Join-Path $tmp 'dotnet-analyzers'
+    Copy-Item (Join-Path $PSScriptRoot 'testdata\dotnet-fixture') $dnAna -Recurse
+    # CA1310 (SDK) and MA0074 (Meziantou) over the same call: one line proves both the
+    # properties and the injected package arrived.
+    [IO.File]::WriteAllText((Join-Path $dnAna 'Probe.cs'), @'
+namespace Fixture;
+
+public static class Probe
+{
+    public static int Find(string a, string b)
+    {
+        return a.IndexOf(b);
+    }
+}
+'@)
+    # Fast lane FIRST, on a cold obj/: an incremental build that compiles nothing prints no
+    # warnings either, so running it after the full level would pass without proving a thing.
+    $r = Invoke-Gate $dnAna
+    $anaFastOut = $r.Out
+    $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $dnAna -All -Full 2>&1 | Out-String)
+    $dnAnaCode = $LASTEXITCODE
+    if ($out -match 'injection failed') {
+        Write-Output '[skip] analyzer packages could not be restored -- the injection checks cannot run'
+    }
+    else {
+        Check 'analyzer diagnostics are reported at the full level' `
+            (($out -match 'analyzer diagnostic\(s\)') -and ($out -match 'MA0074') -and ($out -match 'CA1310')) $out
+        # The point of this pass. The owner asked for the volume first, and a rule that goes
+        # red before anybody has read it is a rule people learn to route around.
+        Check 'analyzer diagnostics are a warning, not a failure' `
+            (($dnAnaCode -eq 0) -and ($out -match '\[PASS\] build') -and ($out -notmatch '\[FAIL\]')) "code=$dnAnaCode $out"
+        # The compiler's own count is separate: one number for both would read as though csc
+        # had suddenly grown 300 opinions about code it used to accept.
+        Check 'analyzer diagnostics are not counted as compiler warnings' `
+            ($out -notmatch 'compiler warning\(s\)') $out
+        Check 'the fast lane does not pay for the analyzer build' `
+            (($anaFastOut -notmatch 'analyzer diagnostic') -and ($anaFastOut -notmatch 'MA0074')) $anaFastOut
+        # Unity rules on a project with no UnityEngine anywhere are noise. The assets file is
+        # the honest witness: it says what restore actually pulled, not what was asked for.
+        $anaAssets = [IO.File]::ReadAllText((Join-Path $dnAna 'obj\project.assets.json'))
+        Check 'Unity analyzers are not injected into a project with no UnityEngine reference' `
+            (($anaAssets -match 'Meziantou\.Analyzer/3\.0\.224') -and ($anaAssets -notmatch 'Microsoft\.Unity\.Analyzers')) `
+            'obj/project.assets.json'
+    }
+
+    # And the failure this feature must survive. Injecting PackageReferences forces a
+    # restore, and a repository that pins its packages with a lock file answers NU1004 --
+    # the same shape as an offline machine or a private feed. Reported as a warning, and
+    # the build is repeated without the analyzers: nothing here may become unbuildable
+    # because the gate wanted an opinion about the code.
+    $dnLock = Join-Path $tmp 'dotnet-lock'
+    Copy-Item (Join-Path $PSScriptRoot 'testdata\dotnet-fixture') $dnLock -Recurse
+    Push-Location $dnLock
+    & dotnet restore Fixture.csproj -p:RestorePackagesWithLockFile=true -nologo *> $null
+    $dnLocked = (($LASTEXITCODE -eq 0) -and (Test-Path (Join-Path $dnLock 'packages.lock.json')))
+    Pop-Location
+    if ($dnLocked) {
+        [IO.File]::WriteAllText((Join-Path $dnLock 'Fixture.csproj'), $dnProjClean.Replace('</PropertyGroup>', @'
+  <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <RestoreLockedMode>true</RestoreLockedMode>
+  </PropertyGroup>
+'@))
+        $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $dnLock -All -Full 2>&1 | Out-String)
+        $dnLockCode = $LASTEXITCODE
+        Check 'a repository the analyzers cannot be injected into is still built' `
+            (($dnLockCode -eq 0) -and ($out -match '\[PASS\] build')) "code=$dnLockCode $out"
+        # Silently building without them would be worse than not injecting at all: the report
+        # would claim an analysis nobody performed.
+        Check 'a failed injection says so, with its reason' `
+            (($out -match '\[WARN\] analyzers -- injection failed, built without them') -and ($out -match 'NU1004')) $out
+    }
+    else {
+        Write-Output '[skip] no lock file could be produced -- the injection fallback cannot be exercised'
+    }
 } else {
     Write-Output '[skip] no .NET SDK on this machine -- the dotnet stack cannot be exercised'
 }
