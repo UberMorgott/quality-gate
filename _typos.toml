@@ -3,3 +3,11 @@
 [default.extend-words]
 # Both spellings are English; this is the one the prose in gate/outdated.ps1 uses.
 unparseable = "unparseable"
+
+# extend-words is checked AFTER an identifier is split into words, so it cannot answer
+# for a name whose spelling is only correct whole. extend-identifiers is the earlier
+# hook, and the one a protocol name needs.
+[default.extend-identifiers]
+# The protocol, in a comment in gate/qgate.analyzers.props. Split by case, the middle
+# word is `Pn`, which typos reads as a typo for `On`.
+UPnP = "UPnP"
