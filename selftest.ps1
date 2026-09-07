@@ -685,17 +685,28 @@ if ($dnSdks) {
     # diagnostic stay a warning instead of reddening a build that compiles.
     $dnAna = Join-Path $tmp 'dotnet-analyzers'
     Copy-Item (Join-Path $PSScriptRoot 'testdata\dotnet-fixture') $dnAna -Recurse
-    # CA1310 (SDK) and MA0074 (Meziantou) over the same call: one line proves both the
-    # properties and the injected package arrived.
+    # CA1310 (SDK) and MA0084 (Meziantou) in the same method: two lines prove both the
+    # properties and the injected package arrived. MA0074 used to be the Meziantou half and
+    # cannot be: it is the same 41 sites as CA1310 and is now silenced as a duplicate.
+    # Prefix() is a Harmony patch, spelled the only way Harmony accepts -- the leading
+    # underscores are the injector's API, and CA1707 asking for them to be renamed is the
+    # single loudest false positive this gate can produce on a game mod.
     [IO.File]::WriteAllText((Join-Path $dnAna 'Probe.cs'), @'
 namespace Fixture;
 
-public static class Probe
+public sealed class Probe
 {
-    public static int Find(string a, string b)
+    private readonly string tag = "probe";
+
+    public string Tag => tag;
+
+    public int Find(string a, string b)
     {
-        return a.IndexOf(b);
+        var tag = a;
+        return tag.IndexOf(b);
     }
+
+    public static bool Prefix(object __instance) => __instance != null;
 }
 '@)
     # Fast lane FIRST, on a cold obj/: an incremental build that compiles nothing prints no
@@ -709,7 +720,13 @@ public static class Probe
     }
     else {
         Check 'analyzer diagnostics are reported at the full level' `
-            (($out -match 'analyzer diagnostic\(s\)') -and ($out -match 'MA0074') -and ($out -match 'CA1310')) $out
+            (($out -match 'analyzer diagnostic\(s\)') -and ($out -match 'MA0084') -and ($out -match 'CA1310')) $out
+        # The rule that had to go. Harmony patch parameters are named __instance, __result,
+        # ___privateField and __state because Harmony reads those names; CA1707 asks for
+        # every one of them to be renamed, which breaks the patch. 134 hits on the live
+        # repositories, not one of them a defect.
+        Check 'CA1707 stays silent about a Harmony patch parameter' `
+            ($out -notmatch 'CA1707') $out
         # The point of this pass. The owner asked for the volume first, and a rule that goes
         # red before anybody has read it is a rule people learn to route around.
         Check 'analyzer diagnostics are a warning, not a failure' `
@@ -719,7 +736,7 @@ public static class Probe
         Check 'analyzer diagnostics are not counted as compiler warnings' `
             ($out -notmatch 'compiler warning\(s\)') $out
         Check 'the fast lane does not pay for the analyzer build' `
-            (($anaFastOut -notmatch 'analyzer diagnostic') -and ($anaFastOut -notmatch 'MA0074')) $anaFastOut
+            (($anaFastOut -notmatch 'analyzer diagnostic') -and ($anaFastOut -notmatch 'MA0084')) $anaFastOut
         # Unity rules on a project with no UnityEngine anywhere are noise. The assets file is
         # the honest witness: it says what restore actually pulled, not what was asked for.
         $anaAssets = [IO.File]::ReadAllText((Join-Path $dnAna 'obj\project.assets.json'))

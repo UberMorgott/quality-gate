@@ -18,6 +18,66 @@
   answers with MSB4024 on an import it cannot even parse.)
 -->
 <Project>
+  <!--
+    What is switched OFF, and why each one earned it. The first measurement over the three
+    live repositories was 8666 diagnostics across 19 projects; nobody reads 8666. Every rule
+    below was judged on SAMPLED HITS in those repositories, not on the rule's title: the
+    question asked of each was "would a developer looking at this line call it a bug?".
+
+    Roslyn resolves NoWarn per project, so this list is appended to whatever the repository
+    already had ($(NoWarn) is empty in all three today) rather than replacing it. Set here
+    and not on the command line so the reasoning lives beside the packages it silences.
+
+    FALSE POSITIVES on this codebase (the rule is wrong here, not the code):
+      CA1707  identifiers with underscores. These are Harmony patches: __instance, __result,
+              ___privateField and __state are the injector's API, and renaming them breaks
+              the patch. 134 hits, every sampled one a patch parameter.
+      CA1051  visible instance fields. Unity serializes public fields; that IS the model.
+      CA1401  visible P/Invoke. A mod's interop surface is deliberately public.
+      MA0002  no IEqualityComparer<string> on a HashSet/Dictionary. The default already IS
+              ordinal; sampled hits included a line that had just passed StringComparer.Ordinal.
+      MA0046  EventHandler<T> shape. The transport's delegates are not UI events.
+      CA2211/MA0069  public static mutable fields. A mod's globals are how it is reached.
+
+    NOT DEFECTS, style or micro-performance (a hit here is never a bug report):
+      MA0006  string == string. Idiomatic C#, 2391 hits over 388 files.
+      MA0051  method length metric.        MA0048  file name must match type name.
+      MA0047  type outside a namespace.    MA0008  StructLayoutAttribute.
+      MA0016  return the abstraction.      MA0015  parameter name in ArgumentException.
+      MA0023  RegexOptions.ExplicitCapture.
+      CA1861  constant array argument.     CA1825  Array.Empty (MA0005 is the same rule).
+      CA1859  concrete return type.        CA1805  explicit default initializer.
+      CA1822  member could be static.      CA2201  throw new Exception.
+
+    LOUD AND NOT ABOUT THIS CODE:
+      CA1305/MA0011  IFormatProvider. Sampled 518 hits across all three repositories: every
+              single one is a number or DateTime being concatenated into a LOG string
+              (TacticalCommandSync writes the wire with BinaryWriter and only formats the
+              trace line beside it). The bug this rule exists for, a float serialized with a
+              comma, does not occur here. CA1310 below still catches the comparison half.
+      MA0009  regex evaluation timeout. Fires on every Regex regardless of the pattern; the
+              inputs are the repository's own manifests and a UPnP reply, not hostile text.
+
+    DUPLICATES, kept once so a fix is not reported twice:
+      MA0005 = CA1825, MA0011 = CA1305, MA0074 = CA1310 (identical 41 sites, CA1310 kept).
+
+    KEPT ON PURPOSE, including the ones still loud: MA0084 (a local hiding a field is the
+    classic "assigned the wrong one" bug, 57 hits), CA1310 (culture-sensitive StartsWith /
+    IndexOf, 41), CA1806 (an ignored return value, 18), MA0004 (missing ConfigureAwait),
+    MA0134 (fire and forget), CA1001 (a type owning IDisposable fields and not disposing),
+    CA5350/CA5351 (SHA1/MD5), CA2101 (marshalling). Each of those, sampled, reads as a
+    defect report. 299 survive, roughly 16 per project.
+  -->
+  <!-- No opt-out condition on this group on purpose: EnableNETAnalyzers on the command line
+       still turns on the CA rules that ship inside the SDK, packages or no packages, so a
+       repository holding a .qgate-no-analyzers file would otherwise get the noise back and
+       none of the reasoning. -->
+  <PropertyGroup>
+    <NoWarn>$(NoWarn);CA1707;CA1051;CA1401;CA2211;CA1305;CA1861;CA1825;CA1859;CA1805;CA1822;CA2201</NoWarn>
+    <NoWarn>$(NoWarn);MA0002;MA0046;MA0069;MA0006;MA0051;MA0048;MA0047;MA0008;MA0016;MA0015</NoWarn>
+    <NoWarn>$(NoWarn);MA0023;MA0005;MA0011;MA0074;MA0009</NoWarn>
+  </PropertyGroup>
+
   <ItemGroup Condition="!Exists('$(MSBuildProjectDirectory)\.qgate-no-analyzers')">
     <PackageReference Include="Meziantou.Analyzer" Version="3.0.224"
                       PrivateAssets="all" IncludeAssets="runtime;build;native;contentfiles;analyzers;buildtransitive" />
