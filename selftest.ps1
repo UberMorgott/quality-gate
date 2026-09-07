@@ -685,9 +685,12 @@ if ($dnSdks) {
     # diagnostic stay a warning instead of reddening a build that compiles.
     $dnAna = Join-Path $tmp 'dotnet-analyzers'
     Copy-Item (Join-Path $PSScriptRoot 'testdata\dotnet-fixture') $dnAna -Recurse
-    # CA1310 (SDK) and MA0084 (Meziantou) in the same method: two lines prove both the
-    # properties and the injected package arrived. MA0074 used to be the Meziantou half and
-    # cannot be: it is the same 41 sites as CA1310 and is now silenced as a duplicate.
+    # CA1001 (SDK) and MA0084 (Meziantou) in one file: two diagnostics prove both the
+    # properties and the injected package arrived. The SDK half has been CA1310 and, before
+    # that, MA0074; both are now silenced, and CA1001 is the better witness anyway -- it is
+    # the rule that found the only unambiguous bug of the live sweep (three Unity
+    # CommandBuffers created and never disposed), so a run that stops reporting it has lost
+    # something that matters rather than something that was loud.
     # Prefix() is a Harmony patch, spelled the only way Harmony accepts -- the leading
     # underscores are the injector's API, and CA1707 asking for them to be renamed is the
     # single loudest false positive this gate can produce on a game mod.
@@ -698,7 +701,11 @@ public sealed class Probe
 {
     private readonly string tag = "probe";
 
+    private readonly System.IO.MemoryStream buffer = new();
+
     public string Tag => tag;
+
+    public int Length => (int)buffer.Length;
 
     public int Find(string a, string b)
     {
@@ -707,6 +714,11 @@ public sealed class Probe
     }
 
     public static bool Prefix(object __instance) => __instance != null;
+}
+
+internal class Sealable
+{
+    public int Value => 1;
 }
 '@)
     # Fast lane FIRST, on a cold obj/: an incremental build that compiles nothing prints no
@@ -720,7 +732,12 @@ public sealed class Probe
     }
     else {
         Check 'analyzer diagnostics are reported at the full level' `
-            (($out -match 'analyzer diagnostic\(s\)') -and ($out -match 'MA0084') -and ($out -match 'CA1310')) $out
+            (($out -match 'analyzer diagnostic\(s\)') -and ($out -match 'MA0084') -and ($out -match 'CA1001')) $out
+        # The second noise pass, asserted as absence: the probe's Find() is still a
+        # culture-sensitive-looking IndexOf and Probe itself is still a candidate for
+        # "could be sealed", so a NoWarn list that stopped being applied would show up here.
+        Check 'the second-pass suppressions stay silent' `
+            (($out -notmatch 'CA1310') -and ($out -notmatch 'CA1852')) $out
         # The rule that had to go. Harmony patch parameters are named __instance, __result,
         # ___privateField and __state because Harmony reads those names; CA1707 asks for
         # every one of them to be renamed, which breaks the patch. 134 hits on the live

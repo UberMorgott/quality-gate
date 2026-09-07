@@ -61,12 +61,33 @@
     DUPLICATES, kept once so a fix is not reported twice:
       MA0005 = CA1825, MA0011 = CA1305, MA0074 = CA1310 (identical 41 sites, CA1310 kept).
 
+    SECOND PASS, after reading the 299 that survived: about one diagnostic in ten was
+    worth reading, and these three were most of the rest.
+      CA1310  culture-sensitive StartsWith / IndexOf. Kept last time on the rule's own
+              merits and measured since: all 28 hits are ASCII prefix tests over the
+              repositories' own manifest keys and file extensions, where the culture
+              cannot change the answer. The comparison bug this rule exists for needs a
+              locale-sensitive alphabet, which none of these strings has.
+      CA1852  "type can be sealed". Style, and one that costs a public API change to act
+              on in a mod that other mods reference.
+      CA5351  MD5 is a broken hash. A JUDGEMENT CALL, and the one suppression here that
+              is not simply "the rule is wrong": MD5 as a content-key digest is a correct
+              use of it (ContentTool/src/Bake/CatalogText.cs:157 hashes catalog text to
+              address it), MD5 for authentication is a real vulnerability, and the
+              analyzer cannot tell the two apart. Silenced because every sampled hit is
+              the first kind, which also means this gate will not catch the second kind.
+              Said out loud here and in the README rather than left to be found.
+
     KEPT ON PURPOSE, including the ones still loud: MA0084 (a local hiding a field is the
-    classic "assigned the wrong one" bug, 57 hits), CA1310 (culture-sensitive StartsWith /
-    IndexOf, 41), CA1806 (an ignored return value, 18), MA0004 (missing ConfigureAwait),
-    MA0134 (fire and forget), CA1001 (a type owning IDisposable fields and not disposing),
-    CA5350/CA5351 (SHA1/MD5), CA2101 (marshalling). Each of those, sampled, reads as a
-    defect report. 299 survive, roughly 16 per project.
+    classic "assigned the wrong one" bug, 57 hits), CA1806 (an ignored return value, 18),
+    MA0004 (missing ConfigureAwait), MA0134 (fire and forget), CA5350 (SHA1), CA2101
+    (marshalling), and above all CA1001: a type owning IDisposable fields and not
+    disposing them found the one unambiguous .NET bug in the whole sweep.
+    Renderforge/src/DlssDriver.cs:21 creates three Unity CommandBuffers at :345-348 and
+    disposes none of them, leaked on every teardown. It also fires on a MemoryStream
+    field, which is harmless. A rule that finds a real leak has earned its noise.
+
+    299 to 253: Renderforge 21 to 16, ContentTool 133 to 101, Multiplayer2 145 to 136.
   -->
   <!-- No opt-out condition on this group on purpose: EnableNETAnalyzers on the command line
        still turns on the CA rules that ship inside the SDK, packages or no packages, so a
@@ -76,6 +97,7 @@
     <NoWarn>$(NoWarn);CA1707;CA1051;CA1401;CA2211;CA1305;CA1861;CA1825;CA1859;CA1805;CA1822;CA2201</NoWarn>
     <NoWarn>$(NoWarn);MA0002;MA0046;MA0069;MA0006;MA0051;MA0048;MA0047;MA0008;MA0016;MA0015</NoWarn>
     <NoWarn>$(NoWarn);MA0023;MA0005;MA0011;MA0074;MA0009</NoWarn>
+    <NoWarn>$(NoWarn);CA1310;CA1852;CA5351</NoWarn>
   </PropertyGroup>
 
   <ItemGroup Condition="!Exists('$(MSBuildProjectDirectory)\.qgate-no-analyzers')">
