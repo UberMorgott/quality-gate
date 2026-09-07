@@ -1,27 +1,27 @@
 # Graph Report - quality-gate  (2026-09-07)
 
 ## Corpus Check
-- 29 files · ~60,149 words
+- 29 files · ~62,393 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 178 nodes · 207 edges · 30 communities (19 shown, 11 thin omitted)
-- Extraction: 86% EXTRACTED · 14% INFERRED · 0% AMBIGUOUS · INFERRED: 29 edges (avg confidence: 0.83)
+- 180 nodes · 212 edges · 30 communities (19 shown, 11 thin omitted)
+- Extraction: 86% EXTRACTED · 14% INFERRED · 0% AMBIGUOUS · INFERRED: 30 edges (avg confidence: 0.83)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `379f39d7`
+- Built from commit: `d393ea66`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
 ## Community Hubs (Navigation)
-- GitHub Actions quality-gate workflow
+- qgate wire (repo wiring, config only)
 - detect.ps1
 - Coverage measures happy paths; a green suite proves nothing
 - quality_gate job anchor shared by both hooks
 - Greeter.cs
 - selftest.ps1
-- qgate wire (repo wiring, config only)
+- Claude Code Stop hook (exit code 2)
 - ignoreFiles
 - package.json
 - check.ps1
@@ -43,12 +43,12 @@
 2. `.golangci.yml template` - 8 edges
 3. `Get-DotnetSharedFormat()` - 7 edges
 4. `Invoke-GodotStack()` - 7 edges
-5. `Phase()` - 6 edges
-6. `Invoke-CustomStack()` - 6 edges
-7. `qgate wire (repo wiring, config only)` - 6 edges
-8. `Get-ChangedPaths()` - 5 edges
-9. `Fail()` - 5 edges
-10. `Have()` - 5 edges
+5. `Invoke-CppStack()` - 7 edges
+6. `Phase()` - 6 edges
+7. `Have()` - 6 edges
+8. `Invoke-CustomStack()` - 6 edges
+9. `qgate wire (repo wiring, config only)` - 6 edges
+10. `Get-ChangedPaths()` - 5 edges
 
 ## Surprising Connections (you probably didn't know these)
 - `detect stacks step (monorepo-aware marker search)` --semantically_similar_to--> `Marker-file stack detection`  [INFERRED] [semantically similar]
@@ -59,8 +59,8 @@
   HANDOFF.md → PLAYBOOK.md
 - `Set-OutdatedCache()` --calls--> `Get-PathKey()`  [INFERRED]
   selftest.ps1 → gate/detect.ps1
-- `.golangci.yml template` --references--> `Vulnerability phase (govulncheck / npm audit)`  [EXTRACTED]
-  templates/.golangci.yml → README.md
+- `Cancellability findings (context propagation)` --conceptually_related_to--> `.golangci.yml template`  [INFERRED]
+  PLAYBOOK.md → templates/.golangci.yml
 
 ## Import Cycles
 - None detected.
@@ -72,25 +72,25 @@
 
 ## Communities (30 total, 11 thin omitted)
 
-### Community 0 - "GitHub Actions quality-gate workflow"
+### Community 0 - "qgate wire (repo wiring, config only)"
 Cohesion: 0.12
-Nodes (20): "Gate is wrong" issue template, GOTOOLCHAIN=auto unpacking races produce 'missing std package', Incoming agent reports: symptom right, cause wrong half the time, Second-engine review, Security findings (path traversal, middleware order, body limits), One entry point, stop on first failed phase, Wave mechanism: cleanup queue lives in the linter config, -Baseline adoption on a legacy codebase (+12 more)
+Nodes (22): "Gate is wrong" issue template, cherry-pick and revert cannot be covered cheaply, Deliberately chosen boundaries (not TODOs), GOTOOLCHAIN=auto unpacking races produce 'missing std package', Measured git hook coverage matrix (git 2.53), One entry point, stop on first failed phase, Wave mechanism: cleanup queue lives in the linter config, -Baseline adoption on a legacy codebase (+14 more)
 
 ### Community 1 - "detect.ps1"
-Cohesion: 0.15
-Nodes (14): Find-Marker(), Get-ChecksHash(), Get-CustomChecks(), Get-GoBuiltWith(), Get-GodotBin(), Get-Stacks(), Get-TrustedHash(), Get-TrustKey() (+6 more)
+Cohesion: 0.14
+Nodes (15): Find-Marker(), Get-ChecksHash(), Get-CustomChecks(), Get-GoBuiltWith(), Get-GodotBin(), Get-Stacks(), Get-TrustedHash(), Get-TrustKey() (+7 more)
 
 ### Community 2 - "Coverage measures happy paths; a green suite proves nothing"
 Cohesion: 0.17
 Nodes (13): git check-ignore exit codes; --stdin batch unusable on Windows, Selftest counts 121 online / 115 offline, Coverage measures happy paths; a green suite proves nothing, Mutation check of existing tests, PowerShell reads an empty value as absence, Red-then-green verification, A right outcome does not prove the right cause (§0.1), Negative check asserts outcome + applied cause + absent cause (+5 more)
 
 ### Community 3 - "quality_gate job anchor shared by both hooks"
-Cohesion: 0.17
-Nodes (12): Three rules for a machine-readable deferral file, Suppression needs a named reason; stale suppressions flagged, qgate.deferrals.json (dated deferrals), qgate outdated, -Quiet (silent only on green), Vulnerability phase (govulncheck / npm audit), exhaustive with default-signifies-exhaustive, nolintlint: no bare or dead suppressions (+4 more)
+Cohesion: 0.20
+Nodes (10): Three rules for a machine-readable deferral file, Suppression needs a named reason; stale suppressions flagged, qgate.deferrals.json (dated deferrals), -Quiet (silent only on green), exhaustive with default-signifies-exhaustive, nolintlint: no bare or dead suppressions, qgate.cmd is load-bearing under the Git shell, command -v probe is false under sh.exe (+2 more)
 
-### Community 6 - "qgate wire (repo wiring, config only)"
-Cohesion: 0.15
-Nodes (15): cherry-pick and revert cannot be covered cheaply, Deliberately chosen boundaries (not TODOs), GIT_INDEX_FILE marks that we are inside a commit, Measured git hook coverage matrix (git 2.53), Parallel commits in one worktree swallow each other's staged files, A signature-changing commit must carry its callers, Commit discipline (per module, explicit paths, consequence in message), Verify the hook actually executes (relative path silently skipped it) (+7 more)
+### Community 6 - "Claude Code Stop hook (exit code 2)"
+Cohesion: 0.22
+Nodes (9): GIT_INDEX_FILE marks that we are inside a commit, Parallel commits in one worktree swallow each other's staged files, A signature-changing commit must carry its callers, Commit discipline (per module, explicit paths, consequence in message), Verify the hook actually executes (relative path silently skipped it), Green-commit marker in TEMP for the Stop hook, Staged-tree guard via git write-tree, Claude Code Stop hook (exit code 2) (+1 more)
 
 ### Community 7 - "ignoreFiles"
 Cohesion: 0.25
@@ -101,12 +101,12 @@ Cohesion: 0.29
 Nodes (6): name, private, scripts, build-only, type-check, type
 
 ### Community 9 - "check.ps1"
-Cohesion: 0.32
-Nodes (16): Fail(), Get-ChangedPaths(), Get-DotnetChangedCs(), Get-DotnetEval(), Get-DotnetSharedFormat(), Get-DotnetTfms(), Get-DotnetTooNew(), Have() (+8 more)
+Cohesion: 0.31
+Nodes (17): Fail(), Get-ChangedPaths(), Get-CppCompileDb(), Get-DotnetChangedCs(), Get-DotnetEval(), Get-DotnetSharedFormat(), Get-DotnetTfms(), Get-DotnetTooNew() (+9 more)
 
 ### Community 10 - ".golangci.yml template"
-Cohesion: 0.20
-Nodes (10): git add --renormalize + checkout is a no-op for CRLF, Cancellability findings (context propagation), Final-write timeout created too early, Taint rules report one finding at a time and are inter-package, Unchecked errors: propagate, log-and-degrade, or join, Go stack phases, .golangci.yml template, govet disable-all plus non-default analyzer allow-list (+2 more)
+Cohesion: 0.12
+Nodes (16): Incoming agent reports: symptom right, cause wrong half the time, git add --renormalize + checkout is a no-op for CRLF, Cancellability findings (context propagation), Final-write timeout created too early, Second-engine review, Security findings (path traversal, middleware order, body limits), Taint rules report one finding at a time and are inter-package, Unchecked errors: propagate, log-and-degrade, or join (+8 more)
 
 ### Community 11 - "Add"
 Cohesion: 0.40
@@ -124,17 +124,17 @@ Nodes (3): Cross-stack fan-out on .proto change, Proto stack phases (buf), proto
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `qgate wire (repo wiring, config only)` connect `qgate wire (repo wiring, config only)` to `GitHub Actions quality-gate workflow`, `.golangci.yml template`?**
-  _High betweenness centrality (0.099) - this node is a cross-community bridge._
-- **Why does `.golangci.yml template` connect `.golangci.yml template` to `quality_gate job anchor shared by both hooks`, `qgate wire (repo wiring, config only)`?**
-  _High betweenness centrality (0.072) - this node is a cross-community bridge._
-- **Why does `quality-gate (qgate)` connect `GitHub Actions quality-gate workflow` to `Coverage measures happy paths; a green suite proves nothing`?**
-  _High betweenness centrality (0.049) - this node is a cross-community bridge._
+- **Why does `qgate wire (repo wiring, config only)` connect `qgate wire (repo wiring, config only)` to `.golangci.yml template`, `Claude Code Stop hook (exit code 2)`?**
+  _High betweenness centrality (0.097) - this node is a cross-community bridge._
+- **Why does `.golangci.yml template` connect `.golangci.yml template` to `qgate wire (repo wiring, config only)`?**
+  _High betweenness centrality (0.070) - this node is a cross-community bridge._
+- **Why does `quality-gate (qgate)` connect `qgate wire (repo wiring, config only)` to `Coverage measures happy paths; a green suite proves nothing`?**
+  _High betweenness centrality (0.048) - this node is a cross-community bridge._
 - **Are the 2 inferred relationships involving `.golangci.yml template` (e.g. with `Cancellability findings (context propagation)` and `Unchecked errors: propagate, log-and-degrade, or join`) actually correct?**
   _`.golangci.yml template` has 2 INFERRED edges - model-reasoned connections that need verification._
 - **Are the 2 inferred relationships involving `Invoke-GodotStack()` (e.g. with `Get-GodotBin()` and `Test-GitIgnoredDir()`) actually correct?**
   _`Invoke-GodotStack()` has 2 INFERRED edges - model-reasoned connections that need verification._
 - **What connects `stylelint-config-standard-scss`, `stylelint-config-recommended-vue/scss`, `dist/**` to the rest of the system?**
   _25 weakly-connected nodes found - possible documentation gaps or missing edges._
-- **Should `GitHub Actions quality-gate workflow` be split into smaller, more focused modules?**
-  _Cohesion score 0.11578947368421053 - nodes in this community are weakly interconnected._
+- **Should `qgate wire (repo wiring, config only)` be split into smaller, more focused modules?**
+  _Cohesion score 0.11688311688311688 - nodes in this community are weakly interconnected._

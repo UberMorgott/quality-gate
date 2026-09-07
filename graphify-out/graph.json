@@ -75,17 +75,6 @@
       "norm_label": "invoke-child()"
     },
     {
-      "label": "bootstrap.ps1",
-      "file_type": "code",
-      "source_file": "bootstrap.ps1",
-      "source_location": "L1",
-      "_origin": "ast",
-      "id": "bootstrap",
-      "community": 20,
-      "community_name": "bootstrap.ps1",
-      "norm_label": "bootstrap.ps1"
-    },
-    {
       "label": "check.ps1",
       "file_type": "code",
       "source_file": "gate/check.ps1",
@@ -218,10 +207,21 @@
       "norm_label": "invoke-godotstack()"
     },
     {
+      "label": "Get-CppCompileDb()",
+      "file_type": "code",
+      "source_file": "gate/check.ps1",
+      "source_location": "L1141",
+      "_origin": "ast",
+      "id": "gate_check_get_cppcompiledb",
+      "community": 9,
+      "community_name": "check.ps1",
+      "norm_label": "get-cppcompiledb()"
+    },
+    {
       "label": "Invoke-CppStack()",
       "file_type": "code",
       "source_file": "gate/check.ps1",
-      "source_location": "L1129",
+      "source_location": "L1152",
       "_origin": "ast",
       "id": "gate_check_invoke_cppstack",
       "community": 9,
@@ -232,7 +232,7 @@
       "label": "Invoke-BaseStack()",
       "file_type": "code",
       "source_file": "gate/check.ps1",
-      "source_location": "L1198",
+      "source_location": "L1300",
       "_origin": "ast",
       "id": "gate_check_invoke_basestack",
       "community": 9,
@@ -243,7 +243,7 @@
       "label": "Invoke-CustomStack()",
       "file_type": "code",
       "source_file": "gate/check.ps1",
-      "source_location": "L1330",
+      "source_location": "L1432",
       "_origin": "ast",
       "id": "gate_check_invoke_customstack",
       "community": 9,
@@ -262,10 +262,21 @@
       "norm_label": "detect.ps1"
     },
     {
+      "label": "Test-CppOwn()",
+      "file_type": "code",
+      "source_file": "gate/detect.ps1",
+      "source_location": "L44",
+      "_origin": "ast",
+      "id": "gate_detect_test_cppown",
+      "community": 1,
+      "community_name": "detect.ps1",
+      "norm_label": "test-cppown()"
+    },
+    {
       "label": "Get-RepoRoot()",
       "file_type": "code",
       "source_file": "gate/detect.ps1",
-      "source_location": "L37",
+      "source_location": "L52",
       "_origin": "ast",
       "id": "gate_detect_get_reporoot",
       "community": 1,
@@ -276,7 +287,7 @@
       "label": "Test-GitIgnored()",
       "file_type": "code",
       "source_file": "gate/detect.ps1",
-      "source_location": "L51",
+      "source_location": "L66",
       "_origin": "ast",
       "id": "gate_detect_test_gitignored",
       "community": 1,
@@ -287,7 +298,7 @@
       "label": "Test-GitIgnoredDir()",
       "file_type": "code",
       "source_file": "gate/detect.ps1",
-      "source_location": "L81",
+      "source_location": "L96",
       "_origin": "ast",
       "id": "gate_detect_test_gitignoreddir",
       "community": 9,
@@ -298,7 +309,7 @@
       "label": "Find-Marker()",
       "file_type": "code",
       "source_file": "gate/detect.ps1",
-      "source_location": "L88",
+      "source_location": "L103",
       "_origin": "ast",
       "id": "gate_detect_find_marker",
       "community": 1,
@@ -309,7 +320,7 @@
       "label": "Get-PathKey()",
       "file_type": "code",
       "source_file": "gate/detect.ps1",
-      "source_location": "L105",
+      "source_location": "L120",
       "_origin": "ast",
       "id": "gate_detect_get_pathkey",
       "community": 9,
@@ -320,7 +331,7 @@
       "label": "Get-GoBuiltWith()",
       "file_type": "code",
       "source_file": "gate/detect.ps1",
-      "source_location": "L126",
+      "source_location": "L141",
       "_origin": "ast",
       "id": "gate_detect_get_gobuiltwith",
       "community": 1,
@@ -331,7 +342,7 @@
       "label": "Test-GoToolStale()",
       "file_type": "code",
       "source_file": "gate/detect.ps1",
-      "source_location": "L143",
+      "source_location": "L158",
       "_origin": "ast",
       "id": "gate_detect_test_gotoolstale",
       "community": 1,
@@ -342,7 +353,7 @@
       "label": "Get-GodotBin()",
       "file_type": "code",
       "source_file": "gate/detect.ps1",
-      "source_location": "L155",
+      "source_location": "L170",
       "_origin": "ast",
       "id": "gate_detect_get_godotbin",
       "community": 1,
@@ -353,7 +364,7 @@
       "label": "Get-CustomChecks()",
       "file_type": "code",
       "source_file": "gate/detect.ps1",
-      "source_location": "L173",
+      "source_location": "L188",
       "_origin": "ast",
       "id": "gate_detect_get_customchecks",
       "community": 1,
@@ -364,7 +375,7 @@
       "label": "Get-TrustStore()",
       "file_type": "code",
       "source_file": "gate/detect.ps1",
-      "source_location": "L221",
+      "source_location": "L236",
       "_origin": "ast",
       "id": "gate_detect_get_truststore",
       "community": 1,
@@ -375,7 +386,7 @@
       "label": "Get-TrustKey()",
       "file_type": "code",
       "source_file": "gate/detect.ps1",
-      "source_location": "L226",
+      "source_location": "L241",
       "_origin": "ast",
       "id": "gate_detect_get_trustkey",
       "community": 1,
@@ -386,7 +397,7 @@
       "label": "Get-ChecksHash()",
       "file_type": "code",
       "source_file": "gate/detect.ps1",
-      "source_location": "L234",
+      "source_location": "L249",
       "_origin": "ast",
       "id": "gate_detect_get_checkshash",
       "community": 1,
@@ -397,7 +408,7 @@
       "label": "Get-TrustedHash()",
       "file_type": "code",
       "source_file": "gate/detect.ps1",
-      "source_location": "L248",
+      "source_location": "L263",
       "_origin": "ast",
       "id": "gate_detect_get_trustedhash",
       "community": 1,
@@ -408,7 +419,7 @@
       "label": "Test-ChecksTrusted()",
       "file_type": "code",
       "source_file": "gate/detect.ps1",
-      "source_location": "L257",
+      "source_location": "L272",
       "_origin": "ast",
       "id": "gate_detect_test_checkstrusted",
       "community": 1,
@@ -419,7 +430,7 @@
       "label": "Test-AnyFile()",
       "file_type": "code",
       "source_file": "gate/detect.ps1",
-      "source_location": "L262",
+      "source_location": "L277",
       "_origin": "ast",
       "id": "gate_detect_test_anyfile",
       "community": 1,
@@ -430,133 +441,12 @@
       "label": "Get-Stacks()",
       "file_type": "code",
       "source_file": "gate/detect.ps1",
-      "source_location": "L276",
+      "source_location": "L291",
       "_origin": "ast",
       "id": "gate_detect_get_stacks",
       "community": 1,
       "community_name": "detect.ps1",
       "norm_label": "get-stacks()"
-    },
-    {
-      "label": "outdated.ps1",
-      "file_type": "code",
-      "source_file": "gate/outdated.ps1",
-      "source_location": "L1",
-      "_origin": "ast",
-      "id": "gate_outdated",
-      "community": 13,
-      "community_name": "outdated.ps1",
-      "norm_label": "outdated.ps1"
-    },
-    {
-      "label": "Split-Deferred()",
-      "file_type": "code",
-      "source_file": "gate/outdated.ps1",
-      "source_location": "L81",
-      "_origin": "ast",
-      "id": "gate_outdated_split_deferred",
-      "community": 13,
-      "community_name": "outdated.ps1",
-      "norm_label": "split-deferred()"
-    },
-    {
-      "label": "Get-Latest()",
-      "file_type": "code",
-      "source_file": "gate/outdated.ps1",
-      "source_location": "L113",
-      "_origin": "ast",
-      "id": "gate_outdated_get_latest",
-      "community": 13,
-      "community_name": "outdated.ps1",
-      "norm_label": "get-latest()"
-    },
-    {
-      "label": "stop-hook.ps1",
-      "file_type": "code",
-      "source_file": "gate/stop-hook.ps1",
-      "source_location": "L1",
-      "_origin": "ast",
-      "id": "gate_stop_hook",
-      "community": 21,
-      "community_name": "stop-hook.ps1",
-      "norm_label": "stop-hook.ps1"
-    },
-    {
-      "label": "trust.ps1",
-      "file_type": "code",
-      "source_file": "gate/trust.ps1",
-      "source_location": "L1",
-      "_origin": "ast",
-      "id": "gate_trust",
-      "community": 30,
-      "community_name": "trust.ps1",
-      "norm_label": "trust.ps1"
-    },
-    {
-      "label": "Save-TrustStore()",
-      "file_type": "code",
-      "source_file": "gate/trust.ps1",
-      "source_location": "L33",
-      "_origin": "ast",
-      "id": "gate_trust_save_truststore",
-      "community": 30,
-      "community_name": "trust.ps1",
-      "norm_label": "save-truststore()"
-    },
-    {
-      "label": "install.ps1",
-      "file_type": "code",
-      "source_file": "install.ps1",
-      "source_location": "L1",
-      "_origin": "ast",
-      "id": "install",
-      "community": 1,
-      "community_name": "detect.ps1",
-      "norm_label": "install.ps1"
-    },
-    {
-      "label": "Install-WebConfigs()",
-      "file_type": "code",
-      "source_file": "install.ps1",
-      "source_location": "L33",
-      "_origin": "ast",
-      "id": "install_install_webconfigs",
-      "community": 1,
-      "community_name": "detect.ps1",
-      "norm_label": "install-webconfigs()"
-    },
-    {
-      "label": "Set-StopHook()",
-      "file_type": "code",
-      "source_file": "install.ps1",
-      "source_location": "L140",
-      "_origin": "ast",
-      "id": "install_set_stophook",
-      "community": 1,
-      "community_name": "detect.ps1",
-      "norm_label": "set-stophook()"
-    },
-    {
-      "label": "Set-AgentDoc()",
-      "file_type": "code",
-      "source_file": "install.ps1",
-      "source_location": "L198",
-      "_origin": "ast",
-      "id": "install_set_agentdoc",
-      "community": 1,
-      "community_name": "detect.ps1",
-      "norm_label": "set-agentdoc()"
-    },
-    {
-      "label": "Install-Lefthook()",
-      "file_type": "code",
-      "source_file": "install.ps1",
-      "source_location": "L231",
-      "_origin": "ast",
-      "id": "install_install_lefthook",
-      "community": 1,
-      "community_name": "detect.ps1",
-      "norm_label": "install-lefthook()"
     },
     {
       "label": "selftest.ps1",
@@ -658,15 +548,147 @@
       "norm_label": "invoke-trust()"
     },
     {
+      "label": "bootstrap.ps1",
+      "file_type": "code",
+      "source_file": "bootstrap.ps1",
+      "source_location": "L1",
+      "_origin": "ast",
+      "community": 20,
+      "community_name": "bootstrap.ps1",
+      "norm_label": "bootstrap.ps1",
+      "id": "bootstrap"
+    },
+    {
+      "label": "outdated.ps1",
+      "file_type": "code",
+      "source_file": "gate/outdated.ps1",
+      "source_location": "L1",
+      "_origin": "ast",
+      "community": 13,
+      "community_name": "outdated.ps1",
+      "norm_label": "outdated.ps1",
+      "id": "gate_outdated"
+    },
+    {
+      "label": "Split-Deferred()",
+      "file_type": "code",
+      "source_file": "gate/outdated.ps1",
+      "source_location": "L81",
+      "_origin": "ast",
+      "community": 13,
+      "community_name": "outdated.ps1",
+      "norm_label": "split-deferred()",
+      "id": "gate_outdated_split_deferred"
+    },
+    {
+      "label": "Get-Latest()",
+      "file_type": "code",
+      "source_file": "gate/outdated.ps1",
+      "source_location": "L113",
+      "_origin": "ast",
+      "community": 13,
+      "community_name": "outdated.ps1",
+      "norm_label": "get-latest()",
+      "id": "gate_outdated_get_latest"
+    },
+    {
+      "label": "stop-hook.ps1",
+      "file_type": "code",
+      "source_file": "gate/stop-hook.ps1",
+      "source_location": "L1",
+      "_origin": "ast",
+      "community": 21,
+      "community_name": "stop-hook.ps1",
+      "norm_label": "stop-hook.ps1",
+      "id": "gate_stop_hook"
+    },
+    {
+      "label": "trust.ps1",
+      "file_type": "code",
+      "source_file": "gate/trust.ps1",
+      "source_location": "L1",
+      "_origin": "ast",
+      "community": 30,
+      "community_name": "trust.ps1",
+      "norm_label": "trust.ps1",
+      "id": "gate_trust"
+    },
+    {
+      "label": "Save-TrustStore()",
+      "file_type": "code",
+      "source_file": "gate/trust.ps1",
+      "source_location": "L33",
+      "_origin": "ast",
+      "community": 30,
+      "community_name": "trust.ps1",
+      "norm_label": "save-truststore()",
+      "id": "gate_trust_save_truststore"
+    },
+    {
+      "label": "install.ps1",
+      "file_type": "code",
+      "source_file": "install.ps1",
+      "source_location": "L1",
+      "_origin": "ast",
+      "community": 1,
+      "community_name": "detect.ps1",
+      "norm_label": "install.ps1",
+      "id": "install"
+    },
+    {
+      "label": "Install-WebConfigs()",
+      "file_type": "code",
+      "source_file": "install.ps1",
+      "source_location": "L33",
+      "_origin": "ast",
+      "community": 1,
+      "community_name": "detect.ps1",
+      "norm_label": "install-webconfigs()",
+      "id": "install_install_webconfigs"
+    },
+    {
+      "label": "Set-StopHook()",
+      "file_type": "code",
+      "source_file": "install.ps1",
+      "source_location": "L140",
+      "_origin": "ast",
+      "community": 1,
+      "community_name": "detect.ps1",
+      "norm_label": "set-stophook()",
+      "id": "install_set_stophook"
+    },
+    {
+      "label": "Set-AgentDoc()",
+      "file_type": "code",
+      "source_file": "install.ps1",
+      "source_location": "L198",
+      "_origin": "ast",
+      "community": 1,
+      "community_name": "detect.ps1",
+      "norm_label": "set-agentdoc()",
+      "id": "install_set_agentdoc"
+    },
+    {
+      "label": "Install-Lefthook()",
+      "file_type": "code",
+      "source_file": "install.ps1",
+      "source_location": "L231",
+      "_origin": "ast",
+      "community": 1,
+      "community_name": "detect.ps1",
+      "norm_label": "install-lefthook()",
+      "id": "install_install_lefthook"
+    },
+    {
       "label": ".stylelintrc.json",
       "file_type": "code",
       "source_file": "templates/.stylelintrc.json",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "templates_stylelintrc",
       "community": 7,
       "community_name": "ignoreFiles",
-      "norm_label": ".stylelintrc.json"
+      "norm_label": ".stylelintrc.json",
+      "id": "templates_stylelintrc"
     },
     {
       "label": "extends",
@@ -674,10 +696,10 @@
       "source_file": "templates/.stylelintrc.json",
       "source_location": "L2",
       "_origin": "ast",
-      "id": "templates_stylelintrc_extends",
       "community": 7,
       "community_name": "ignoreFiles",
-      "norm_label": "extends"
+      "norm_label": "extends",
+      "id": "templates_stylelintrc_extends"
     },
     {
       "label": "stylelint-config-standard-scss",
@@ -685,10 +707,10 @@
       "source_file": "templates/.stylelintrc.json",
       "source_location": "L2",
       "_origin": "ast",
-      "id": "ref_stylelint_config_standard_scss",
       "community": 7,
       "community_name": "ignoreFiles",
-      "norm_label": "stylelint-config-standard-scss"
+      "norm_label": "stylelint-config-standard-scss",
+      "id": "ref_stylelint_config_standard_scss"
     },
     {
       "label": "stylelint-config-recommended-vue/scss",
@@ -696,10 +718,10 @@
       "source_file": "templates/.stylelintrc.json",
       "source_location": "L2",
       "_origin": "ast",
-      "id": "ref_stylelint_config_recommended_vue_scss",
       "community": 7,
       "community_name": "ignoreFiles",
-      "norm_label": "stylelint-config-recommended-vue/scss"
+      "norm_label": "stylelint-config-recommended-vue/scss",
+      "id": "ref_stylelint_config_recommended_vue_scss"
     },
     {
       "label": "ignoreFiles",
@@ -707,10 +729,10 @@
       "source_file": "templates/.stylelintrc.json",
       "source_location": "L6",
       "_origin": "ast",
-      "id": "templates_stylelintrc_ignorefiles",
       "community": 7,
       "community_name": "ignoreFiles",
-      "norm_label": "ignorefiles"
+      "norm_label": "ignorefiles",
+      "id": "templates_stylelintrc_ignorefiles"
     },
     {
       "label": "dist/**",
@@ -718,10 +740,10 @@
       "source_file": "templates/.stylelintrc.json",
       "source_location": "L6",
       "_origin": "ast",
-      "id": "ref_dist",
       "community": 7,
       "community_name": "ignoreFiles",
-      "norm_label": "dist/**"
+      "norm_label": "dist/**",
+      "id": "ref_dist"
     },
     {
       "label": "coverage/**",
@@ -729,10 +751,10 @@
       "source_file": "templates/.stylelintrc.json",
       "source_location": "L6",
       "_origin": "ast",
-      "id": "ref_coverage",
       "community": 7,
       "community_name": "ignoreFiles",
-      "norm_label": "coverage/**"
+      "norm_label": "coverage/**",
+      "id": "ref_coverage"
     },
     {
       "label": ".cache/**",
@@ -740,10 +762,10 @@
       "source_file": "templates/.stylelintrc.json",
       "source_location": "L6",
       "_origin": "ast",
-      "id": "ref_cache",
       "community": 7,
       "community_name": "ignoreFiles",
-      "norm_label": ".cache/**"
+      "norm_label": ".cache/**",
+      "id": "ref_cache"
     },
     {
       "label": "eslint.config.js",
@@ -751,10 +773,10 @@
       "source_file": "templates/eslint.config.js",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "templates_eslint_config",
       "community": 24,
       "community_name": "eslint.config.js",
-      "norm_label": "eslint.config.js"
+      "norm_label": "eslint.config.js",
+      "id": "templates_eslint_config"
     },
     {
       "label": "pre-commit",
@@ -766,10 +788,10 @@
         "kind": "file"
       },
       "_origin": "ast",
-      "id": "templates_pre_commit",
       "community": 19,
       "community_name": "pre-commit",
-      "norm_label": "pre-commit"
+      "norm_label": "pre-commit",
+      "id": "templates_pre_commit"
     },
     {
       "label": "pre-commit script",
@@ -781,10 +803,10 @@
         "kind": "bash_entrypoint"
       },
       "_origin": "ast",
-      "id": "templates_pre_commit__entry",
       "community": 19,
       "community_name": "pre-commit",
-      "norm_label": "pre-commit script"
+      "norm_label": "pre-commit script",
+      "id": "templates_pre_commit__entry"
     },
     {
       "label": "greeting.cpp",
@@ -792,10 +814,10 @@
       "source_file": "testdata/cpp-fixture/src/greeting.cpp",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "testdata_cpp_fixture_src_greeting_cpp_testdata_cpp_fixture_src_greeting",
       "community": 31,
       "community_name": "string",
-      "norm_label": "greeting.cpp"
+      "norm_label": "greeting.cpp",
+      "id": "testdata_cpp_fixture_src_greeting_cpp_testdata_cpp_fixture_src_greeting"
     },
     {
       "label": "greeting()",
@@ -804,10 +826,10 @@
       "source_location": "L3",
       "_callable": true,
       "_origin": "ast",
-      "id": "testdata_cpp_fixture_src_greeting_greeting",
       "community": 31,
       "community_name": "string",
-      "norm_label": "greeting()"
+      "norm_label": "greeting()",
+      "id": "testdata_cpp_fixture_src_greeting_greeting"
     },
     {
       "label": "string",
@@ -815,10 +837,10 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "id": "string",
       "community": 31,
       "community_name": "string",
-      "norm_label": "string"
+      "norm_label": "string",
+      "id": "string"
     },
     {
       "label": "greeting.hpp",
@@ -826,10 +848,10 @@
       "source_file": "testdata/cpp-fixture/src/greeting.hpp",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "testdata_cpp_fixture_src_greeting_hpp_testdata_cpp_fixture_src_greeting",
       "community": 31,
       "community_name": "string",
-      "norm_label": "greeting.hpp"
+      "norm_label": "greeting.hpp",
+      "id": "testdata_cpp_fixture_src_greeting_hpp_testdata_cpp_fixture_src_greeting"
     },
     {
       "label": "Fixture.csproj",
@@ -837,10 +859,10 @@
       "source_file": "testdata/dotnet-fixture/Fixture.csproj",
       "source_location": null,
       "_origin": "ast",
-      "id": "testdata_dotnet_fixture_fixture",
       "community": 27,
       "community_name": "Fixture.csproj",
-      "norm_label": "fixture.csproj"
+      "norm_label": "fixture.csproj",
+      "id": "testdata_dotnet_fixture_fixture"
     },
     {
       "label": "net8.0",
@@ -848,10 +870,10 @@
       "source_file": "testdata/dotnet-fixture/Fixture.csproj",
       "source_location": null,
       "_origin": "ast",
-      "id": "framework_net8_0",
       "community": 27,
       "community_name": "Fixture.csproj",
-      "norm_label": "net8.0"
+      "norm_label": "net8.0",
+      "id": "framework_net8_0"
     },
     {
       "label": "Microsoft.NET.Sdk",
@@ -859,10 +881,10 @@
       "source_file": "testdata/dotnet-fixture/Fixture.csproj",
       "source_location": null,
       "_origin": "ast",
-      "id": "sdk_microsoft_net_sdk",
       "community": 27,
       "community_name": "Fixture.csproj",
-      "norm_label": "microsoft.net.sdk"
+      "norm_label": "microsoft.net.sdk",
+      "id": "sdk_microsoft_net_sdk"
     },
     {
       "label": "Greeter.cs",
@@ -870,10 +892,10 @@
       "source_file": "testdata/dotnet-fixture/Greeter.cs",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "testdata_dotnet_fixture_greeter",
       "community": 4,
       "community_name": "Greeter.cs",
-      "norm_label": "greeter.cs"
+      "norm_label": "greeter.cs",
+      "id": "testdata_dotnet_fixture_greeter"
     },
     {
       "label": "Fixture",
@@ -886,10 +908,10 @@
         "namespace": "Fixture"
       },
       "_origin": "ast",
-      "id": "csharp_namespace:b79957adcf9f3730",
       "community": 4,
       "community_name": "Greeter.cs",
-      "norm_label": "fixture"
+      "norm_label": "fixture",
+      "id": "csharp_namespace:b79957adcf9f3730"
     },
     {
       "label": "Greeter",
@@ -905,10 +927,10 @@
       "_callable": true,
       "_callable_class": true,
       "_origin": "ast",
-      "id": "testdata_dotnet_fixture_greeter_fixture_greeter",
       "community": 4,
       "community_name": "Greeter.cs",
-      "norm_label": "greeter"
+      "norm_label": "greeter",
+      "id": "testdata_dotnet_fixture_greeter_fixture_greeter"
     },
     {
       "label": ".Greet()",
@@ -923,10 +945,10 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "id": "testdata_dotnet_fixture_greeter_fixture_greeter_greet",
       "community": 4,
       "community_name": "Greeter.cs",
-      "norm_label": ".greet()"
+      "norm_label": ".greet()",
+      "id": "testdata_dotnet_fixture_greeter_fixture_greeter_greet"
     },
     {
       "label": "gatefixture",
@@ -936,10 +958,10 @@
       "source_file": "testdata/go-fixture/go.mod",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "pkg_gatefixture",
       "community": 22,
       "community_name": "gatefixture",
-      "norm_label": "gatefixture"
+      "norm_label": "gatefixture",
+      "id": "pkg_gatefixture"
     },
     {
       "label": "main.go",
@@ -947,10 +969,10 @@
       "source_file": "testdata/go-fixture/main.go",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "testdata_go_fixture_main",
       "community": 11,
       "community_name": "Add",
-      "norm_label": "main.go"
+      "norm_label": "main.go",
+      "id": "testdata_go_fixture_main"
     },
     {
       "label": "Add()",
@@ -958,10 +980,10 @@
       "source_file": "testdata/go-fixture/main.go",
       "source_location": "L6",
       "_origin": "ast",
-      "id": "testdata_go_fixture_main_add",
       "community": 11,
       "community_name": "Add",
-      "norm_label": "add()"
+      "norm_label": "add()",
+      "id": "testdata_go_fixture_main_add"
     },
     {
       "label": "main()",
@@ -969,10 +991,10 @@
       "source_file": "testdata/go-fixture/main.go",
       "source_location": "L8",
       "_origin": "ast",
-      "id": "testdata_go_fixture_main_main",
       "community": 11,
       "community_name": "Add",
-      "norm_label": "main()"
+      "norm_label": "main()",
+      "id": "testdata_go_fixture_main_main"
     },
     {
       "label": "main_test.go",
@@ -980,10 +1002,10 @@
       "source_file": "testdata/go-fixture/main_test.go",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "testdata_go_fixture_main_test",
       "community": 11,
       "community_name": "Add",
-      "norm_label": "main_test.go"
+      "norm_label": "main_test.go",
+      "id": "testdata_go_fixture_main_test"
     },
     {
       "label": "TestAdd()",
@@ -991,10 +1013,10 @@
       "source_file": "testdata/go-fixture/main_test.go",
       "source_location": "L5",
       "_origin": "ast",
-      "id": "testdata_go_fixture_main_test_testadd",
       "community": 11,
       "community_name": "Add",
-      "norm_label": "testadd()"
+      "norm_label": "testadd()",
+      "id": "testdata_go_fixture_main_test_testadd"
     },
     {
       "label": "T",
@@ -1002,10 +1024,10 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "id": "t",
       "community": 11,
       "community_name": "Add",
-      "norm_label": "t"
+      "norm_label": "t",
+      "id": "t"
     },
     {
       "label": "python-fixture",
@@ -1016,10 +1038,10 @@
       "source_location": "L1",
       "version": "0.0.0",
       "_origin": "ast",
-      "id": "pkg_python_fixture",
       "community": 23,
       "community_name": "python-fixture",
-      "norm_label": "python-fixture"
+      "norm_label": "python-fixture",
+      "id": "pkg_python_fixture"
     },
     {
       "label": "main.rs",
@@ -1027,10 +1049,10 @@
       "source_file": "testdata/rust-fixture/src/main.rs",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "testdata_rust_fixture_src_main",
       "community": 12,
       "community_name": "main.rs",
-      "norm_label": "main.rs"
+      "norm_label": "main.rs",
+      "id": "testdata_rust_fixture_src_main"
     },
     {
       "label": "add()",
@@ -1038,10 +1060,10 @@
       "source_file": "testdata/rust-fixture/src/main.rs",
       "source_location": "L2",
       "_origin": "ast",
-      "id": "testdata_rust_fixture_src_main_add",
       "community": 12,
       "community_name": "main.rs",
-      "norm_label": "add()"
+      "norm_label": "add()",
+      "id": "testdata_rust_fixture_src_main_add"
     },
     {
       "label": "main()",
@@ -1049,10 +1071,10 @@
       "source_file": "testdata/rust-fixture/src/main.rs",
       "source_location": "L6",
       "_origin": "ast",
-      "id": "testdata_rust_fixture_src_main_main",
       "community": 12,
       "community_name": "main.rs",
-      "norm_label": "main()"
+      "norm_label": "main()",
+      "id": "testdata_rust_fixture_src_main_main"
     },
     {
       "label": "adds()",
@@ -1060,10 +1082,10 @@
       "source_file": "testdata/rust-fixture/src/main.rs",
       "source_location": "L15",
       "_origin": "ast",
-      "id": "testdata_rust_fixture_src_main_adds",
       "community": 12,
       "community_name": "main.rs",
-      "norm_label": "adds()"
+      "norm_label": "adds()",
+      "id": "testdata_rust_fixture_src_main_adds"
     },
     {
       "label": "package.json",
@@ -1071,10 +1093,10 @@
       "source_file": "testdata/web-fixture/package.json",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "testdata_web_fixture_package",
       "community": 8,
       "community_name": "package.json",
-      "norm_label": "package.json"
+      "norm_label": "package.json",
+      "id": "testdata_web_fixture_package"
     },
     {
       "label": "name",
@@ -1082,10 +1104,10 @@
       "source_file": "testdata/web-fixture/package.json",
       "source_location": "L2",
       "_origin": "ast",
-      "id": "testdata_web_fixture_package_name",
       "community": 8,
       "community_name": "package.json",
-      "norm_label": "name"
+      "norm_label": "name",
+      "id": "testdata_web_fixture_package_name"
     },
     {
       "label": "private",
@@ -1093,10 +1115,10 @@
       "source_file": "testdata/web-fixture/package.json",
       "source_location": "L3",
       "_origin": "ast",
-      "id": "testdata_web_fixture_package_private",
       "community": 8,
       "community_name": "package.json",
-      "norm_label": "private"
+      "norm_label": "private",
+      "id": "testdata_web_fixture_package_private"
     },
     {
       "label": "type",
@@ -1104,10 +1126,10 @@
       "source_file": "testdata/web-fixture/package.json",
       "source_location": "L4",
       "_origin": "ast",
-      "id": "testdata_web_fixture_package_type",
       "community": 8,
       "community_name": "package.json",
-      "norm_label": "type"
+      "norm_label": "type",
+      "id": "testdata_web_fixture_package_type"
     },
     {
       "label": "scripts",
@@ -1115,10 +1137,10 @@
       "source_file": "testdata/web-fixture/package.json",
       "source_location": "L5",
       "_origin": "ast",
-      "id": "testdata_web_fixture_package_scripts",
       "community": 8,
       "community_name": "package.json",
-      "norm_label": "scripts"
+      "norm_label": "scripts",
+      "id": "testdata_web_fixture_package_scripts"
     },
     {
       "label": "build-only",
@@ -1126,10 +1148,10 @@
       "source_file": "testdata/web-fixture/package.json",
       "source_location": "L6",
       "_origin": "ast",
-      "id": "testdata_web_fixture_package_scripts_build_only",
       "community": 8,
       "community_name": "package.json",
-      "norm_label": "build-only"
+      "norm_label": "build-only",
+      "id": "testdata_web_fixture_package_scripts_build_only"
     },
     {
       "label": "type-check",
@@ -1137,10 +1159,10 @@
       "source_file": "testdata/web-fixture/package.json",
       "source_location": "L7",
       "_origin": "ast",
-      "id": "testdata_web_fixture_package_scripts_type_check",
       "community": 8,
       "community_name": "package.json",
-      "norm_label": "type-check"
+      "norm_label": "type-check",
+      "id": "testdata_web_fixture_package_scripts_type_check"
     },
     {
       "label": "vite.config.js",
@@ -1148,10 +1170,10 @@
       "source_file": "testdata/web-fixture/vite.config.js",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "testdata_web_fixture_vite_config",
       "community": 25,
       "community_name": "vite.config.js",
-      "norm_label": "vite.config.js"
+      "norm_label": "vite.config.js",
+      "id": "testdata_web_fixture_vite_config"
     },
     {
       "label": "CLAUDE.md",
@@ -1159,10 +1181,10 @@
       "source_file": "CLAUDE.md",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "claude",
       "community": 26,
       "community_name": "CLAUDE.md",
-      "norm_label": "claude.md"
+      "norm_label": "claude.md",
+      "id": "claude"
     },
     {
       "label": "graphify",
@@ -1170,10 +1192,10 @@
       "source_file": "CLAUDE.md",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "claude_graphify",
       "community": 26,
       "community_name": "CLAUDE.md",
-      "norm_label": "graphify"
+      "norm_label": "graphify",
+      "id": "claude_graphify"
     },
     {
       "label": "quality-gate (qgate)",
@@ -1187,7 +1209,7 @@
       "community": 0,
       "norm_label": "quality-gate (qgate)",
       "_origin": "semantic",
-      "community_name": "GitHub Actions quality-gate workflow",
+      "community_name": "qgate wire (repo wiring, config only)",
       "id": "readme_quality_gate"
     },
     {
@@ -1202,7 +1224,7 @@
       "community": 0,
       "norm_label": "marker-file stack detection",
       "_origin": "semantic",
-      "community_name": "GitHub Actions quality-gate workflow",
+      "community_name": "qgate wire (repo wiring, config only)",
       "id": "readme_stack_detection"
     },
     {
@@ -1217,7 +1239,7 @@
       "community": 0,
       "norm_label": "two levels: -fast and -full",
       "_origin": "semantic",
-      "community_name": "GitHub Actions quality-gate workflow",
+      "community_name": "qgate wire (repo wiring, config only)",
       "id": "readme_two_levels"
     },
     {
@@ -1244,7 +1266,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 6,
+      "community": 0,
       "norm_label": "qgate wire (repo wiring, config only)",
       "_origin": "semantic",
       "community_name": "qgate wire (repo wiring, config only)",
@@ -1259,10 +1281,10 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 3,
+      "community": 10,
       "norm_label": "qgate outdated",
       "_origin": "semantic",
-      "community_name": "quality_gate job anchor shared by both hooks",
+      "community_name": ".golangci.yml template",
       "id": "readme_qgate_outdated"
     },
     {
@@ -1292,7 +1314,7 @@
       "community": 0,
       "norm_label": "qgate.json toolchain pinning",
       "_origin": "semantic",
-      "community_name": "GitHub Actions quality-gate workflow",
+      "community_name": "qgate wire (repo wiring, config only)",
       "id": "readme_toolchain_pinning"
     },
     {
@@ -1307,7 +1329,7 @@
       "community": 6,
       "norm_label": "staged-tree guard via git write-tree",
       "_origin": "semantic",
-      "community_name": "qgate wire (repo wiring, config only)",
+      "community_name": "Claude Code Stop hook (exit code 2)",
       "id": "readme_staged_index_guard"
     },
     {
@@ -1322,7 +1344,7 @@
       "community": 6,
       "norm_label": "claude code stop hook (exit code 2)",
       "_origin": "semantic",
-      "community_name": "qgate wire (repo wiring, config only)",
+      "community_name": "Claude Code Stop hook (exit code 2)",
       "id": "readme_stop_hook"
     },
     {
@@ -1337,7 +1359,7 @@
       "community": 6,
       "norm_label": "green-commit marker in temp for the stop hook",
       "_origin": "semantic",
-      "community_name": "qgate wire (repo wiring, config only)",
+      "community_name": "Claude Code Stop hook (exit code 2)",
       "id": "readme_green_commit_marker"
     },
     {
@@ -1367,7 +1389,7 @@
       "community": 0,
       "norm_label": "-baseline adoption on a legacy codebase",
       "_origin": "semantic",
-      "community_name": "GitHub Actions quality-gate workflow",
+      "community_name": "qgate wire (repo wiring, config only)",
       "id": "readme_baseline_adoption"
     },
     {
@@ -1382,7 +1404,7 @@
       "community": 0,
       "norm_label": "eslint --suppress-all baseline",
       "_origin": "semantic",
-      "community_name": "GitHub Actions quality-gate workflow",
+      "community_name": "qgate wire (repo wiring, config only)",
       "id": "readme_eslint_suppressions"
     },
     {
@@ -1397,7 +1419,7 @@
       "community": 0,
       "norm_label": "stale tool binary vs go.mod toolchain check",
       "_origin": "semantic",
-      "community_name": "GitHub Actions quality-gate workflow",
+      "community_name": "qgate wire (repo wiring, config only)",
       "id": "readme_stale_tool_binary_check"
     },
     {
@@ -1424,10 +1446,10 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 3,
+      "community": 10,
       "norm_label": "vulnerability phase (govulncheck / npm audit)",
       "_origin": "semantic",
-      "community_name": "quality_gate job anchor shared by both hooks",
+      "community_name": ".golangci.yml template",
       "id": "readme_vulnerability_phase"
     },
     {
@@ -1472,7 +1494,7 @@
       "community": 0,
       "norm_label": "rust stack phases",
       "_origin": "semantic",
-      "community_name": "GitHub Actions quality-gate workflow",
+      "community_name": "qgate wire (repo wiring, config only)",
       "id": "readme_rust_stack"
     },
     {
@@ -1667,7 +1689,7 @@
       "community": 0,
       "norm_label": "one entry point, stop on first failed phase",
       "_origin": "semantic",
-      "community_name": "GitHub Actions quality-gate workflow",
+      "community_name": "qgate wire (repo wiring, config only)",
       "id": "playbook_single_entry_gate"
     },
     {
@@ -1682,7 +1704,7 @@
       "community": 0,
       "norm_label": "wave mechanism: cleanup queue lives in the linter config",
       "_origin": "semantic",
-      "community_name": "GitHub Actions quality-gate workflow",
+      "community_name": "qgate wire (repo wiring, config only)",
       "id": "playbook_wave_mechanism"
     },
     {
@@ -1694,10 +1716,10 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 0,
+      "community": 10,
       "norm_label": "second-engine review",
       "_origin": "semantic",
-      "community_name": "GitHub Actions quality-gate workflow",
+      "community_name": ".golangci.yml template",
       "id": "playbook_second_engine_review"
     },
     {
@@ -1754,10 +1776,10 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 0,
+      "community": 10,
       "norm_label": "security findings (path traversal, middleware order, body limits)",
       "_origin": "semantic",
-      "community_name": "GitHub Actions quality-gate workflow",
+      "community_name": ".golangci.yml template",
       "id": "playbook_security_findings"
     },
     {
@@ -1802,7 +1824,7 @@
       "community": 6,
       "norm_label": "commit discipline (per module, explicit paths, consequence in message)",
       "_origin": "semantic",
-      "community_name": "qgate wire (repo wiring, config only)",
+      "community_name": "Claude Code Stop hook (exit code 2)",
       "id": "playbook_commit_discipline"
     },
     {
@@ -1817,7 +1839,7 @@
       "community": 6,
       "norm_label": "a signature-changing commit must carry its callers",
       "_origin": "semantic",
-      "community_name": "qgate wire (repo wiring, config only)",
+      "community_name": "Claude Code Stop hook (exit code 2)",
       "id": "playbook_bisectable_signature_commit"
     },
     {
@@ -1832,7 +1854,7 @@
       "community": 6,
       "norm_label": "verify the hook actually executes (relative path silently skipped it)",
       "_origin": "semantic",
-      "community_name": "qgate wire (repo wiring, config only)",
+      "community_name": "Claude Code Stop hook (exit code 2)",
       "id": "playbook_hook_actually_runs"
     },
     {
@@ -1889,7 +1911,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 6,
+      "community": 0,
       "norm_label": "measured git hook coverage matrix (git 2.53)",
       "_origin": "semantic",
       "community_name": "qgate wire (repo wiring, config only)",
@@ -1904,7 +1926,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 6,
+      "community": 0,
       "norm_label": "cherry-pick and revert cannot be covered cheaply",
       "_origin": "semantic",
       "community_name": "qgate wire (repo wiring, config only)",
@@ -1952,7 +1974,7 @@
       "community": 6,
       "norm_label": "parallel commits in one worktree swallow each other's staged files",
       "_origin": "semantic",
-      "community_name": "qgate wire (repo wiring, config only)",
+      "community_name": "Claude Code Stop hook (exit code 2)",
       "id": "handoff_parallel_commit_race"
     },
     {
@@ -1967,7 +1989,7 @@
       "community": 6,
       "norm_label": "git_index_file marks that we are inside a commit",
       "_origin": "semantic",
-      "community_name": "qgate wire (repo wiring, config only)",
+      "community_name": "Claude Code Stop hook (exit code 2)",
       "id": "handoff_git_index_file_marker"
     },
     {
@@ -1997,7 +2019,7 @@
       "community": 0,
       "norm_label": "gotoolchain=auto unpacking races produce 'missing std package'",
       "_origin": "semantic",
-      "community_name": "GitHub Actions quality-gate workflow",
+      "community_name": "qgate wire (repo wiring, config only)",
       "id": "handoff_gotoolchain_auto"
     },
     {
@@ -2009,7 +2031,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 6,
+      "community": 0,
       "norm_label": "deliberately chosen boundaries (not todos)",
       "_origin": "semantic",
       "community_name": "qgate wire (repo wiring, config only)",
@@ -2024,10 +2046,10 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 0,
+      "community": 10,
       "norm_label": "incoming agent reports: symptom right, cause wrong half the time",
       "_origin": "semantic",
-      "community_name": "GitHub Actions quality-gate workflow",
+      "community_name": ".golangci.yml template",
       "id": "handoff_incoming_reports"
     },
     {
@@ -2129,10 +2151,10 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 0,
+      "community": 10,
       "norm_label": "gosec excludes for windows acl-irrelevant rules",
       "_origin": "semantic",
-      "community_name": "GitHub Actions quality-gate workflow",
+      "community_name": ".golangci.yml template",
       "id": "templates__golangci_gosec_excludes"
     },
     {
@@ -2162,7 +2184,7 @@
       "community": 0,
       "norm_label": "per-package cleanup queue in exclusions.rules",
       "_origin": "semantic",
-      "community_name": "GitHub Actions quality-gate workflow",
+      "community_name": "qgate wire (repo wiring, config only)",
       "id": "templates__golangci_cleanup_queue"
     },
     {
@@ -2192,7 +2214,7 @@
       "community": 0,
       "norm_label": "github actions quality-gate workflow",
       "_origin": "semantic",
-      "community_name": "GitHub Actions quality-gate workflow",
+      "community_name": "qgate wire (repo wiring, config only)",
       "id": "templates_ci_workflow"
     },
     {
@@ -2207,7 +2229,7 @@
       "community": 0,
       "norm_label": "detect stacks step (monorepo-aware marker search)",
       "_origin": "semantic",
-      "community_name": "GitHub Actions quality-gate workflow",
+      "community_name": "qgate wire (repo wiring, config only)",
       "id": "templates_ci_detect_stacks_step"
     },
     {
@@ -2222,7 +2244,7 @@
       "community": 0,
       "norm_label": "qg_ref tag pin (v1), never main",
       "_origin": "semantic",
-      "community_name": "GitHub Actions quality-gate workflow",
+      "community_name": "qgate wire (repo wiring, config only)",
       "id": "templates_ci_qg_ref_pin"
     },
     {
@@ -2234,7 +2256,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 6,
+      "community": 0,
       "norm_label": "lefthook.yml template",
       "_origin": "semantic",
       "community_name": "qgate wire (repo wiring, config only)",
@@ -2264,7 +2286,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 6,
+      "community": 0,
       "norm_label": "lefthook swallows the exit code of pwsh -command",
       "_origin": "semantic",
       "community_name": "qgate wire (repo wiring, config only)",
@@ -2327,7 +2349,7 @@
       "community": 6,
       "norm_label": "lefthook ai: key rejected (exits 1, claude blocks only on 2)",
       "_origin": "semantic",
-      "community_name": "qgate wire (repo wiring, config only)",
+      "community_name": "Claude Code Stop hook (exit code 2)",
       "id": "templates_lefthook_ai_key_rejected"
     },
     {
@@ -2357,7 +2379,7 @@
       "community": 0,
       "norm_label": "\"gate is wrong\" issue template",
       "_origin": "semantic",
-      "community_name": "GitHub Actions quality-gate workflow",
+      "community_name": "qgate wire (repo wiring, config only)",
       "id": "_github_issue_template_gate_bug_template"
     }
   ],
@@ -2393,6 +2415,17 @@
       "_origin": "ast",
       "source": "gate_check",
       "target": "gate_check_get_changedpaths",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "gate/check.ps1",
+      "source_location": "L1141",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "gate_check",
+      "target": "gate_check_get_cppcompiledb",
       "confidence_score": 1.0
     },
     {
@@ -2465,7 +2498,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "gate/check.ps1",
-      "source_location": "L1198",
+      "source_location": "L1300",
       "weight": 1.0,
       "_origin": "ast",
       "source": "gate_check",
@@ -2476,7 +2509,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "gate/check.ps1",
-      "source_location": "L1129",
+      "source_location": "L1152",
       "weight": 1.0,
       "_origin": "ast",
       "source": "gate_check",
@@ -2487,7 +2520,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "gate/check.ps1",
-      "source_location": "L1330",
+      "source_location": "L1432",
       "weight": 1.0,
       "_origin": "ast",
       "source": "gate_check",
@@ -2531,7 +2564,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "gate/check.ps1",
-      "source_location": "L1258",
+      "source_location": "L1360",
       "weight": 1.0,
       "_origin": "ast",
       "source": "gate_check_invoke_basestack",
@@ -2542,7 +2575,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "gate/check.ps1",
-      "source_location": "L1150",
+      "source_location": "L1173",
       "weight": 1.0,
       "_origin": "ast",
       "source": "gate_check_invoke_cppstack",
@@ -2575,7 +2608,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "gate/check.ps1",
-      "source_location": "L1227",
+      "source_location": "L1329",
       "weight": 1.0,
       "_origin": "ast",
       "source": "gate_check_invoke_basestack",
@@ -2586,7 +2619,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "gate/check.ps1",
-      "source_location": "L1160",
+      "source_location": "L1183",
       "weight": 1.0,
       "_origin": "ast",
       "source": "gate_check_invoke_cppstack",
@@ -2597,7 +2630,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "gate/check.ps1",
-      "source_location": "L1376",
+      "source_location": "L1478",
       "weight": 1.0,
       "_origin": "ast",
       "source": "gate_check_invoke_customstack",
@@ -2630,7 +2663,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "gate/check.ps1",
-      "source_location": "L1173",
+      "source_location": "L1196",
       "weight": 1.0,
       "_origin": "ast",
       "source": "gate_check_invoke_cppstack",
@@ -2641,7 +2674,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "gate/check.ps1",
-      "source_location": "L1333",
+      "source_location": "L1435",
       "weight": 1.0,
       "_origin": "ast",
       "source": "gate_check_invoke_customstack",
@@ -2674,7 +2707,18 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "gate/check.ps1",
-      "source_location": "L1200",
+      "source_location": "L1142",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "gate_check_get_cppcompiledb",
+      "target": "gate_check_have",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "gate/check.ps1",
+      "source_location": "L1302",
       "weight": 1.0,
       "_origin": "ast",
       "source": "gate_check_invoke_basestack",
@@ -2685,7 +2729,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "gate/check.ps1",
-      "source_location": "L1140",
+      "source_location": "L1163",
       "weight": 1.0,
       "_origin": "ast",
       "source": "gate_check_invoke_cppstack",
@@ -2851,11 +2895,34 @@
     },
     {
       "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "gate/check.ps1",
+      "source_location": "L1217",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "gate_check_invoke_cppstack",
+      "target": "gate_check_get_cppcompiledb",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
       "context": "call",
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "gate/check.ps1",
-      "source_location": "L1226",
+      "source_location": "L1246",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "gate_check_invoke_cppstack",
+      "target": "gate_detect_test_cppown"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "gate/check.ps1",
+      "source_location": "L1328",
       "weight": 1.0,
       "_origin": "ast",
       "source": "gate_check_invoke_basestack",
@@ -2867,7 +2934,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "gate/check.ps1",
-      "source_location": "L1331",
+      "source_location": "L1433",
       "weight": 1.0,
       "_origin": "ast",
       "source": "gate_check_invoke_customstack",
@@ -2879,7 +2946,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "gate/check.ps1",
-      "source_location": "L1357",
+      "source_location": "L1459",
       "weight": 1.0,
       "_origin": "ast",
       "source": "gate_check_invoke_customstack",
@@ -2891,7 +2958,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "gate/check.ps1",
-      "source_location": "L1334",
+      "source_location": "L1436",
       "weight": 1.0,
       "_origin": "ast",
       "source": "gate_check_invoke_customstack",
@@ -2901,7 +2968,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "gate/detect.ps1",
-      "source_location": "L88",
+      "source_location": "L103",
       "weight": 1.0,
       "_origin": "ast",
       "source": "gate_detect",
@@ -2912,7 +2979,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "gate/detect.ps1",
-      "source_location": "L234",
+      "source_location": "L249",
       "weight": 1.0,
       "_origin": "ast",
       "source": "gate_detect",
@@ -2923,7 +2990,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "gate/detect.ps1",
-      "source_location": "L173",
+      "source_location": "L188",
       "weight": 1.0,
       "_origin": "ast",
       "source": "gate_detect",
@@ -2934,7 +3001,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "gate/detect.ps1",
-      "source_location": "L126",
+      "source_location": "L141",
       "weight": 1.0,
       "_origin": "ast",
       "source": "gate_detect",
@@ -2945,7 +3012,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "gate/detect.ps1",
-      "source_location": "L155",
+      "source_location": "L170",
       "weight": 1.0,
       "_origin": "ast",
       "source": "gate_detect",
@@ -2956,7 +3023,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "gate/detect.ps1",
-      "source_location": "L105",
+      "source_location": "L120",
       "weight": 1.0,
       "_origin": "ast",
       "source": "gate_detect",
@@ -2967,7 +3034,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "gate/detect.ps1",
-      "source_location": "L37",
+      "source_location": "L52",
       "weight": 1.0,
       "_origin": "ast",
       "source": "gate_detect",
@@ -2978,7 +3045,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "gate/detect.ps1",
-      "source_location": "L276",
+      "source_location": "L291",
       "weight": 1.0,
       "_origin": "ast",
       "source": "gate_detect",
@@ -2989,7 +3056,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "gate/detect.ps1",
-      "source_location": "L248",
+      "source_location": "L263",
       "weight": 1.0,
       "_origin": "ast",
       "source": "gate_detect",
@@ -3000,7 +3067,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "gate/detect.ps1",
-      "source_location": "L226",
+      "source_location": "L241",
       "weight": 1.0,
       "_origin": "ast",
       "source": "gate_detect",
@@ -3011,7 +3078,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "gate/detect.ps1",
-      "source_location": "L221",
+      "source_location": "L236",
       "weight": 1.0,
       "_origin": "ast",
       "source": "gate_detect",
@@ -3022,7 +3089,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "gate/detect.ps1",
-      "source_location": "L262",
+      "source_location": "L277",
       "weight": 1.0,
       "_origin": "ast",
       "source": "gate_detect",
@@ -3033,7 +3100,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "gate/detect.ps1",
-      "source_location": "L257",
+      "source_location": "L272",
       "weight": 1.0,
       "_origin": "ast",
       "source": "gate_detect",
@@ -3044,7 +3111,18 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "gate/detect.ps1",
-      "source_location": "L51",
+      "source_location": "L44",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "gate_detect",
+      "target": "gate_detect_test_cppown",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "gate/detect.ps1",
+      "source_location": "L66",
       "weight": 1.0,
       "_origin": "ast",
       "source": "gate_detect",
@@ -3055,7 +3133,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "gate/detect.ps1",
-      "source_location": "L81",
+      "source_location": "L96",
       "weight": 1.0,
       "_origin": "ast",
       "source": "gate_detect",
@@ -3066,7 +3144,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "gate/detect.ps1",
-      "source_location": "L143",
+      "source_location": "L158",
       "weight": 1.0,
       "_origin": "ast",
       "source": "gate_detect",
@@ -3077,7 +3155,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "gate/detect.ps1",
-      "source_location": "L99",
+      "source_location": "L114",
       "weight": 1.0,
       "_origin": "ast",
       "source": "gate_detect_find_marker",
@@ -3088,7 +3166,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "gate/detect.ps1",
-      "source_location": "L83",
+      "source_location": "L98",
       "weight": 1.0,
       "_origin": "ast",
       "source": "gate_detect_test_gitignoreddir",
@@ -3099,7 +3177,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "gate/detect.ps1",
-      "source_location": "L300",
+      "source_location": "L315",
       "weight": 1.0,
       "_origin": "ast",
       "source": "gate_detect_get_stacks",
@@ -3122,7 +3200,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "gate/detect.ps1",
-      "source_location": "L145",
+      "source_location": "L160",
       "weight": 1.0,
       "_origin": "ast",
       "source": "gate_detect_test_gotoolstale",
@@ -3133,7 +3211,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "gate/detect.ps1",
-      "source_location": "L375",
+      "source_location": "L390",
       "weight": 1.0,
       "_origin": "ast",
       "source": "gate_detect_get_stacks",
@@ -3144,7 +3222,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "gate/detect.ps1",
-      "source_location": "L385",
+      "source_location": "L400",
       "weight": 1.0,
       "_origin": "ast",
       "source": "gate_detect_get_stacks",
@@ -3155,7 +3233,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "gate/detect.ps1",
-      "source_location": "L249",
+      "source_location": "L264",
       "weight": 1.0,
       "_origin": "ast",
       "source": "gate_detect_get_trustedhash",
@@ -3166,7 +3244,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "gate/detect.ps1",
-      "source_location": "L254",
+      "source_location": "L269",
       "weight": 1.0,
       "_origin": "ast",
       "source": "gate_detect_get_trustedhash",
@@ -3177,7 +3255,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "gate/detect.ps1",
-      "source_location": "L259",
+      "source_location": "L274",
       "weight": 1.0,
       "_origin": "ast",
       "source": "gate_detect_test_checkstrusted",
@@ -3188,7 +3266,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "gate/detect.ps1",
-      "source_location": "L258",
+      "source_location": "L273",
       "weight": 1.0,
       "_origin": "ast",
       "source": "gate_detect_test_checkstrusted",
@@ -3199,7 +3277,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "gate/detect.ps1",
-      "source_location": "L312",
+      "source_location": "L327",
       "weight": 1.0,
       "_origin": "ast",
       "source": "gate_detect_get_stacks",
@@ -3217,83 +3295,6 @@
       "_origin": "ast",
       "source": "install_install_webconfigs",
       "target": "gate_detect_test_anyfile"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "gate/outdated.ps1",
-      "source_location": "L113",
-      "weight": 1.0,
-      "_origin": "ast",
-      "source": "gate_outdated",
-      "target": "gate_outdated_get_latest",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "gate/outdated.ps1",
-      "source_location": "L81",
-      "weight": 1.0,
-      "_origin": "ast",
-      "source": "gate_outdated",
-      "target": "gate_outdated_split_deferred",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "gate/trust.ps1",
-      "source_location": "L33",
-      "weight": 1.0,
-      "_origin": "ast",
-      "source": "gate_trust",
-      "target": "gate_trust_save_truststore",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "install.ps1",
-      "source_location": "L231",
-      "weight": 1.0,
-      "_origin": "ast",
-      "source": "install",
-      "target": "install_install_lefthook",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "install.ps1",
-      "source_location": "L33",
-      "weight": 1.0,
-      "_origin": "ast",
-      "source": "install",
-      "target": "install_install_webconfigs",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "install.ps1",
-      "source_location": "L198",
-      "weight": 1.0,
-      "_origin": "ast",
-      "source": "install",
-      "target": "install_set_agentdoc",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "install.ps1",
-      "source_location": "L140",
-      "weight": 1.0,
-      "_origin": "ast",
-      "source": "install",
-      "target": "install_set_stophook",
-      "confidence_score": 1.0
     },
     {
       "relation": "contains",
@@ -3386,13 +3387,90 @@
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
+      "source_file": "gate/outdated.ps1",
+      "source_location": "L113",
+      "weight": 1.0,
+      "_origin": "ast",
+      "confidence_score": 1.0,
+      "source": "gate_outdated",
+      "target": "gate_outdated_get_latest"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "gate/outdated.ps1",
+      "source_location": "L81",
+      "weight": 1.0,
+      "_origin": "ast",
+      "confidence_score": 1.0,
+      "source": "gate_outdated",
+      "target": "gate_outdated_split_deferred"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "gate/trust.ps1",
+      "source_location": "L33",
+      "weight": 1.0,
+      "_origin": "ast",
+      "confidence_score": 1.0,
+      "source": "gate_trust",
+      "target": "gate_trust_save_truststore"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "install.ps1",
+      "source_location": "L231",
+      "weight": 1.0,
+      "_origin": "ast",
+      "confidence_score": 1.0,
+      "source": "install",
+      "target": "install_install_lefthook"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "install.ps1",
+      "source_location": "L33",
+      "weight": 1.0,
+      "_origin": "ast",
+      "confidence_score": 1.0,
+      "source": "install",
+      "target": "install_install_webconfigs"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "install.ps1",
+      "source_location": "L198",
+      "weight": 1.0,
+      "_origin": "ast",
+      "confidence_score": 1.0,
+      "source": "install",
+      "target": "install_set_agentdoc"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "install.ps1",
+      "source_location": "L140",
+      "weight": 1.0,
+      "_origin": "ast",
+      "confidence_score": 1.0,
+      "source": "install",
+      "target": "install_set_stophook"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
       "source_file": "templates/.stylelintrc.json",
       "source_location": "L2",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "templates_stylelintrc",
-      "target": "templates_stylelintrc_extends",
-      "confidence_score": 1.0
+      "target": "templates_stylelintrc_extends"
     },
     {
       "relation": "contains",
@@ -3401,9 +3479,9 @@
       "source_location": "L6",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "templates_stylelintrc",
-      "target": "templates_stylelintrc_ignorefiles",
-      "confidence_score": 1.0
+      "target": "templates_stylelintrc_ignorefiles"
     },
     {
       "relation": "extends",
@@ -3413,9 +3491,9 @@
       "weight": 1.0,
       "context": "import",
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "templates_stylelintrc_extends",
-      "target": "ref_stylelint_config_recommended_vue_scss",
-      "confidence_score": 1.0
+      "target": "ref_stylelint_config_recommended_vue_scss"
     },
     {
       "relation": "extends",
@@ -3425,9 +3503,9 @@
       "weight": 1.0,
       "context": "import",
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "templates_stylelintrc_extends",
-      "target": "ref_stylelint_config_standard_scss",
-      "confidence_score": 1.0
+      "target": "ref_stylelint_config_standard_scss"
     },
     {
       "relation": "extends",
@@ -3437,9 +3515,9 @@
       "weight": 1.0,
       "context": "import",
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "templates_stylelintrc_ignorefiles",
-      "target": "ref_cache",
-      "confidence_score": 1.0
+      "target": "ref_cache"
     },
     {
       "relation": "extends",
@@ -3449,9 +3527,9 @@
       "weight": 1.0,
       "context": "import",
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "templates_stylelintrc_ignorefiles",
-      "target": "ref_coverage",
-      "confidence_score": 1.0
+      "target": "ref_coverage"
     },
     {
       "relation": "extends",
@@ -3461,9 +3539,9 @@
       "weight": 1.0,
       "context": "import",
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "templates_stylelintrc_ignorefiles",
-      "target": "ref_dist",
-      "confidence_score": 1.0
+      "target": "ref_dist"
     },
     {
       "relation": "contains",
@@ -3472,9 +3550,9 @@
       "source_location": "L1",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "templates_pre_commit",
-      "target": "templates_pre_commit__entry",
-      "confidence_score": 1.0
+      "target": "templates_pre_commit__entry"
     },
     {
       "relation": "contains",
@@ -3483,9 +3561,9 @@
       "source_location": "L3",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "testdata_cpp_fixture_src_greeting_cpp_testdata_cpp_fixture_src_greeting",
-      "target": "testdata_cpp_fixture_src_greeting_greeting",
-      "confidence_score": 1.0
+      "target": "testdata_cpp_fixture_src_greeting_greeting"
     },
     {
       "relation": "imports",
@@ -3495,9 +3573,9 @@
       "source_location": "L1",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "testdata_cpp_fixture_src_greeting_cpp_testdata_cpp_fixture_src_greeting",
-      "target": "testdata_cpp_fixture_src_greeting_hpp_testdata_cpp_fixture_src_greeting",
-      "confidence_score": 1.0
+      "target": "testdata_cpp_fixture_src_greeting_hpp_testdata_cpp_fixture_src_greeting"
     },
     {
       "relation": "references",
@@ -3507,9 +3585,9 @@
       "weight": 1.0,
       "context": "return_type",
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "testdata_cpp_fixture_src_greeting_greeting",
-      "target": "string",
-      "confidence_score": 1.0
+      "target": "string"
     },
     {
       "relation": "imports",
@@ -3519,9 +3597,9 @@
       "source_location": "L3",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "testdata_cpp_fixture_src_greeting_hpp_testdata_cpp_fixture_src_greeting",
-      "target": "string",
-      "confidence_score": 1.0
+      "target": "string"
     },
     {
       "relation": "references",
@@ -3529,9 +3607,9 @@
       "source_file": "testdata/dotnet-fixture/Fixture.csproj",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "testdata_dotnet_fixture_fixture",
-      "target": "framework_net8_0",
-      "confidence_score": 1.0
+      "target": "framework_net8_0"
     },
     {
       "relation": "references",
@@ -3539,9 +3617,9 @@
       "source_file": "testdata/dotnet-fixture/Fixture.csproj",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "testdata_dotnet_fixture_fixture",
-      "target": "sdk_microsoft_net_sdk",
-      "confidence_score": 1.0
+      "target": "sdk_microsoft_net_sdk"
     },
     {
       "relation": "contains",
@@ -3550,9 +3628,9 @@
       "source_location": "L1",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "testdata_dotnet_fixture_greeter",
-      "target": "csharp_namespace:b79957adcf9f3730",
-      "confidence_score": 1.0
+      "target": "csharp_namespace:b79957adcf9f3730"
     },
     {
       "relation": "contains",
@@ -3561,9 +3639,9 @@
       "source_location": "L4",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "testdata_dotnet_fixture_greeter",
-      "target": "testdata_dotnet_fixture_greeter_fixture_greeter",
-      "confidence_score": 1.0
+      "target": "testdata_dotnet_fixture_greeter_fixture_greeter"
     },
     {
       "relation": "method",
@@ -3572,9 +3650,9 @@
       "source_location": "L7",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "testdata_dotnet_fixture_greeter_fixture_greeter",
-      "target": "testdata_dotnet_fixture_greeter_fixture_greeter_greet",
-      "confidence_score": 1.0
+      "target": "testdata_dotnet_fixture_greeter_fixture_greeter_greet"
     },
     {
       "relation": "contains",
@@ -3583,9 +3661,9 @@
       "source_location": "L6",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "testdata_go_fixture_main",
-      "target": "testdata_go_fixture_main_add",
-      "confidence_score": 1.0
+      "target": "testdata_go_fixture_main_add"
     },
     {
       "relation": "contains",
@@ -3594,9 +3672,9 @@
       "source_location": "L8",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "testdata_go_fixture_main",
-      "target": "testdata_go_fixture_main_main",
-      "confidence_score": 1.0
+      "target": "testdata_go_fixture_main_main"
     },
     {
       "relation": "calls",
@@ -3606,9 +3684,9 @@
       "source_location": "L8",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "testdata_go_fixture_main_main",
-      "target": "testdata_go_fixture_main_add",
-      "confidence_score": 1.0
+      "target": "testdata_go_fixture_main_add"
     },
     {
       "relation": "calls",
@@ -3629,9 +3707,9 @@
       "source_location": "L5",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "testdata_go_fixture_main_test",
-      "target": "testdata_go_fixture_main_test_testadd",
-      "confidence_score": 1.0
+      "target": "testdata_go_fixture_main_test_testadd"
     },
     {
       "relation": "references",
@@ -3641,9 +3719,9 @@
       "weight": 1.0,
       "context": "parameter_type",
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "testdata_go_fixture_main_test_testadd",
-      "target": "t",
-      "confidence_score": 1.0
+      "target": "t"
     },
     {
       "relation": "contains",
@@ -3652,9 +3730,9 @@
       "source_location": "L2",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "testdata_rust_fixture_src_main",
-      "target": "testdata_rust_fixture_src_main_add",
-      "confidence_score": 1.0
+      "target": "testdata_rust_fixture_src_main_add"
     },
     {
       "relation": "contains",
@@ -3663,9 +3741,9 @@
       "source_location": "L15",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "testdata_rust_fixture_src_main",
-      "target": "testdata_rust_fixture_src_main_adds",
-      "confidence_score": 1.0
+      "target": "testdata_rust_fixture_src_main_adds"
     },
     {
       "relation": "contains",
@@ -3674,9 +3752,9 @@
       "source_location": "L6",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "testdata_rust_fixture_src_main",
-      "target": "testdata_rust_fixture_src_main_main",
-      "confidence_score": 1.0
+      "target": "testdata_rust_fixture_src_main_main"
     },
     {
       "relation": "contains",
@@ -3685,9 +3763,9 @@
       "source_location": "L2",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "testdata_web_fixture_package",
-      "target": "testdata_web_fixture_package_name",
-      "confidence_score": 1.0
+      "target": "testdata_web_fixture_package_name"
     },
     {
       "relation": "contains",
@@ -3696,9 +3774,9 @@
       "source_location": "L3",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "testdata_web_fixture_package",
-      "target": "testdata_web_fixture_package_private",
-      "confidence_score": 1.0
+      "target": "testdata_web_fixture_package_private"
     },
     {
       "relation": "contains",
@@ -3707,9 +3785,9 @@
       "source_location": "L5",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "testdata_web_fixture_package",
-      "target": "testdata_web_fixture_package_scripts",
-      "confidence_score": 1.0
+      "target": "testdata_web_fixture_package_scripts"
     },
     {
       "relation": "contains",
@@ -3718,9 +3796,9 @@
       "source_location": "L4",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "testdata_web_fixture_package",
-      "target": "testdata_web_fixture_package_type",
-      "confidence_score": 1.0
+      "target": "testdata_web_fixture_package_type"
     },
     {
       "relation": "contains",
@@ -3729,9 +3807,9 @@
       "source_location": "L6",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "testdata_web_fixture_package_scripts",
-      "target": "testdata_web_fixture_package_scripts_build_only",
-      "confidence_score": 1.0
+      "target": "testdata_web_fixture_package_scripts_build_only"
     },
     {
       "relation": "contains",
@@ -3740,9 +3818,9 @@
       "source_location": "L7",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "testdata_web_fixture_package_scripts",
-      "target": "testdata_web_fixture_package_scripts_type_check",
-      "confidence_score": 1.0
+      "target": "testdata_web_fixture_package_scripts_type_check"
     },
     {
       "relation": "contains",
@@ -3751,9 +3829,9 @@
       "source_location": "L1",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "claude",
-      "target": "claude_graphify",
-      "confidence_score": 1.0
+      "target": "claude_graphify"
     },
     {
       "relation": "references",
@@ -4706,5 +4784,5 @@
       "source_file": "HANDOFF.md"
     }
   ],
-  "built_at_commit": "379f39d733531d6a94fe317a972d480e1282e520"
+  "built_at_commit": "d393ea6696582c1100d583b023b58af9d79ad760"
 }
