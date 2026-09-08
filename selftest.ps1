@@ -2046,8 +2046,8 @@ if (Get-Command typos -ErrorAction SilentlyContinue) {
         (($LASTEXITCODE -ne 0) -and ($txNone -match '\[FAIL\] typos')) "code=$LASTEXITCODE $txNone"
 
     # A git hash in prose is not a misspelling. typos splits `6129afe` at the digits and
-    # reports the tail as `safe`; the same run reported `ede` inside a go.mod
-    # pseudo-version. Every repository puts hashes in docs and lockfiles, so the gate
+    # corrects its three-letter tail; the same run reported another such tail inside a
+    # go.mod pseudo-version. Every repository puts hashes in docs and lockfiles, so the gate
     # ships the ignore and the fixture asserts BOTH halves: the hash is quiet and a real
     # typo on the same line is still red -- an ignore that swallowed the line would pass
     # the first half alone.

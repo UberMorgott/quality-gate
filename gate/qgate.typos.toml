@@ -4,23 +4,25 @@
 # including over a repository that ships a `_typos.toml` of its own. Measured, because the
 # two flags do not mean the same thing: gitleaks' `-c` REPLACES the repo's file, while
 # typos layers this one on top of the config it discovers by walking up from the scanned
-# path. A fixture with `[default.extend-words] teh = "teh"` still silenced `teh` with this
-# file present, and a fixture with its own `extend-ignore-re` kept ITS pattern while the
-# hash below stayed ignored -- the two lists merge, neither wins.
+# path. A fixture that declared one misspelling correct in its own
+# `[default.extend-words]` still had it silenced with this file passed, and a fixture with
+# its own `extend-ignore-re` kept ITS pattern while the hash below stayed ignored -- the
+# two lists merge, neither wins.
 #
 # Nothing here is a dictionary word: an English word declared correct is a repository's
 # call, and this file is applied to every repository on the machine.
 [default]
 # A git hash is not prose. `6129afe` in a plan document is a real commit
-# (`git rev-parse` resolves it), typos splits the identifier at the digits and reports the
-# `afe` tail as a misspelling of `safe` -- and "correcting" it destroys the reference. The
-# same run reported `ede` inside a go.mod pseudo-version (`v0.0.0-<date>-<12 hex>`), which
-# is the same token wearing a different suffix. Every repository the gate runs on puts
-# hashes in docs, plans and lockfiles, so this cannot be each repository's own `afe =
-# "afe"` -- that spelling also switches the word off everywhere, prose included.
+# (`git rev-parse` resolves it), typos splits the identifier at the digits and reports its
+# three-letter tail as a misspelling -- and "correcting" it destroys the reference. The
+# same run reported another such tail inside a go.mod pseudo-version
+# (`v0.0.0-<date>-<12 hex>`), which is the same token wearing a different suffix. Every
+# repository the gate runs on puts hashes in docs, plans and lockfiles, so this cannot be
+# each repository declaring that tail correct in its own `_typos.toml` -- that also
+# switches the word off everywhere else, prose included.
 #
 # 7..40 lowercase hex: `git rev-parse --short` starts at 7 and a full SHA-1 is 40. Bounded
-# by \b, so it is the WHOLE token or nothing -- `afe` alone in prose is still a finding,
+# by \b, so it is the WHOLE token or nothing -- the same tail alone in prose is a finding,
 # and so is every word with a non-hex letter in it. What it does cost: an all-hex English
 # word of 7+ letters (`defaced`, `effaced`) is no longer spell-checked. Both are spelled
 # correctly, and a typo that lands on another all-hex string is not a shape typos would
