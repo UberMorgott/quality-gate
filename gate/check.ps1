@@ -1335,12 +1335,21 @@ function Invoke-BaseStack($s) {
         # 2>$null, not 2>&1: the progress and summary lines go to stderr and would make
         # the report unparseable JSON. Exit 1 is "leaks found" and 0 is "none"; anything
         # else is gitleaks failing, which is not a verdict about the code.
-        $raw = (& gitleaks dir @glCfg --redact --no-banner --no-color -f json -r - $Root 2>$null | Out-String)
+        #
+        # `.`, not $Root -- the target is echoed verbatim into every File and, through it,
+        # into every Fingerprint. The absolute form printed
+        # `E:/DEV/CodeDungeon/x.md:generic-api-key:13` while the fix: line below tells the
+        # reader to record that fingerprint in .gitleaksignore, a COMMITTED file: the same
+        # finding gets a different fingerprint in a teammate's checkout and in CI, so the
+        # line can never suppress it for both. Measured: `.` prints `x.md:github-pat:1`,
+        # forward slashes even nested on Windows, and that line in .gitleaksignore takes
+        # the finding to zero. Set-Location $Root above is what makes `.` the repo root.
+        $raw = (& gitleaks dir @glCfg --redact --no-banner --no-color -f json -r - . 2>$null | Out-String)
         $glCode = $LASTEXITCODE
         $sw.Stop()
         $hits = @(if ($glCode -eq 1) { try { $raw | ConvertFrom-Json } catch { $null } })
-        # gitleaks reports absolute paths with forward slashes; git check-ignore takes
-        # them as they are, verified on Windows.
+        # Repo-relative paths with forward slashes; git check-ignore takes them as they
+        # are, and `-C $Root` is the directory they are relative to. Verified on Windows.
         $ignored = Get-GitIgnoredSet $Root @($hits | ForEach-Object { $_.File } | Where-Object { $_ } | Sort-Object -Unique)
         $hits = @($hits | Where-Object { $_.File -and -not $ignored[$_.File] })
         Phase 'secrets' {

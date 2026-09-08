@@ -2121,6 +2121,20 @@ if (Get-Command gitleaks -ErrorAction SilentlyContinue) {
     # ride along on a run that was going to be red anyway.
     Check 'the failing run still says nothing about the ignored copies' `
         (($out -notmatch 'config\.json') -and ($out -notmatch 'dump\.json')) $out
+    # The fingerprint on that line is what the fix: hint tells the reader to commit to
+    # .gitleaksignore, so it must not carry this machine's checkout path -- a teammate and
+    # CI resolve the repository somewhere else, and an absolute fingerprint suppresses the
+    # finding for exactly one person. Asserted as "no drive letter, nothing of $sec in it",
+    # and then as the thing the hint actually promises: that line, committed, takes the
+    # same run to green.
+    $fp = (($out -split "`n" | Select-String 'app\.env:.*github-pat -- ' | Select-Object -First 1) -split ' -- ')[-1].Trim()
+    Check 'the printed fingerprint is repo-relative, not a path on this machine' `
+        ($fp -and ($fp -notmatch '^[A-Za-z]:') -and ($fp -notmatch [regex]::Escape($sec)) -and
+            ($fp -like 'app.env:github-pat:*')) "fingerprint=$fp"
+    [IO.File]::WriteAllText((Join-Path $sec '.gitleaksignore'), "$fp`n")
+    $out = (& pwsh -NoProfile -File $gate -Root $sec -Only base -Full 2>&1 | Out-String)
+    Check 'that fingerprint in .gitleaksignore suppresses the finding' `
+        (($LASTEXITCODE -eq 0) -and ($out -notmatch 'app\.env')) "code=$LASTEXITCODE $out"
 } else {
     Write-Output '[skip] gitleaks not on PATH -- the secrets filter cannot be judged here'
 }
