@@ -2044,6 +2044,33 @@ if (Get-Command typos -ErrorAction SilentlyContinue) {
     $txNone = (& pwsh -NoProfile -File $gate -Root $tx -Only base 2>&1 | Out-String)
     Check 'the excluded fixture is green because of the exclusion, not because it is clean' `
         (($LASTEXITCODE -ne 0) -and ($txNone -match '\[FAIL\] typos')) "code=$LASTEXITCODE $txNone"
+
+    # A git hash in prose is not a misspelling. typos splits `6129afe` at the digits and
+    # reports the tail as `safe`; the same run reported `ede` inside a go.mod
+    # pseudo-version. Every repository puts hashes in docs and lockfiles, so the gate
+    # ships the ignore and the fixture asserts BOTH halves: the hash is quiet and a real
+    # typo on the same line is still red -- an ignore that swallowed the line would pass
+    # the first half alone.
+    $th = Join-Path $tmp 'typos-hash'
+    New-Item -ItemType Directory -Path $th | Out-Null
+    git -C $th init -q 2>$null
+    [IO.File]::WriteAllText((Join-Path $th 'plan.md'),
+        "see 6129afe and v0.0.0-20250101120000-abc123def456`n")
+    $thOut = (& pwsh -NoProfile -File $gate -Root $th -Only base -Full 2>&1 | Out-String)
+    Check 'a commit hash and a go.mod pseudo-version are not typos' `
+        (($LASTEXITCODE -eq 0) -and ($thOut -notmatch 'plan\.md')) "code=$LASTEXITCODE $thOut"
+    [IO.File]::WriteAllText((Join-Path $th 'plan.md'),
+        "see 6129afe -- you will $typo it`n")
+    $thOut = (& pwsh -NoProfile -File $gate -Root $th -Only base -Full 2>&1 | Out-String)
+    Check 'a real typo beside a hash on the same line is still caught' `
+        (($LASTEXITCODE -ne 0) -and ($thOut -match '\[FAIL\] typos') -and ($thOut -match 'plan\.md')) `
+        "code=$LASTEXITCODE $thOut"
+    # ...and the gate's own config must not evict the repository's. typos merges the two,
+    # gitleaks' -c would have replaced the file.
+    [IO.File]::WriteAllText((Join-Path $th '_typos.toml'), "[default.extend-words]`n$typo = `"$typo`"`n")
+    $thOut = (& pwsh -NoProfile -File $gate -Root $th -Only base -Full 2>&1 | Out-String)
+    Check "the repository's own _typos.toml still applies with the gate's config passed" `
+        (($LASTEXITCODE -eq 0) -and ($thOut -notmatch 'plan\.md')) "code=$LASTEXITCODE $thOut"
 } else {
     Write-Output '[skip] typos not on PATH -- its fast/full scoping cannot be judged here'
 }

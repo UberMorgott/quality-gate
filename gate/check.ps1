@@ -1406,7 +1406,13 @@ function Invoke-BaseStack($s) {
             # fix -- the paths above had to become relative too, or there is nothing for
             # the globs to match. The full lane passes no paths, so there the flag would
             # have nothing to force.
-            $targs = @('--format', 'brief')
+            #
+            # --config is the gate's own default set (git hashes are not prose; the
+            # reasoning is in the .toml itself). Passed ALWAYS, unlike the gitleaks -c
+            # next door, because typos layers it on top of the repository's own
+            # _typos.toml instead of replacing that file -- measured both ways, and the
+            # two extend-ignore-re lists merge rather than one winning.
+            $targs = @('--format', 'brief', '--config', (Join-Path $PSScriptRoot 'qgate.typos.toml'))
             if ($paths) { $targs += '--force-exclude' }
             Phase 'typos' { typos @targs @paths }
         }
