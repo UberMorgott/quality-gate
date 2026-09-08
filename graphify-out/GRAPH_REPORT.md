@@ -1,7 +1,7 @@
-# Graph Report - quality-gate  (2026-09-07)
+# Graph Report - quality-gate  (2026-09-08)
 
 ## Corpus Check
-- 30 files · ~65,583 words
+- 30 files · ~66,656 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
@@ -10,7 +10,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `c99aeb53`
+- Built from commit: `33032249`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -42,13 +42,13 @@
 1. `Invoke-DotnetStack()` - 10 edges
 2. `.golangci.yml template` - 8 edges
 3. `Get-DotnetSharedFormat()` - 7 edges
-4. `Invoke-CppStack()` - 7 edges
-5. `Invoke-GodotStack()` - 7 edges
-6. `Have()` - 6 edges
-7. `Invoke-CustomStack()` - 6 edges
-8. `Phase()` - 6 edges
+4. `Invoke-GodotStack()` - 7 edges
+5. `Invoke-CppStack()` - 7 edges
+6. `Phase()` - 6 edges
+7. `Have()` - 6 edges
+8. `Invoke-CustomStack()` - 6 edges
 9. `qgate wire (repo wiring, config only)` - 6 edges
-10. `Get-Stacks()` - 5 edges
+10. `Get-ChangedPaths()` - 5 edges
 
 ## Surprising Connections (you probably didn't know these)
 - `detect stacks step (monorepo-aware marker search)` --semantically_similar_to--> `Marker-file stack detection`  [INFERRED] [semantically similar]

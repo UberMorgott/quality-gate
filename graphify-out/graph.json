@@ -1173,7 +1173,7 @@
       "file_type": "code",
       "norm_label": "invoke-customstack()",
       "source_file": "gate/check.ps1",
-      "source_location": "L1469"
+      "source_location": "L1484"
     },
     {
       "id": "gate_check_invoke_dotnetstack",
@@ -2600,7 +2600,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "gate/check.ps1",
-      "source_location": "L1346",
+      "source_location": "L1355",
       "weight": 1.0
     },
     {
@@ -2611,7 +2611,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "gate/check.ps1",
-      "source_location": "L1377",
+      "source_location": "L1386",
       "weight": 1.0
     },
     {
@@ -2677,7 +2677,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "gate/check.ps1",
-      "source_location": "L1472",
+      "source_location": "L1487",
       "weight": 1.0
     },
     {
@@ -2688,7 +2688,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "gate/check.ps1",
-      "source_location": "L1515",
+      "source_location": "L1530",
       "weight": 1.0
     },
     {
@@ -3040,7 +3040,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "gate/check.ps1",
-      "source_location": "L1469",
+      "source_location": "L1484",
       "weight": 1.0
     },
     {
@@ -3801,7 +3801,7 @@
       "confidence_score": 0.85,
       "context": "call",
       "source_file": "gate/check.ps1",
-      "source_location": "L1344",
+      "source_location": "L1353",
       "weight": 1.0
     },
     {
@@ -3825,7 +3825,7 @@
       "confidence_score": 0.85,
       "context": "call",
       "source_file": "gate/check.ps1",
-      "source_location": "L1470",
+      "source_location": "L1485",
       "weight": 1.0
     },
     {
@@ -3837,7 +3837,7 @@
       "confidence_score": 0.85,
       "context": "call",
       "source_file": "gate/check.ps1",
-      "source_location": "L1473",
+      "source_location": "L1488",
       "weight": 1.0
     },
     {
@@ -3849,7 +3849,7 @@
       "confidence_score": 0.85,
       "context": "call",
       "source_file": "gate/check.ps1",
-      "source_location": "L1496",
+      "source_location": "L1511",
       "weight": 1.0
     },
     {
@@ -4839,5 +4839,5 @@
       "source_file": "HANDOFF.md"
     }
   ],
-  "built_at_commit": "c99aeb533681cfebd81a6dd994e9019ad1c54402"
+  "built_at_commit": "330322499c8b1011c50cb6a7fe502c98fb87fcdc"
 }
