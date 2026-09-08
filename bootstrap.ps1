@@ -17,6 +17,14 @@ else { Join-Path $env:LOCALAPPDATA 'quality-gate' }
 if ($PSVersionTable.PSVersion.Major -lt 7) { throw 'PowerShell 7+ required: winget install Microsoft.PowerShell' }
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) { throw 'git required and not on PATH' }
 
+# `-C` names the directory, but an inherited GIT_DIR names the REPOSITORY and wins over
+# it: measured, `git -C <this repo> rev-parse HEAD` returned an unrelated repository's
+# HEAD with GIT_DIR set. So the pull below would fast-forward whatever repository the
+# caller's environment points at, not the install. Every other entry point clears the
+# pair in gate/detect.ps1; this script runs before there is anything to dot-source.
+$env:GIT_DIR = $null
+$env:GIT_WORK_TREE = $null
+
 if (Test-Path (Join-Path $dir '.git')) {
     git -C $dir pull --ff-only
     if ($LASTEXITCODE -ne 0) { throw "git pull failed in $dir -- fix or delete that directory and re-run" }
