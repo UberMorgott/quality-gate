@@ -929,6 +929,9 @@ function Invoke-WebStack($s) {
         $env:FORCE_COLOR = '0'
         try {
             $npmExe = if ($IsWindows) { 'npm.cmd' } else { 'npm' }
+            # Read before the launch, so nothing born after it can be mistaken for
+            # something already here: the defence against a recycled pid.
+            $launchedAt = Get-Date
             $p = Start-Process $npmExe -ArgumentList 'run', 'test' `
                 -WorkingDirectory $s.Dir -NoNewWindow -PassThru `
                 -RedirectStandardOutput $outFile -RedirectStandardError $errFile
@@ -938,6 +941,10 @@ function Invoke-WebStack($s) {
         # Kill the tree: npm is a parent, and the runner it started is what hangs.
         if (-not $done) { try { $p.Kill($true) } catch { } ; [void]$p.WaitForExit(5000) }
         $code = if ($done) { $p.ExitCode } else { 1 }
+        # A dev server the suite forgot to stop is the same defect a custom check has,
+        # and it is the one that keeps the port. Before the temp files are removed: a
+        # leaked child holding the inherited stdout handle keeps them undeletable.
+        $leak = Get-LeakReport $p.Id $launchedAt 'test'
         $text = ((@((Get-Content $outFile -Raw -ErrorAction SilentlyContinue),
                     (Get-Content $errFile -Raw -ErrorAction SilentlyContinue)) -join '') -as [string]).TrimEnd()
         Remove-Item $outFile, $errFile -Force -ErrorAction SilentlyContinue
@@ -946,7 +953,8 @@ function Invoke-WebStack($s) {
         $name = if ($done) { 'test' } else { "test -- timeout after ${testTimeoutSec}s (watch mode? it is run with CI=1)" }
         Phase $name {
             if ($text) { $text }
-            if ($code -ne 0) { $global:LASTEXITCODE = 1 }
+            if ($leak) { $leak }
+            if (($code -ne 0) -or $leak) { $global:LASTEXITCODE = 1 }
         } -Elapsed $sw.Elapsed.TotalSeconds
     }
     # See the govulncheck note above: a real defect, full level only, and it needs
@@ -1524,6 +1532,65 @@ function Invoke-BaseStack($s) {
 # Untrusted is a [SKIP], never a [FAIL]: refusing to execute a command is not a
 # verdict on the code, and a repository nobody has trusted yet must not be a repo
 # nobody can commit to.
+# A check that leaves a process behind reported green while still holding ports and
+# files -- and the process that outlives its own parent is exactly the one .Kill($true)
+# below cannot see, because the tree that call walks is built from LIVE parents. The
+# Win32_Process record of an orphan still names the pid of its dead parent, so the
+# orphan is findable by IDENTITY: descendant of the pid we launched, created no earlier
+# than we launched it (pids are recycled). Never by executable name -- half this machine
+# is running pwsh.
+#
+# Windows only, and deliberately: there is no Win32_Process elsewhere, and POSIX
+# containment (process groups) is not implemented here.
+function Get-Descendants([int]$RootPid, [datetime]$NotBefore) {
+    $all = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
+        Where-Object { $_.ProcessId -ne $RootPid -and $_.CreationDate -ge $NotBefore })
+    $found = @()
+    $frontier = @($RootPid)
+    while ($frontier) {
+        $kids = @($all | Where-Object {
+                $frontier -contains $_.ParentProcessId -and $found.ProcessId -notcontains $_.ProcessId })
+        if (-not $kids) { break }
+        $found += $kids
+        $frontier = @($kids.ProcessId)
+    }
+    $found
+}
+
+# Asked on every path out of every command this gate owns, exit 0 included: a parent
+# that exits clean while its child keeps the port is the entire defect. Grace first and
+# bounded -- a child normally goes down within a moment of its parent, and only what
+# survives that is a leak. Returns '' when there is nothing to report.
+function Get-LeakReport([int]$RootPid, [datetime]$NotBefore, [string]$Name) {
+    if (-not $IsWindows) { return '' }
+    $left = @()
+    foreach ($i in 1..6) {
+        $left = @(Get-Descendants $RootPid $NotBefore)
+        if (-not $left -or $i -eq 6) { break }
+        Start-Sleep -Milliseconds 500
+    }
+    if (-not $left) { return '' }
+    # pid, name, and the ports it is holding -- never the command line, which is where a
+    # token ends up. Get-NetTCPConnection is a Windows module that can be absent, and
+    # evidence that cannot be gathered is not an error.
+    $ev = foreach ($d in $left) {
+        $ports = @()
+        try {
+            $ports = @(Get-NetTCPConnection -OwningProcess $d.ProcessId -State Listen -ErrorAction Stop |
+                    Select-Object -ExpandProperty LocalPort -Unique)
+        } catch { }
+        "pid $($d.ProcessId) $($d.Name)$(if ($ports) { " listening on $($ports -join ',')" })"
+    }
+    # They are ours, so they are ours to end -- the same .Kill($true) a timeout uses.
+    # Then verified: a kill that failed quietly would leave the report claiming a
+    # cleanup that never happened.
+    foreach ($d in $left) { try { (Get-Process -Id $d.ProcessId -ErrorAction Stop).Kill($true) } catch { } }
+    Start-Sleep -Milliseconds 300
+    $alive = @(Get-Descendants $RootPid $NotBefore)
+    $leak = "[LEAK] $Name left $($left.Count) process(es) running: $($ev -join '; ')"
+    $leak + $(if ($alive) { " -- STILL RUNNING after kill: $($alive.ProcessId -join ',')" } else { ' -- killed' })
+}
+
 function Invoke-CustomStack($s) {
     $custom = Get-CustomChecks $Root
     if (-not $custom) { return }
@@ -1554,6 +1621,9 @@ function Invoke-CustomStack($s) {
         $outFile = Join-Path ([IO.Path]::GetTempPath()) "quality-gate-custom-$(Get-PathKey "$Root|$($c.Name)")-$PID.out"
         $errFile = "$outFile.err"
         $sw = [Diagnostics.Stopwatch]::StartNew()
+        # Read before the launch, so nothing born after it can be mistaken for something
+        # that was already here: this is the whole defence against a recycled pid.
+        $launchedAt = Get-Date
         $p = Start-Process pwsh -ArgumentList '-NoProfile', '-Command', $c.Run `
             -WorkingDirectory $Root -NoNewWindow -PassThru `
             -RedirectStandardOutput $outFile -RedirectStandardError $errFile
@@ -1563,6 +1633,9 @@ function Invoke-CustomStack($s) {
         # started is what is actually hanging.
         if (-not $done) { try { $p.Kill($true) } catch { } ; [void]$p.WaitForExit(5000) }
         $code = if ($done) { $p.ExitCode } else { 1 }
+        # Asked before the temp files are removed: a leaked child still holding the
+        # inherited stdout handle keeps them undeletable.
+        $leak = Get-LeakReport $p.Id $launchedAt $c.Name
         $text = ((@((Get-Content $outFile -Raw -ErrorAction SilentlyContinue),
                     (Get-Content $errFile -Raw -ErrorAction SilentlyContinue)) -join '') -as [string]).TrimEnd()
         Remove-Item $outFile, $errFile -Force -ErrorAction SilentlyContinue
@@ -1576,7 +1649,13 @@ function Invoke-CustomStack($s) {
             if ($text) { $text }
             # Every other phase's output names the tool that produced it; this one's
             # does not, and the command is the only thing here a reader can act on.
-            if ($code -ne 0) { "run: $($c.Run)"; $global:LASTEXITCODE = 1 }
+            if ($code -ne 0) { "run: $($c.Run)" }
+            # ADDED to whatever the command itself reported, never instead of it: a leak
+            # that replaced the real reason would trade one blind spot for another. And
+            # it fails the phase on its own -- a green exit code is precisely how this
+            # gets past a gate today.
+            if ($leak) { $leak }
+            if (($code -ne 0) -or $leak) { $global:LASTEXITCODE = 1 }
         } -Elapsed $sw.Elapsed.TotalSeconds
     }
 }

@@ -1762,6 +1762,40 @@ try {
     Check 'a check that outruns its timeout is killed and named as a timeout' `
         (($r.Code -ne 0) -and ($r.Out -match '\[FAIL\] hang -- timeout after 1s')) $r.Out
 
+    # A command that exits 0 while a process it started keeps running is a green verdict
+    # over a held port, and the orphan -- whose parent is already gone -- is exactly what
+    # the .Kill($true) above cannot see. The bystander is started FIRST and is the same
+    # executable as the leak: the walk has to match identity, not names, or this process
+    # dies with them.
+    $bystander = Start-Process pwsh -ArgumentList '-NoProfile', '-Command', 'Start-Sleep 90' -PassThru -WindowStyle Hidden
+    try {
+        [IO.File]::WriteAllText($custJson,
+            '{"checks":[{"name":"leaky","run":"Start-Process pwsh -ArgumentList ''-NoProfile'',''-Command'',''Start-Sleep 90'' -WindowStyle Hidden; exit 0","level":"fast"}]}')
+        Invoke-Trust $cust | Out-Null
+        $r = Invoke-Gate $cust
+        # The count is not pinned: the orphaned pwsh drags its own conhost.exe along, and
+        # a walk that dropped that one would be matching on a name again.
+        Check 'a check that leaves a process behind fails even though it exited 0' `
+            (($r.Code -ne 0) -and ($r.Out -match '\[FAIL\] leaky') -and
+                ($r.Out -match '\[LEAK\] leaky left \d+ process\(es\) running:')) $r.Out
+        # Named by pid, and then actually ended: a report that says `killed` while the
+        # process is still holding the port is worth less than no report at all.
+        $leakPid = if ($r.Out -match '\[LEAK\][^\r\n]*pid (\d+) pwsh') { [int]$Matches[1] } else { 0 }
+        Check 'the leaked process is named by pid and is gone after the run' `
+            (($leakPid -gt 0) -and ($r.Out -match ' -- killed') -and
+                (-not (Get-Process -Id $leakPid -ErrorAction SilentlyContinue))) $r.Out
+        Check 'a process the gate did not start is left alone' `
+            (-not $bystander.HasExited) "bystander pid $($bystander.Id)"
+
+        # ...and a repository that leaves nothing behind reads exactly as it did before:
+        # a cleanup that reported on every ordinary run would be noise nobody can act on.
+        [IO.File]::WriteAllText($custJson, '{"checks":[{"name":"tidy","run":"exit 0","level":"fast"}]}')
+        Invoke-Trust $cust | Out-Null
+        $r = Invoke-Gate $cust
+        Check 'a check that leaves nothing behind still passes, with no leak line' `
+            (($r.Code -eq 0) -and ($r.Out -match '\[PASS\] tidy') -and ($r.Out -notmatch 'LEAK')) $r.Out
+    } finally { try { $bystander.Kill() } catch { } }
+
     # Malformed checks are a [FAIL] with the specific reason, never a silent absence:
     # a config that reads as enforcement and does nothing is the oldest defect in this
     # file. Trusted first, so the verdict cannot be standing on the trust gate instead.
