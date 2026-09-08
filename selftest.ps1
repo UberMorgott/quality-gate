@@ -2198,6 +2198,43 @@ if (Get-Command gitleaks -ErrorAction SilentlyContinue) {
     Write-Output '[skip] gitleaks not on PATH -- the secrets filter cannot be judged here'
 }
 
+# 39. The web stack linted, type-checked, built and audited -- and never ran the
+# test script the repository itself declares, so a project whose suite was red went
+# through the gate green. The two halves: a declared `test` that exits non-zero must
+# be the thing that fails the full run, and a project that declares none must be
+# exactly as silent as it was before.
+if (Get-Command npm -ErrorAction SilentlyContinue) {
+    $wt = Join-Path $tmp 'webtest'
+    Copy-Item (Join-Path $PSScriptRoot 'testdata\web-fixture') $wt -Recurse
+    New-Item -ItemType Directory -Path (Join-Path $wt 'node_modules\.bin') -Force | Out-Null
+    # No eslint/stylelint config, no tsconfig: `build` and `test` are the only phases
+    # this fixture has, which is what makes the failure attributable to one of them.
+    [IO.File]::WriteAllText((Join-Path $wt 'package.json'),
+        '{"name":"webtest","private":true,"type":"module","scripts":{"build":"node -e \"process.exit(0)\"","test":"node -e \"process.exit(1)\""}}')
+    $out = (& pwsh -NoProfile -File $gate -Root $wt -Only 'web' -Full 2>&1 | Out-String)
+    $wtCode = $LASTEXITCODE
+    Check 'a failing npm test script fails the full gate' `
+        (($wtCode -ne 0) -and ($out -match '(?m)^\[FAIL\] test\b')) "code=$wtCode $out"
+    # ...and it is the test step that is named. A red `build` line here would be the
+    # same exit code standing on a different reason.
+    Check 'the failure names the test step, not the build' `
+        (($out -notmatch '(?m)^\[FAIL\] build') -and ($out -match '(?m)^\[PASS\] build')) $out
+    # The fast lane runs on every agent turn and never promised the expensive phases.
+    # This fixture's test script is red, so a fast run that touched it could not stay
+    # quiet about it.
+    $out = (& pwsh -NoProfile -File $gate -Root $wt -Only 'web' -Fast 2>&1 | Out-String)
+    Check 'the fast lane does not run the test script' ($out -notmatch '(?m)^\[(PASS|FAIL)\] test\b') $out
+    # No `test` declared: nothing to ask, nothing said, same verdict as before.
+    [IO.File]::WriteAllText((Join-Path $wt 'package.json'),
+        '{"name":"webtest","private":true,"type":"module","scripts":{"build":"node -e \"process.exit(0)\""}}')
+    $out = (& pwsh -NoProfile -File $gate -Root $wt -Only 'web' -Full 2>&1 | Out-String)
+    $wtCode = $LASTEXITCODE
+    Check 'a web project that declares no test script is unaffected' `
+        (($wtCode -eq 0) -and ($out -notmatch '(?m)^\[(PASS|FAIL)\] test\b')) "code=$wtCode $out"
+} else {
+    Write-Output '[skip] npm not on PATH -- the web test phase cannot be judged here'
+}
+
 Remove-Item $tmp -Recurse -Force
 if ($script:Fails) { Write-Output "`n$($script:Fails) of $($script:Total) check(s) failed"; exit 1 }
 Write-Output "`nall checks passed ($($script:Total)/$($script:Total))"

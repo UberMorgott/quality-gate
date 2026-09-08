@@ -906,6 +906,49 @@ function Invoke-WebStack($s) {
         $buildScript = @('build-only', 'build') | Where-Object { $scripts -contains $_ } | Select-Object -First 1
         if ($buildScript) { Phase 'build' { npm run $buildScript } }
     }
+    # The repository's own declared test script, full level only -- the same split
+    # `build` above uses, and for the same reason: the fast lane runs on every agent
+    # turn. Only `test`: discovering arbitrary scripts would make the gate's meaning
+    # depend on names nobody agreed on, and a project that declares none is silent
+    # here exactly as it was before.
+    if ($Full -and $scripts -contains 'test') {
+        # Redirected to files and bounded, for the two reasons the custom stack is:
+        # vitest and jest default to WATCH mode, so the run never returns at all, and
+        # a process filling a pipe nobody drains blocks forever. CI=1 is what turns
+        # both runners into a single pass; the timeout is what happens when it does
+        # not. 10m, the same ceiling `go test` is given.
+        $testTimeoutSec = 600
+        $outFile = Join-Path ([IO.Path]::GetTempPath()) "quality-gate-webtest-$(Get-PathKey $s.Dir)-$PID.out"
+        $errFile = "$outFile.err"
+        $sw = [Diagnostics.Stopwatch]::StartNew()
+        # FORCE_COLOR for the same reason every other phase passes --no-color: escape
+        # codes in a failure dump are noise the reader pays for. Restored either way,
+        # like GIT_LFS_SKIP_SMUDGE below -- this process runs the other stacks too.
+        $prior = @{ CI = $env:CI; FORCE_COLOR = $env:FORCE_COLOR }
+        $env:CI = '1'
+        $env:FORCE_COLOR = '0'
+        try {
+            $npmExe = if ($IsWindows) { 'npm.cmd' } else { 'npm' }
+            $p = Start-Process $npmExe -ArgumentList 'run', 'test' `
+                -WorkingDirectory $s.Dir -NoNewWindow -PassThru `
+                -RedirectStandardOutput $outFile -RedirectStandardError $errFile
+            $done = $p.WaitForExit($testTimeoutSec * 1000)
+        } finally { $env:CI = $prior.CI; $env:FORCE_COLOR = $prior.FORCE_COLOR }
+        $sw.Stop()
+        # Kill the tree: npm is a parent, and the runner it started is what hangs.
+        if (-not $done) { try { $p.Kill($true) } catch { } ; [void]$p.WaitForExit(5000) }
+        $code = if ($done) { $p.ExitCode } else { 1 }
+        $text = ((@((Get-Content $outFile -Raw -ErrorAction SilentlyContinue),
+                    (Get-Content $errFile -Raw -ErrorAction SilentlyContinue)) -join '') -as [string]).TrimEnd()
+        Remove-Item $outFile, $errFile -Force -ErrorAction SilentlyContinue
+        # The timeout goes in the NAME, like the custom stack's: a killed runner
+        # usually printed nothing, and "never came back" is not "exited 1".
+        $name = if ($done) { 'test' } else { "test -- timeout after ${testTimeoutSec}s (watch mode? it is run with CI=1)" }
+        Phase $name {
+            if ($text) { $text }
+            if ($code -ne 0) { $global:LASTEXITCODE = 1 }
+        } -Elapsed $sw.Elapsed.TotalSeconds
+    }
     # See the govulncheck note above: a real defect, full level only, and it needs
     # a lockfile to have anything to resolve against.
     if ($Full) {
