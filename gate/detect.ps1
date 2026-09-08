@@ -4,6 +4,25 @@
 # mentioned. A stack whose marker is present but whose linter config is missing
 # is reported once, clearly, and the run continues.
 
+# Every git question the gate asks names its directory with `-C`, so the git
+# environment it INHERITED can only ever be wrong. A hook is the case that
+# proves it: git exports GIT_DIR and leaves GIT_WORK_TREE unset, and under those
+# two variables git stops discovering the repository and treats the CURRENT
+# directory as the work tree root. Measured on git 2.53, in a linked worktree,
+# from `<worktree>/shared`: `rev-parse --show-toplevel` answers `.../shared`
+# with GIT_DIR set and `.../` (the real root) without it, and
+# `--path-format=absolute` does NOT fix it -- it makes the wrong answer absolute.
+# That wrong root then became buf's baseline `<worktree>/shared/.git`, a path
+# that does not exist ("could not clone ... exit status 3"), and every other
+# `git -C $top` in the same run inherited it. Cleared once here, for the whole
+# process, because this file is the prologue of every entry point.
+#
+# GIT_INDEX_FILE is deliberately KEPT: git exports it as an absolute path, it
+# stays correct without GIT_DIR, and check.ps1 reads its presence as the signal
+# that this run is inside a commit.
+$env:GIT_DIR = $null
+$env:GIT_WORK_TREE = $null
+
 # Every stack this gate knows about and the file that proves it exists.
 # Used for provenance output: `check.ps1 -Why` names the marker behind every
 # phase that ran and every stack that does not exist here.

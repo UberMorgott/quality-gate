@@ -61,6 +61,12 @@ switch ($cmd) {
     'trust'     { Invoke-Child 'gate\trust.ps1'     $rest }
     'selftest'  { Invoke-Child 'selftest.ps1'       $rest }
     'update' {
+        # Same inherited-git-environment trap detect.ps1 clears for every other entry
+        # point, and this branch is the one that does not dot-source it. Under a hook's
+        # GIT_DIR, `-C $home_` names the directory but the variable names the
+        # repository, so this would fast-forward the repository being COMMITTED.
+        $env:GIT_DIR = $null
+        $env:GIT_WORK_TREE = $null
         git -C $home_ pull --ff-only
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         Write-Output "quality-gate $(git -C $home_ rev-parse --short HEAD) at $home_"

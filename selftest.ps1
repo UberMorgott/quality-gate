@@ -1203,6 +1203,65 @@ Check 'a clean merge commit still lands' `
     (($goodCode -eq 0) -and ((git -C $mrg rev-parse HEAD) -ne $beforeGood) -and ($parents.Count -eq 3)) `
     "code=$goodCode fields=$($parents.Count)"
 
+# A hook does not run in the environment a terminal does: git exports GIT_DIR and
+# leaves GIT_WORK_TREE unset, and under those two variables git stops DISCOVERING the
+# repository and calls the current directory the work tree root. Measured on git 2.53
+# in a linked worktree, from `<worktree>/schema`: `rev-parse --show-toplevel` answered
+# `<worktree>/schema`, and `--path-format=absolute` only made that wrong answer
+# absolute. The proto phase built buf's baseline from that root and handed it
+# `<worktree>/schema/.git`, which does not exist -- `could not clone ... exit status 3`
+# on every commit from a worktree, for a schema with nothing wrong with it.
+#
+# Driven through a CHILD pwsh, because the fix clears those variables once for the
+# whole process and this file dot-sourced the gate at line 15 -- setting GIT_DIR here
+# would prove nothing. Both halves are asserted in the same run: raw git still gets it
+# wrong, or the fixture has stopped reproducing the hook environment at all, and the
+# gate gets it right anyway.
+$hookWt = Join-Path $tmp 'hookwt'
+git -C $mrg worktree add -q -b hookenv $hookWt *> $null
+$hookGitDir = (& git -C $hookWt rev-parse --path-format=absolute --git-dir 2>$null)
+$probe = Join-Path $tmp 'hookenv-probe.ps1'
+[IO.File]::WriteAllText($probe, @'
+param([string]$Sub, [string]$GitDir, [string]$Detect)
+$env:GIT_DIR = $GitDir
+Set-Location $Sub
+Write-Output "raw=$(git rev-parse --show-toplevel)"
+. $Detect
+Write-Output "gate=$(Get-RepoRoot (Get-Location).Path)"
+'@)
+if (-not $hookGitDir) {
+    Write-Output '[skip] git refused to make a linked worktree -- the hook-environment check needs one'
+} else {
+    $hookOut = (& pwsh -NoProfile -File $probe (Join-Path $hookWt 'schema') $hookGitDir `
+        (Join-Path $PSScriptRoot 'gate\detect.ps1') 2>&1 | Out-String)
+    # .Trim() first: `$` in a multiline regex matches BEFORE the newline but `.` still
+    # matches the `\r` in front of it, so every captured path ends in a carriage return.
+    $norm = { param($p) ($p.Trim() -replace '/', '\').TrimEnd('\').ToLowerInvariant() }
+    $wtPath = & $norm (Resolve-Path $hookWt).Path
+    $rawTop = & $norm ([regex]::Match($hookOut, '(?m)^raw=(.*)$').Groups[1].Value)
+    $gateTop = & $norm ([regex]::Match($hookOut, '(?m)^gate=(.*)$').Groups[1].Value)
+    Check 'the hook environment really does break bare `rev-parse --show-toplevel`' `
+        ($rawTop -eq "$wtPath\schema") "raw=$rawTop"
+    Check 'the repo root resolves to the worktree root with GIT_DIR exported' `
+        ($gateTop -eq $wtPath) "gate=$gateTop want=$wtPath"
+
+    # ...and the symptom itself: the proto phase run from a subdirectory of a linked
+    # worktree, in that same environment, must not hand buf a baseline under the
+    # subdirectory. Asserted on the failure text rather than only on the exit code, so
+    # an unrelated red phase cannot be mistaken for this bug being fixed.
+    $bufProbe = Join-Path $tmp 'hookenv-buf.ps1'
+    [IO.File]::WriteAllText($bufProbe, @'
+param([string]$Sub, [string]$GitDir, [string]$Check)
+$env:GIT_DIR = $GitDir
+Set-Location $Sub
+& pwsh -NoProfile -File $Check -Only proto -Full
+'@)
+    $bufOut = (& pwsh -NoProfile -File $bufProbe (Join-Path $hookWt 'schema') $hookGitDir `
+        (Join-Path $PSScriptRoot 'gate\check.ps1') 2>&1 | Out-String)
+    Check 'buf breaking gets a real baseline from inside a hook in a worktree' `
+        ($bufOut -notmatch 'could not clone') ($bufOut -replace "`r?`n", ' | ')
+}
+
 # Concurrent commits in one worktree. Git serialises the final write, but it does not
 # protect the INDEX while a hook runs, and this hook runs for 40 seconds to five
 # minutes -- the gate is what widens the window from milliseconds to minutes. Measured
