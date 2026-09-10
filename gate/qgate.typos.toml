@@ -27,4 +27,39 @@
 # word of 7+ letters (`defaced`, `effaced`) is no longer spell-checked. Both are spelled
 # correctly, and a typo that lands on another all-hex string is not a shape typos would
 # have corrected anyway. Lowercase only -- uppercase hex is a constant, not a commit.
-extend-ignore-re = ["\\b[0-9a-f]{7,40}\\b"]
+#
+# The next three are one argument, about MIME transfer encodings. A mail test fixture -- the
+# vendored `imap_test.go` of an upstream Go project -- reported the same two-letter fragment
+# (`B`+`A`) five times, every hit a hex pair of a quoted-printable body: `=D0=BA` and its
+# neighbours. Encoded bytes are not prose, and no repository can declare that fragment
+# correct in its own `_typos.toml` without switching the word off in prose too. (Spelled out
+# here it would be a finding in this very file.) All three forms live in that one fixture --
+# 26 lines carry quoted-printable, 18 a long base64 run, 5 an encoded-word -- so all three
+# are what the report actually measured, not a guess about the next fixture.
+#
+# 1. Quoted-printable: two or more `=XX` hex escapes in a row, plus any letters glued to
+#    them. The letters are the point -- the encoding splits a word in half, so the fixture
+#    reports the front of an accented word as its own misspelling. Two escapes minimum, not
+#    one: a lone `=XX` is how ordinary code assigns a hex constant.
+#    Ceiling: a single-escape latin-1 word stays a finding. Widen only with a case in hand.
+#
+# 2. An RFC 2047 encoded-word, `=?charset?B?...?=` (or `?Q?`) -- how a mail header carries
+#    non-ASCII text. Anchored on both sentinels and stopping at the first `?`, so it is the
+#    encoded run and nothing around it.
+#
+# 3. A separator-free run of base64 alphabet characters, 48 or more. The threshold is the
+#    whole safety of this line: MIME wraps base64 at 76 characters per line, so a real body
+#    clears it on every line, while an identifier does not -- the longest names in this
+#    repository stay under 40, and 48 unbroken base64 characters means no `_`, no `-`, no
+#    space and no punctuation for 36 bytes of payload. Below ~40 a long camelCase name would
+#    start matching and stop being spell-checked.
+#
+# What none of them cover: correctly spelled non-English text sitting in a fixture as plain
+# words. That is a dictionary question, and the repository answers it in its own `_typos.toml`
+# under `[default.extend-words]` -- the same mechanism this repository uses for its own terms.
+extend-ignore-re = [
+    "\\b[0-9a-f]{7,40}\\b",
+    "[A-Za-z]*(?:=[0-9A-Fa-f]{2}){2,}[A-Za-z]*",
+    "=\\?[-A-Za-z0-9_*]+\\?[BbQq]\\?[^?]*\\?=",
+    "\\b[A-Za-z0-9+/]{48,}={0,2}",
+]

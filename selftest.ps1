@@ -2164,6 +2164,39 @@ if (Get-Command typos -ErrorAction SilentlyContinue) {
     $thOut = (& pwsh -NoProfile -File $gate -Root $th -Only base -Full 2>&1 | Out-String)
     Check "the repository's own _typos.toml still applies with the gate's config passed" `
         (($LASTEXITCODE -eq 0) -and ($thOut -notmatch 'plan\.md')) "code=$LASTEXITCODE $thOut"
+
+    # Encoded bytes are not prose. A vendored mail test fixture reported the same two-letter
+    # fragment five times (spelled out here it would redden THIS file, exactly as the gate's
+    # own config comment says), every hit a hex pair of a quoted-printable body. All three
+    # shapes here, because a different pattern ignores each: the short encoded-word is far
+    # below the 48-character base64 threshold and only the RFC 2047 sentinels cover it, and
+    # the quoted-printable run also splits a word, so the letters glued to the escapes are
+    # part of the encoded run and not a misspelling. Then the same file with a
+    # real misspelling in a comment, to prove the exemption is the encoded run and not the
+    # line, the string or the file.
+    $tb = Join-Path $tmp 'typos-base64'
+    New-Item -ItemType Directory -Path $tb | Out-Null
+    git -C $tb init -q 2>$null
+    $mime = @'
+package email
+
+const raw = "" +
+	"Subject: =?utf-8?B?eHk5BA3eg==?=\r\n" +
+	"Content-Transfer-Encoding: base64\r\n\r\n" +
+	"aGVsbG8gd29ybGQgdGhpcyBpcyBhIHZlcnkgbG9uZzBiYXNlNjQgYm9keTBmb3IgdGVzdGluZw5BA3\r\n" +
+	"Content-Transfer-Encoding: quoted-printable\r\n\r\n" +
+	"=D0=9F=D0=BE=D0=B4=D1=81=D0=BA=D0=B0=D0=B6=D0=B8=D1=82=D0=B5\r\n" +
+	"y funcion=C3=B3 de maravilla\r\n"
+'@
+    [IO.File]::WriteAllText((Join-Path $tb 'imap_test.go'), "$mime`n")
+    $tbOut = (& pwsh -NoProfile -File $gate -Root $tb -Only base -Full 2>&1 | Out-String)
+    Check 'quoted-printable, base64 and an encoded-word are not typos' `
+        (($LASTEXITCODE -eq 0) -and ($tbOut -notmatch 'imap_test\.go')) "code=$LASTEXITCODE $tbOut"
+    [IO.File]::WriteAllText((Join-Path $tb 'imap_test.go'), "$mime`n// you will $typo it`n")
+    $tbOut = (& pwsh -NoProfile -File $gate -Root $tb -Only base -Full 2>&1 | Out-String)
+    Check 'a real typo in a comment beside an encoded body is still caught' `
+        (($LASTEXITCODE -ne 0) -and ($tbOut -match '\[FAIL\] typos') -and
+            ($tbOut -match 'imap_test\.go')) "code=$LASTEXITCODE $tbOut"
 } else {
     Write-Output '[skip] typos not on PATH -- its fast/full scoping cannot be judged here'
 }
