@@ -1472,9 +1472,35 @@ function Invoke-BaseStack($s) {
             # next door, because typos layers it on top of the repository's own
             # _typos.toml instead of replacing that file -- measured both ways, and the
             # two extend-ignore-re lists merge rather than one winning.
-            $targs = @('--format', 'brief', '--config', (Join-Path $PSScriptRoot 'qgate.typos.toml'))
+            $cfg = Join-Path $PSScriptRoot 'qgate.typos.toml'
+            $targs = @('--format', 'brief', '--config', $cfg)
             if ($paths) { $targs += '--force-exclude' }
-            Phase 'typos' { typos @targs @paths }
+            # Captured and counted, not handed straight to the report, for the reason the
+            # format phase next door is: a first run on a repository that never had a
+            # dictionary is hundreds of findings -- measured on a game mod, 387 findings and
+            # 34630 chars -- and the report's 6000-char cap then cut it to ~76 lines and a
+            # byte count. Worse, typos walks the tree in parallel: the surviving prefix
+            # differed between runs on the same tree (56 of ~76 lines in common, measured),
+            # so a pre-commit hook needed several runs to see one list and never saw the
+            # total at all. Twenty SORTED lines plus the real totals say strictly more, and
+            # the rest is one command away -- which the last line names, because nobody can
+            # guess the --config path this phase runs with.
+            $tsw = [Diagnostics.Stopwatch]::StartNew()
+            $tOut = (& typos @targs @paths 2>&1 | Out-String)
+            $tCode = $LASTEXITCODE
+            $tsw.Stop()
+            Phase 'typos' {
+                $hits = @($tOut -split "`r?`n" | Where-Object { $_ -match '^(.*?):\d+:\d+: ' } | Sort-Object)
+                if ($hits.Count -gt 20) {
+                    $files = @($hits | ForEach-Object { ($_ -replace '^(.*?):\d+:\d+: .*$', '$1') } |
+                            Sort-Object -Unique).Count
+                    "typos: $($hits.Count) finding(s) in $files file(s) -- showing first 20"
+                    $hits | Select-Object -First 20
+                    "full list: typos --format brief --config $cfg ."
+                }
+                else { $tOut.TrimEnd() }
+                if ($tCode -ne 0) { $global:LASTEXITCODE = 1 }
+            } -Elapsed $tsw.Elapsed.TotalSeconds
         }
     }
 

@@ -2197,6 +2197,37 @@ const raw = "" +
     Check 'a real typo in a comment beside an encoded body is still caught' `
         (($LASTEXITCODE -ne 0) -and ($tbOut -match '\[FAIL\] typos') -and
             ($tbOut -match 'imap_test\.go')) "code=$LASTEXITCODE $tbOut"
+
+    # A repository that never had a dictionary reports hundreds of findings on its first
+    # run -- 387 measured on a game mod, 34630 chars -- and the report's 6000-char cap cut
+    # that to a prefix and a byte count, never the total. typos walks the tree in parallel,
+    # so the surviving prefix differed between runs on the same tree and a pre-commit hook
+    # needed several of them to see one list. The phase counts and sorts for itself now.
+    $tm = Join-Path $tmp 'typos-many'
+    New-Item -ItemType Directory -Path $tm | Out-Null
+    git -C $tm init -q 2>$null
+    [IO.File]::WriteAllText((Join-Path $tm 'notes.md'),
+        ((1..25 | ForEach-Object { "line $_ you will $typo it" }) -join "`n") + "`n")
+    $tmOut = (& pwsh -NoProfile -File $gate -Root $tm -Only base -Full 2>&1 | Out-String)
+    $tmCode = $LASTEXITCODE
+    $tmHits = @($tmOut -split "`r?`n" | Where-Object { $_ -match ':\d+:\d+: ' })
+    Check 'a flood of typos reports its real total and shows twenty' `
+        (($tmCode -ne 0) -and ($tmHits.Count -eq 20) -and
+            ($tmOut -match 'typos: 25 finding\(s\) in 1 file\(s\) -- showing first 20') -and
+            ($tmOut -match 'full list: typos --format brief')) "code=$tmCode $tmOut"
+    # The shown twenty must be the SAME twenty next run -- the half a byte cap could never
+    # give, because the parallel walk made the surviving prefix a lottery.
+    $tmAgain = @((& pwsh -NoProfile -File $gate -Root $tm -Only base -Full 2>&1 | Out-String) -split "`r?`n" |
+            Where-Object { $_ -match ':\d+:\d+: ' })
+    Check 'the shown findings are the same list on a second run' `
+        ((($tmHits -join "`n") -eq ($tmAgain -join "`n")) -and ($tmHits.Count -eq 20)) `
+        "run1=$($tmHits -join '|') run2=$($tmAgain -join '|')"
+    # ...and a handful still prints in full: the summary is for a flood, not for every run.
+    [IO.File]::WriteAllText((Join-Path $tm 'notes.md'), "you will $typo it`n")
+    $tmFew = (& pwsh -NoProfile -File $gate -Root $tm -Only base -Full 2>&1 | Out-String)
+    Check 'a couple of findings still print in full, with no summary line' `
+        (($LASTEXITCODE -ne 0) -and ($tmFew -notmatch 'showing first 20') -and
+            ($tmFew -match 'notes\.md')) "code=$LASTEXITCODE $tmFew"
 } else {
     Write-Output '[skip] typos not on PATH -- its fast/full scoping cannot be judged here'
 }
