@@ -42,9 +42,9 @@
     "semantic_hash": ""
   },
   "selftest.ps1": {
-    "mtime": 1788899055.9963017,
-    "seen": 1788899067.6382792,
-    "ast_hash": "03d10db74489f6675cf687e1d6878635",
+    "mtime": 1789022447.1492856,
+    "seen": 1789023053.8106346,
+    "ast_hash": "d2bafe0468b490ddac04444a2b1a6ecb",
     "semantic_hash": ""
   },
   "templates/.stylelintrc.json": {
@@ -126,9 +126,9 @@
     "semantic_hash": "95af656e0dd8b458d943a5b06dd99b55"
   },
   "README.md": {
-    "mtime": 1788874151.9271524,
-    "seen": 1788874794.9260662,
-    "ast_hash": "8c9a83f2ab6372a5aa84c43796f47753",
+    "mtime": 1789022478.8535085,
+    "seen": 1789023053.8106477,
+    "ast_hash": "ceed969e02905b249c1047363c02b923",
     "semantic_hash": ""
   },
   "templates/.golangci.yml": {
