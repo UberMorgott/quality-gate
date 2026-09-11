@@ -1940,11 +1940,11 @@ try {
     # real game is ever launched here: it would cover the desktop and can touch real saves.
     if ($IsWindows) {
         $fx = Join-Path $PSScriptRoot 'testdata\smoke-fixture\app.ps1'
-        function Invoke-Smoke([string]$Mode, [hashtable]$Extra = @{}, [int]$Timeout = 60, [string]$Color = 'SeaGreen', $Stages) {
+        function Invoke-Smoke([string]$Mode, [hashtable]$Extra = @{}, [int]$Timeout = 60, [string]$Color = 'SeaGreen', $Stages, [array]$Before = @()) {
             if (-not $Stages) { $Stages = @(@{ name = 'menu'; ready = 'Starting menu'; holdSec = 1 }, @{ name = 'world'; ready = 'Spawned in world'; holdSec = 1 }) }
             $smoke = @{ exe = 'pwsh'; args = @('-NoProfile', '-File', $fx, $Mode, '{dataDir}', $Color); log = '{dataDir}/app.log'; stages = $Stages }
             foreach ($k in $Extra.Keys) { $smoke[$k] = $Extra[$k] }
-            [IO.File]::WriteAllText($custJson, (@{ checks = @(@{ name = 'smoke'; timeoutSec = $Timeout; smoke = $smoke }) } | ConvertTo-Json -Depth 10))
+            [IO.File]::WriteAllText($custJson, (@{ checks = @($Before + @{ name = 'smoke'; timeoutSec = $Timeout; smoke = $smoke }) } | ConvertTo-Json -Depth 10))
             Invoke-Trust $cust | Out-Null
             $o = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $cust -All -Only 'custom' -Full 2>&1 | Out-String)
             [pscustomobject]@{ Code = $LASTEXITCODE; Out = $o }
@@ -2004,6 +2004,15 @@ try {
         $r = Invoke-Smoke 'pass' -Stages $bStages -Color 'Blue'
         Check 'a screenshot that differs from its baseline fails with the ratio and tolerance' `
             (($r.Code -ne 0) -and ($r.Out -match "stage 'menu': screenshot differs from baseline by [\d.]+% \(tolerance 1%\)")) $r.Out
+
+        # #28: a failed build/deploy before the smoke check must not launch the app on the
+        # stale artifacts it left. Same repo + check name = same run dir; the smoke check
+        # wipes and recreates it on launch, so its absence proves the app never started.
+        if ($runDir) { Remove-Item -LiteralPath $runDir -Recurse -Force -ErrorAction SilentlyContinue }
+        $r = Invoke-Smoke 'pass' -Before @(@{ name = 'deploy-driver'; run = 'exit 1' })
+        Check 'a smoke check after a failed check is skipped and the app is not launched' `
+            (($r.Code -ne 0) -and ($r.Out -match '\[FAIL\] deploy-driver') -and
+                ($r.Out -match '\[SKIP\] smoke -- not run: an earlier check failed') -and $runDir -and -not (Test-Path $runDir)) $r.Out
     }
 
     # ...and the two shapes that are simply absence, or every repository that pins a

@@ -120,6 +120,9 @@ function Get-ImageDiff([string]$A, [string]$B) {
 }
 
 function Invoke-SmokeCheck($c) {
+    # quality-gate#28: a failed build/deploy before this check leaves stale artifacts in
+    # place, and launching the app on them "passes" a build that does not exist.
+    if ($script:Failed) { $script:Lines += "[SKIP] $($c.Name) -- not run: an earlier check failed"; return }
     if (-not $IsWindows) { $script:Lines += "[SKIP] $($c.Name) -- smoke checks are Windows-only"; $script:CustomDeferred = $true; return }
     Initialize-SmokeNative
     $s = $c.Smoke
