@@ -860,7 +860,15 @@ function Invoke-DotnetStack($s) {
     # present, or the missing-reference [SKIP] above already returned.
     if (@($refs.Identity) + @($pkgs.Identity) | Where-Object { $_ -match '^(0Harmony|Lib\.Harmony|HarmonyX)\b' }) {
         $hTfm = if (-not $info.Properties.TargetFramework) { $tfms[0] }
-        Phase 'harmony' { & (Join-Path $PSScriptRoot 'harmony.ps1') -Project $projAbs -Root $Root -Tfm $hTfm }
+        Phase 'harmony' {
+            $h = @(& (Join-Path $PSScriptRoot 'harmony.ps1') -Project $projAbs -Root $Root -Tfm $hTfm)
+            $code = $LASTEXITCODE
+            # Probes, other assemblies' findings and the per-assembly count of what could not
+            # be checked are notes beside the verdict: shown on a pass too, like build's counts.
+            $script:Lines += @($h | Where-Object { $_ -match '^\[(WARN|NOTE)\] ' })
+            $h | Where-Object { $_ -notmatch '^\[(WARN|NOTE)\] ' }
+            $global:LASTEXITCODE = $code
+        }
     }
 
     # Test projects in these repos are custom Exe runners, so the phase exists only

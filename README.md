@@ -1000,14 +1000,29 @@ git-worktree, `base` не получает вовсе и по-прежнему �
    их **только метаданными** (`System.Reflection.Metadata` через `Add-Type`, код игры не
    грузится, пакетов качать не нужно). Проверяется так же, как резолвит сам Harmony: тип + метод
    (+ `argumentTypes`, `MethodType` Getter/Setter/Constructor), неоднозначная перегрузка без
-   `argumentTypes`, поля `___field`, имена параметров Prefix/Postfix/Finalizer, литеральные
-   `AccessTools.Method/Field/Property(typeof(T), "name")` в IL. Строка находки:
-   `Hud.UpdateStatusEffects not found (Patches.cs:20, StatusPatch.Postfix)` (фикстура
-   `testdata/harmony-fixture`).
+   `argumentTypes`, поля `___field`, имена параметров Prefix/Postfix/Finalizer. `argumentTypes` и
+   `Type[]` сравниваются как у `DefaultBinder`: подходит перегрузка, в которую аргументы
+   присваиваются (базовый тип, интерфейс, generic-параметр); верное число с неверными типами —
+   находка. В IL — литеральные `AccessTools.Method/Field/Property/FieldRefAccess(typeof(T), "name")`,
+   `AccessTools.Method("Type:Method")`, `AccessTools.TypeByName("T")`,
+   `typeof(T).GetMethod/GetField/GetProperty("name"[, Type[]])`. Строка находки:
+   `Hud.UpdateStatusEffects not found (Patches.cs:28, StatusPatch.Postfix)` (фикстура
+   `testdata/harmony-fixture`). Результат поиска проверяется на null (`?? fallback`,
+   `if (m != null)`, в том числе через поле или локаль) — это проба версии: `[WARN]`, не `[FAIL]`.
+   Что статически не проверить (имя не литерал, `TargetMethod(s)`, тип из незагруженной сборки),
+   считается: `[NOTE] harmony: Mod.dll -- 18 target(s) checked, 2 not checkable statically (...)`.
+
+   Чужие плагины рядом с модом — `qgate.json`:
+   `{"harmony": {"assemblies": ["D:\\Steam\\steamapps\\common\\Valheim\\BepInEx\\plugins\\**\\*.dll"]}}`
+   (от корня или абсолютный путь, `%VAR%` раскрывается, `**` — рекурсивно, копия самого мода
+   пропускается). Проверяются теми же правилами против тех же ссылок плюс всех сборок из их папок;
+   находки — `[WARN] harmony: <file>.dll: ...`, не `[FAIL]`: это не код репозитория. Шаблон, не
+   нашедший ни одного `.dll`, — `[WARN]`, а не молчаливое «покрыто».
    Нет игры — прежний `[SKIP] ... game/SDK not installed`. Готового анализатора нет (проверено
    2026-09): `BUTR.Harmony.Analyzer` смотрит только строки `AccessTools` и не обновлялся с
    2023-06, `Harmonize` проверяет оформление патча, не существование цели. Не проверяется:
-   `TargetMethod(s)`, совместимость типа `__instance`.
+   совместимость типа `__instance`, видимость (`GetMethod` без `NonPublic` на приватный метод),
+   расширение примитивов (`int` вместо `long`) в `argumentTypes`.
 4. (только `-Full`) `dotnet test --no-build` — если вычисленное `IsTestProject` равно `true`
    или среди вычисленных `PackageReference` есть `Microsoft.NET.Test.Sdk`. Оба факта берутся
    из вычисления MSBuild, а не из **текста** csproj: `Microsoft.NET.Test.Sdk`, подключённый

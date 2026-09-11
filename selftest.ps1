@@ -887,8 +887,29 @@ internal class Sealable
             ($out -match 'field m_stamina not found \(parameter ___m_stamina\)') -and
             ($out -match "Hud\.UpdateHealth has no parameter 'delta'") -and
             ($out -match 'Hud\.UpdateFood method not found \(AccessTools\.Method\)')) $out
-    Check 'valid Harmony targets stay silent' `
-        (($out -notmatch 'HealthPatch|HealthGetterPatch|m_health|Lookups\.Valid')) $out
+    Check 'argumentTypes right in number but wrong in type fail' `
+        (($out -match 'Hud\.Damage\(Unit, System\.String\) not found; have \(Unit, System\.Single\)') -and
+            ($out -match 'Hud\.Damage\(System\.String, System\.Single\) method not found \(AccessTools\.Method\)')) $out
+    Check 'Type.GetMethod, "Type:Method" and TypeByName lookups are checked' `
+        (($out -match 'Hud\.UpdateArmor method not found \(Type\.GetMethod\)') -and
+            ($out -match 'Hud\.UpdateStamina method not found \(AccessTools\.Method\)') -and
+            ($out -match 'type Minimap not found \(AccessTools\.TypeByName\)')) $out
+    Check 'a null-checked lookup is a version probe: a warning, not a failure' `
+        (($out -match '\[WARN\] harmony: Hud\.UpdateShield .*null-checked') -and
+            ($out -match '\[WARN\] harmony: Hud\.UpdateMana .*null-checked') -and
+            ($out -notmatch '(?m)^(?!\[WARN\]).*Hud\.Update(Shield|Mana)')) $out
+    Check 'lookups that cannot be checked statically are counted' `
+        ($out -match '\[NOTE\] harmony: Mod\.dll -- \d+ target\(s\) checked, 2 not checkable statically') $out
+    Check 'valid Harmony targets stay silent (assignable, interface, generic argumentTypes too)' `
+        (($out -notmatch 'HealthPatch|HealthGetterPatch|AssignablePatch|m_health|Lookups\.Valid')) $out
+    # Other assemblies (qgate.json harmony.assemblies): the same checks, reported as warnings.
+    $plug = New-Item -ItemType Directory -Force (Join-Path $hm 'plugins')
+    Copy-Item (Get-ChildItem (Join-Path $hmMod 'bin') -Recurse -Filter Mod.dll | Select-Object -First 1).FullName (Join-Path $plug 'Other.dll')
+    '{"harmony": {"assemblies": ["../plugins/**/*.dll"]}}' | Set-Content (Join-Path $hmMod 'qgate.json')
+    $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $hmMod -All -Full 2>&1 | Out-String)
+    Check 'qgate.json harmony.assemblies are checked too, as warnings' `
+        (($out -match '\[WARN\] harmony: Other\.dll: Hud\.UpdateFood method not found') -and
+            ($out -match '\[NOTE\] harmony: Other\.dll -- ')) $out
 } else {
     Write-Output '[skip] no .NET SDK on this machine -- the dotnet stack cannot be exercised'
 }
