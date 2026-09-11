@@ -12,15 +12,15 @@
     "semantic_hash": ""
   },
   "gate/check.ps1": {
-    "mtime": 1789139131.4826124,
-    "seen": 1789139518.1703615,
-    "ast_hash": "5d96299f30b2fbe9cfea67786f998d77",
+    "mtime": 1789140344.7303684,
+    "seen": 1789140345.2092326,
+    "ast_hash": "4a17140190a0b4493c6253e6b22aad16",
     "semantic_hash": ""
   },
   "gate/detect.ps1": {
-    "mtime": 1789139131.4826124,
-    "seen": 1789139518.170363,
-    "ast_hash": "8af32913885a0e5fede0e17f020b14af",
+    "mtime": 1789139534.171096,
+    "seen": 1789140345.209234,
+    "ast_hash": "d5a44eeb0e5084aee45810d564278542",
     "semantic_hash": ""
   },
   "gate/outdated.ps1": {
@@ -42,9 +42,9 @@
     "semantic_hash": ""
   },
   "selftest.ps1": {
-    "mtime": 1789139131.483616,
-    "seen": 1789139518.1703682,
-    "ast_hash": "804e41bc155cc0c7929cc0628270ba92",
+    "mtime": 1789140344.7323842,
+    "seen": 1789140345.2092404,
+    "ast_hash": "0c7532d43efbc3a64008c8ce8fa496c9",
     "semantic_hash": ""
   },
   "templates/.stylelintrc.json": {
@@ -126,9 +126,9 @@
     "semantic_hash": "95af656e0dd8b458d943a5b06dd99b55"
   },
   "README.md": {
-    "mtime": 1789139131.481609,
-    "seen": 1789139518.1703846,
-    "ast_hash": "81befa13b2914490b52bd837e74f346a",
+    "mtime": 1789140344.7303684,
+    "seen": 1789140345.209258,
+    "ast_hash": "26840032fabfd0f4448a7cebf4b232f6",
     "semantic_hash": ""
   },
   "templates/.golangci.yml": {
@@ -180,9 +180,9 @@
     "semantic_hash": ""
   },
   "gate/trust.ps1": {
-    "mtime": 1788766515.113534,
-    "seen": 1788781201.4389377,
-    "ast_hash": "207c13cc4877f4815097a6772108b876",
+    "mtime": 1789139534.171096,
+    "seen": 1789140345.2092388,
+    "ast_hash": "671e3eeebe1b73d2908af4b4a3de79dc",
     "semantic_hash": ""
   },
   "testdata/cpp-fixture/src/greeting.cpp": {
@@ -210,15 +210,15 @@
     "semantic_hash": ""
   },
   "gate/harmony.cs": {
-    "mtime": 1789127193.9980624,
-    "seen": 1789127585.9964392,
-    "ast_hash": "c376e740d8ce67c4f3678fb42ab88b9f",
+    "mtime": 1789140344.7313693,
+    "seen": 1789140345.2092347,
+    "ast_hash": "a195b0c3211882c435125766fe52ddf0",
     "semantic_hash": ""
   },
   "gate/harmony.ps1": {
-    "mtime": 1789127193.9992836,
-    "seen": 1789127585.9964404,
-    "ast_hash": "6be2d9ed810194fd922cc8d26af4a7f2",
+    "mtime": 1789140344.7313693,
+    "seen": 1789140345.2092352,
+    "ast_hash": "3a2e4045ba786e12da40d2d362480b66",
     "semantic_hash": ""
   },
   "testdata/harmony-fixture/Game/Game.csproj": {
@@ -228,9 +228,9 @@
     "semantic_hash": ""
   },
   "testdata/harmony-fixture/Game/Hud.cs": {
-    "mtime": 1789127194.0004554,
-    "seen": 1789127585.9964526,
-    "ast_hash": "a6b27ade7bb5080fa97f86c26fb47e89",
+    "mtime": 1789140344.7323842,
+    "seen": 1789140345.2092483,
+    "ast_hash": "00fcae7b287d364ad271fa308d1f731c",
     "semantic_hash": ""
   },
   "testdata/harmony-fixture/Harmony/Harmony.csproj": {
@@ -240,9 +240,9 @@
     "semantic_hash": ""
   },
   "testdata/harmony-fixture/Harmony/HarmonyStub.cs": {
-    "mtime": 1789127194.0004554,
-    "seen": 1789127585.9964535,
-    "ast_hash": "a6e48a3d9cda7e8160cd734f7650e3ab",
+    "mtime": 1789140344.7323842,
+    "seen": 1789140345.2092495,
+    "ast_hash": "5125aeefe23c2b730b5622c527211322",
     "semantic_hash": ""
   },
   "testdata/harmony-fixture/Mod/Mod.csproj": {
@@ -252,9 +252,21 @@
     "semantic_hash": ""
   },
   "testdata/harmony-fixture/Mod/Patches.cs": {
-    "mtime": 1789127194.0014565,
-    "seen": 1789127585.996455,
-    "ast_hash": "5cc917294112890e30b3e48f5c4ad78b",
+    "mtime": 1789140344.7323842,
+    "seen": 1789140345.2092512,
+    "ast_hash": "fa23661ca8869d344ba54c3f583d3e4f",
+    "semantic_hash": ""
+  },
+  "gate/smoke.ps1": {
+    "mtime": 1789139534.171096,
+    "seen": 1789140345.209237,
+    "ast_hash": "c40f9367ed473a424ad14debb21ef4a7",
+    "semantic_hash": ""
+  },
+  "testdata/smoke-fixture/app.ps1": {
+    "mtime": 1789139534.1720996,
+    "seen": 1789140345.2092535,
+    "ast_hash": "970bccf7d6081f07436317fa022f8624",
     "semantic_hash": ""
   }
 }

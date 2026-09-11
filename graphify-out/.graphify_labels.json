@@ -1,8 +1,8 @@
 {
-  "0": "qgate wire (repo wiring, config only)",
+  "0": "GitHub Actions quality-gate workflow",
   "1": "detect.ps1",
-  "2": "Coverage measures happy paths; a green suite proves nothing",
-  "3": "Claude Code Stop hook (exit code 2)",
+  "2": "\"Gate is wrong\" issue template",
+  "3": "qgate wire (repo wiring, config only)",
   "4": "MethodType",
   "5": "selftest.ps1",
   "6": "QGateHarmony",
@@ -33,5 +33,6 @@
   "31": ".GetArrayType",
   "32": "Harmony.csproj",
   "33": "Mod.csproj",
-  "34": "harmony.ps1"
+  "34": "harmony.ps1",
+  "35": "app.ps1"
 }
