@@ -138,6 +138,12 @@ public sealed class QGateHarmony : ISignatureTypeProvider<string, object>, ICust
     Asm mod;
     bool mapped;
     SortedSet<string> fails, probes;
+    // -Why / -Targets: every target that DID resolve, so a reviewer can confirm a specific new
+    // patch by name instead of inferring it from a count that went up.
+    List<string> oks;
+    bool listTargets;
+    // The reflection lookup Lookup() just resolved; Scan appends the source location.
+    string okLookup;
     // Failed lookups whose result was stored (local/field): a probe if it is null-checked where read.
     List<(string Msg, string Sink)> stored;
     HashSet<string> checkedSinks;
@@ -146,9 +152,9 @@ public sealed class QGateHarmony : ISignatureTypeProvider<string, object>, ICust
     // mods[0..own) are this repository's assemblies: their findings fail. The rest are other
     // assemblies checked against the same references (qgate.json harmony.assemblies) -- not
     // this repository's code, so everything found there is a warning.
-    public static string[] Run(string[] mods, int own, string[] refPaths, string srcDir, string root)
+    public static string[] Run(string[] mods, int own, string[] refPaths, string srcDir, string root, bool targets = false)
     {
-        var q = new QGateHarmony();
+        var q = new QGateHarmony { listTargets = targets };
         var asms = mods.Select(Load).ToArray();
         foreach (var a in asms) if (a != null) q.Index(a);
         foreach (var p in refPaths) { var a = Load(p); if (a != null) q.Index(a); }
@@ -163,6 +169,7 @@ public sealed class QGateHarmony : ISignatureTypeProvider<string, object>, ICust
             var pre = i < own ? "" : file + ": ";
             outp.AddRange(q.fails.Select(f => i < own ? f : "[WARN] harmony: " + pre + f));
             outp.AddRange(q.probes.Select(p => "[WARN] harmony: " + pre + p + probe));
+            outp.AddRange(q.oks.Select(o => "[NOTE] harmony: " + pre + o));
             int skipped = q.nDynamic + q.nComputed + q.nUnloaded;
             if (q.nChecked + skipped == 0) continue;
             var why = new[] { (q.nDynamic, "non-literal lookup(s)"), (q.nComputed, "TargetMethod(s) / no declared target"), (q.nUnloaded, "in assemblies not loaded") }
@@ -269,6 +276,7 @@ public sealed class QGateHarmony : ISignatureTypeProvider<string, object>, ICust
         foreach (var h in a.R.TypeDefinitions) local.TryAdd(Name(a.R, h), (a, h));
         fails = new(StringComparer.Ordinal);
         probes = new(StringComparer.Ordinal);
+        oks = new();
         stored = new();
         checkedSinks = new();
         nChecked = nDynamic = nComputed = nUnloaded = 0;
@@ -348,6 +356,7 @@ public sealed class QGateHarmony : ISignatureTypeProvider<string, object>, ICust
                 if (err != null) { fails.Add($"{err} {where}"); continue; }
                 if (ta == null) continue; // in an assembly not loaded: counted by Resolve
                 nChecked++;
+                if (listTargets) oks.Add($"OK {label} {where}");
                 if (kind is "Prefix" or "Postfix" or "Finalizer") CheckParams(m, kind, ta, tdef, target, label, where);
             }
         }
@@ -753,6 +762,7 @@ public sealed class QGateHarmony : ISignatureTypeProvider<string, object>, ICust
                 {
                     var (msg, v) = Lookup(parent, name, p, a, self, gen);
                     ret = v;
+                    if (okLookup != null) oks.Add("OK " + okLookup + " " + Where(Name(r, m.GetDeclaringType()), r.GetString(m.Name)));
                     if (msg != null)
                     {
                         msg += " " + Where(Name(r, m.GetDeclaringType()), r.GetString(m.Name));
@@ -787,13 +797,16 @@ public sealed class QGateHarmony : ISignatureTypeProvider<string, object>, ICust
     {
         bool harmony = parent == "HarmonyLib.AccessTools";
         var label = (harmony ? "AccessTools." : "Type.") + api;
+        okLookup = null;
         if (harmony && api == "TypeByName" && p.Length == 1)
         {
             if (a[0]?.K != 's') { nDynamic++; return (null, null); }
             var hit = FindType(a[0].S, true);
             if (hit == null && Unloaded(AsmOf(a[0].S), Norm(a[0].S))) { nUnloaded++; return (null, null); }
             nChecked++;
-            return hit == null ? ($"type {Norm(a[0].S)} not found ({label})", null) : (null, T(hit));
+            if (hit == null) return ($"type {Norm(a[0].S)} not found ({label})", null);
+            if (listTargets) okLookup = $"type {hit} ({label})";
+            return (null, T(hit));
         }
         if (!Kinds.TryGetValue(api, out var what)) return (null, null);
         V type = null, member = null, typeArgs = null;
@@ -842,10 +855,18 @@ public sealed class QGateHarmony : ISignatureTypeProvider<string, object>, ICust
         var td = x.R.GetTypeDefinition(h);
         var name = member.S;
         if (what != "method")
-            return HasMember(x, td, name, declared, what) ? (null, null) : ($"{tn}.{name} {what} not found ({label})", null);
+        {
+            if (!HasMember(x, td, name, declared, what)) return ($"{tn}.{name} {what} not found ({label})", null);
+            if (listTargets) okLookup = $"{tn}.{name} ({label})";
+            return (null, null);
+        }
         var sigs = Overloads(x, td, name, declared, out var open);
         var args = typeArgs?.K == 'a' ? typeArgs.Arr : null;
-        if (open || (sigs.Count > 0 && (args == null || sigs.Any(s => Fits(s, args))))) return (null, null);
+        if (open || (sigs.Count > 0 && (args == null || sigs.Any(s => Fits(s, args)))))
+        {
+            if (listTargets) okLookup = $"{tn}.{name}{(args == null ? "" : "(" + string.Join(", ", args.Select(s => s ?? "?")) + ")")} ({label})";
+            return (null, null);
+        }
         var sl = args == null ? $"{tn}.{name}" : $"{tn}.{name}({string.Join(", ", args.Select(s => s ?? "?"))})";
         return ($"{sl} method not found ({label}){Have(sigs)}", null);
     }

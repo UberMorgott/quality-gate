@@ -904,6 +904,11 @@ internal class Sealable
         ($out -match '\[NOTE\] harmony: Mod\.dll -- \d+ target\(s\) checked, 2 not checkable statically') $out
     Check 'valid Harmony targets stay silent (assignable, interface, generic argumentTypes too)' `
         (($out -notmatch 'HealthPatch|HealthGetterPatch|AssignablePatch|m_health|Lookups\.Valid')) $out
+    # -Why names every target that resolved: a new patch is confirmed by name, not by a count.
+    $outWhy = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $hmMod -All -Full -Why 2>&1 | Out-String)
+    Check '-Why lists each resolved Harmony target by name' `
+        (($outWhy -match '\[NOTE\] harmony: OK \S*Hud\.UpdateHealth \(Patches\.cs:\d+, HealthPatch\.Postfix\)') -and
+            ($out -notmatch '\[NOTE\] harmony: OK ')) $outWhy
     # Other assemblies (qgate.json harmony.assemblies): the same checks, reported as warnings.
     $plug = New-Item -ItemType Directory -Force (Join-Path $hm 'plugins')
     Copy-Item (Get-ChildItem (Join-Path $hmMod 'bin') -Recurse -Filter Mod.dll | Select-Object -First 1).FullName (Join-Path $plug 'Other.dll')

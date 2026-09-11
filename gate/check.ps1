@@ -861,7 +861,8 @@ function Invoke-DotnetStack($s) {
     if (@($refs.Identity) + @($pkgs.Identity) | Where-Object { $_ -match '^(0Harmony|Lib\.Harmony|HarmonyX)\b' }) {
         $hTfm = if (-not $info.Properties.TargetFramework) { $tfms[0] }
         Phase 'harmony' {
-            $h = @(& (Join-Path $PSScriptRoot 'harmony.ps1') -Project $projAbs -Root $Root -Tfm $hTfm)
+            # -Why lists every target that resolved, beside the count of them.
+            $h = @(& (Join-Path $PSScriptRoot 'harmony.ps1') -Project $projAbs -Root $Root -Tfm $hTfm -Targets:$Why)
             $code = $LASTEXITCODE
             # Probes, other assemblies' findings and the per-assembly count of what could not
             # be checked are notes beside the verdict: shown on a pass too, like build's counts.

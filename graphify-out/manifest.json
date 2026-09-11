@@ -12,9 +12,9 @@
     "semantic_hash": ""
   },
   "gate/check.ps1": {
-    "mtime": 1789140344.7303684,
-    "seen": 1789140345.2092326,
-    "ast_hash": "4a17140190a0b4493c6253e6b22aad16",
+    "mtime": 1789168092.5820968,
+    "seen": 1789168578.093275,
+    "ast_hash": "a7ea31ec8ce9457e60c8fa4a373733e7",
     "semantic_hash": ""
   },
   "gate/detect.ps1": {
@@ -42,9 +42,9 @@
     "semantic_hash": ""
   },
   "selftest.ps1": {
-    "mtime": 1789141087.0276022,
-    "seen": 1789141507.8846655,
-    "ast_hash": "9702b3c992827c09ef9b18cd611c15b9",
+    "mtime": 1789168114.5294297,
+    "seen": 1789168578.0932825,
+    "ast_hash": "0fabf3e894c5b8ea5cab4718ccfee43e",
     "semantic_hash": ""
   },
   "templates/.stylelintrc.json": {
@@ -126,9 +126,9 @@
     "semantic_hash": "95af656e0dd8b458d943a5b06dd99b55"
   },
   "README.md": {
-    "mtime": 1789140344.7303684,
-    "seen": 1789140345.209258,
-    "ast_hash": "26840032fabfd0f4448a7cebf4b232f6",
+    "mtime": 1789168196.742329,
+    "seen": 1789168578.0933003,
+    "ast_hash": "b7a45323eb0a38f0ebb003aaaa179b12",
     "semantic_hash": ""
   },
   "templates/.golangci.yml": {
@@ -210,15 +210,15 @@
     "semantic_hash": ""
   },
   "gate/harmony.cs": {
-    "mtime": 1789140344.7313693,
-    "seen": 1789140345.2092347,
-    "ast_hash": "a195b0c3211882c435125766fe52ddf0",
+    "mtime": 1789168165.0374415,
+    "seen": 1789168578.0932772,
+    "ast_hash": "cadd2ff663e9aa40853705ef169b3746",
     "semantic_hash": ""
   },
   "gate/harmony.ps1": {
-    "mtime": 1789140344.7313693,
-    "seen": 1789140345.2092352,
-    "ast_hash": "3a2e4045ba786e12da40d2d362480b66",
+    "mtime": 1789168087.8161707,
+    "seen": 1789168578.093278,
+    "ast_hash": "04e4709994fe460c0de33545e5e521c6",
     "semantic_hash": ""
   },
   "testdata/harmony-fixture/Game/Game.csproj": {

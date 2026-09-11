@@ -12,7 +12,9 @@
 # AccessTools strings only and was last released 2023-06; Harmonize checks how a patch is
 # spelled, not whether its target exists. So the gate does it after the build, against the
 # exact references the compiler resolved.
-param([Parameter(Mandatory)][string]$Project, [Parameter(Mandatory)][string]$Root, [string]$Tfm)
+# -Targets (check.ps1 -Why): also print one `[NOTE] harmony: OK <target> (<source>)` per patch
+# whose target DID resolve -- a new hook is confirmed by name, not by a count that went up.
+param([Parameter(Mandatory)][string]$Project, [Parameter(Mandatory)][string]$Root, [string]$Tfm, [switch]$Targets)
 
 if (-not ('QGateHarmony' -as [type])) { Add-Type -Path (Join-Path $PSScriptRoot 'harmony.cs') }
 
@@ -60,6 +62,6 @@ if ($extra) {
         ForEach-Object { Get-ChildItem -LiteralPath $_ -Filter *.dll -File | ForEach-Object FullName })
 }
 
-$lines = [QGateHarmony]::Run(@($mod) + $extra, 1, $refs, (Split-Path $Project), $Root)
+$lines = [QGateHarmony]::Run(@($mod) + $extra, 1, $refs, (Split-Path $Project), $Root, $Targets.IsPresent)
 $lines
 if ($lines | Where-Object { $_ -notmatch '^\[(WARN|NOTE)\] ' }) { exit 1 }

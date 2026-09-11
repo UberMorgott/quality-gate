@@ -1011,6 +1011,9 @@ git-worktree, `base` не получает вовсе и по-прежнему �
    `if (m != null)`, в том числе через поле или локаль) — это проба версии: `[WARN]`, не `[FAIL]`.
    Что статически не проверить (имя не литерал, `TargetMethod(s)`, тип из незагруженной сборки),
    считается: `[NOTE] harmony: Mod.dll -- 18 target(s) checked, 2 not checkable statically (...)`.
+   С `-Why` перед этим счётчиком печатается каждая разрешённая цель поимённо:
+   `[NOTE] harmony: OK Hud.Damage(Player, System.Single) (Patches.cs:21, AssignablePatch.Prefix)` —
+   новый хук подтверждается по имени, а не по выросшему числу.
 
    Чужие плагины рядом с модом — `qgate.json`:
    `{"harmony": {"assemblies": ["D:\\Steam\\steamapps\\common\\Valheim\\BepInEx\\plugins\\**\\*.dll"]}}`
