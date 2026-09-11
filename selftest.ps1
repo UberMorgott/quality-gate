@@ -867,6 +867,28 @@ internal class Sealable
     else {
         Write-Output '[skip] no lock file could be produced -- the injection fallback cannot be exercised'
     }
+
+    # Harmony patch targets (gate/harmony.ps1). A mod whose HintPaths point at a "game" in
+    # ..\lib: first with the game absent -- the existing SKIP, and no harmony phase -- then
+    # with it built, where two valid patches must stay silent and four dangling ones must not.
+    $hm = Join-Path $tmp 'harmony'
+    Copy-Item (Join-Path $PSScriptRoot 'testdata\harmony-fixture') $hm -Recurse
+    $hmMod = Join-Path $hm 'Mod'
+    $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $hmMod -All -Full 2>&1 | Out-String)
+    Check 'a Harmony mod without its game is a skip, not a harmony verdict' `
+        (($LASTEXITCODE -eq 0) -and ($out -match 'game/SDK not installed') -and ($out -notmatch '\] harmony')) $out
+    foreach ($p in 'Game', 'Harmony') { & dotnet build (Join-Path $hm $p) -o (Join-Path $hm 'lib') -nologo -v q *> $null }
+    $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $hmMod -All -Full 2>&1 | Out-String)
+    $hmCode = $LASTEXITCODE
+    Check 'dangling Harmony targets fail the harmony phase' `
+        (($hmCode -ne 0) -and ($out -match '\[PASS\] build') -and ($out -match '\[FAIL\] harmony')) "code=$hmCode $out"
+    Check 'each dangling target is named with its source location' `
+        (($out -match 'Hud\.UpdateStatusEffects not found \(Patches\.cs:\d+, StatusPatch\.Postfix\)') -and
+            ($out -match 'field m_stamina not found \(parameter ___m_stamina\)') -and
+            ($out -match "Hud\.UpdateHealth has no parameter 'delta'") -and
+            ($out -match 'Hud\.UpdateFood method not found \(AccessTools\.Method\)')) $out
+    Check 'valid Harmony targets stay silent' `
+        (($out -notmatch 'HealthPatch|HealthGetterPatch|m_health|Lookups\.Valid')) $out
 } else {
     Write-Output '[skip] no .NET SDK on this machine -- the dotnet stack cannot be exercised'
 }

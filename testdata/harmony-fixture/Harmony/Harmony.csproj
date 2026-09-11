@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The slice of Harmony's API the fixture uses, under Harmony's own names: the checker
+       reads attribute and callee NAMES, so the real 0Harmony.dll is not needed offline. -->
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <AssemblyName>0Harmony</AssemblyName>
+  </PropertyGroup>
+
+</Project>

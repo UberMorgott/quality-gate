@@ -899,6 +899,21 @@ git-worktree, `base` не получает вовсе и по-прежнему �
 
    Отказ: пустой файл `.qgate-no-analyzers` рядом с csproj — `ItemGroup` в props на нём
    выключается, свойства в командной строке без пакетов бесполезны, сборка идёт как раньше.
+   **`harmony`** (только `-Full`, только если среди `Reference`/`PackageReference` есть
+   `0Harmony`/`Lib.Harmony`/`HarmonyX`) — цели Harmony-патчей, которые пропали после обновления
+   игры: `[HarmonyPatch(typeof(Hud), "UpdateStatusEffects")]` — строка, компилятор её не видит.
+   После `build` `gate/harmony.ps1` берёт собранную сборку и `ReferencePath` из MSBuild и читает
+   их **только метаданными** (`System.Reflection.Metadata` через `Add-Type`, код игры не
+   грузится, пакетов качать не нужно). Проверяется так же, как резолвит сам Harmony: тип + метод
+   (+ `argumentTypes`, `MethodType` Getter/Setter/Constructor), неоднозначная перегрузка без
+   `argumentTypes`, поля `___field`, имена параметров Prefix/Postfix/Finalizer, литеральные
+   `AccessTools.Method/Field/Property(typeof(T), "name")` в IL. Строка находки:
+   `Hud.UpdateStatusEffects not found (Patches.cs:20, StatusPatch.Postfix)` (фикстура
+   `testdata/harmony-fixture`).
+   Нет игры — прежний `[SKIP] ... game/SDK not installed`. Готового анализатора нет (проверено
+   2026-09): `BUTR.Harmony.Analyzer` смотрит только строки `AccessTools` и не обновлялся с
+   2023-06, `Harmonize` проверяет оформление патча, не существование цели. Не проверяется:
+   `TargetMethod(s)`, совместимость типа `__instance`.
 4. (только `-Full`) `dotnet test --no-build` — если вычисленное `IsTestProject` равно `true`
    или среди вычисленных `PackageReference` есть `Microsoft.NET.Test.Sdk`. Оба факта берутся
    из вычисления MSBuild, а не из **текста** csproj: `Microsoft.NET.Test.Sdk`, подключённый

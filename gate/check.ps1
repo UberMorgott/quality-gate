@@ -852,6 +852,14 @@ function Invoke-DotnetStack($s) {
     }
     if (-not $Full) { return }
 
+    # Harmony patch targets a game update removed: strings the compiler cannot check. See
+    # gate/harmony.ps1. Only where Harmony is referenced; the references themselves are
+    # present, or the missing-reference [SKIP] above already returned.
+    if (@($refs.Identity) + @($pkgs.Identity) | Where-Object { $_ -match '^(0Harmony|Lib\.Harmony|HarmonyX)\b' }) {
+        $hTfm = if (-not $info.Properties.TargetFramework) { $tfms[0] }
+        Phase 'harmony' { & (Join-Path $PSScriptRoot 'harmony.ps1') -Project $projAbs -Root $Root -Tfm $hTfm }
+    }
+
     # Test projects in these repos are custom Exe runners, so the phase exists only
     # where a real test SDK does. Both facts come from the evaluation above, never from
     # the csproj text: IsTestProject is what the SDK itself sets once the project is

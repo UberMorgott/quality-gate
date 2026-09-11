@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+  </PropertyGroup>
+
+  <!-- A game mod's references: HintPaths into an install (here ..\lib, built by selftest). -->
+  <ItemGroup>
+    <Reference Include="0Harmony">
+      <HintPath>..\lib\0Harmony.dll</HintPath>
+    </Reference>
+    <Reference Include="Game">
+      <HintPath>..\lib\Game.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+
+</Project>
