@@ -329,18 +329,18 @@ if ($dnSdks) {
     Check 'a compile error fails the dotnet gate' (($r.Code -ne 0) -and ($r.Out -match 'error CS0029')) $r.Out
     Check 'a compile error is not reported as a formatting problem' ($r.Out -notmatch 'WHITESPACE') $r.Out
 
-    # Both defects in one file. Reported from the field: `[FAIL] format` and then NO build
-    # line at all, so the report said the only thing wrong here was whitespace -- the
-    # phases after a failure were skipped in silence. The build is still not run; it is
-    # now on the record that it was not.
+    # Both defects in one file. Reported from the field twice: first `[FAIL] format` and NO
+    # build line at all, then -- once the skip was on the record -- 1091 whitespace errors
+    # in an upstream fork skipping the build that held the real bug. Whitespace is not
+    # semantic: it fails the run, and the build still runs and speaks for itself.
     [IO.File]::WriteAllText($dnCs, $dnCsClean.Replace(
             '        return $"Hello, {name}!";', ' int x = "s"; return $"Hello, {name}!{x}";'))
     $r = Invoke-Gate $dn
-    Check 'a phase the run never reached is named, not dropped' `
-        (($r.Code -ne 0) -and ($r.Out -match 'FAIL\] format') -and ($r.Out -match 'SKIP\] build -- not run')) $r.Out
-    # The absence half: the skipped build must not be reported as a verdict on the code --
-    # nothing compiled, so there is no CS to print and printing one would be a lie.
-    Check 'a skipped build is not reported as a compile error' ($r.Out -notmatch 'error CS') $r.Out
+    Check 'a format failure does not skip the build' `
+        (($r.Code -ne 0) -and ($r.Out -match 'FAIL\] format') -and ($r.Out -match 'FAIL\] build') -and
+            ($r.Out -match 'error CS0029')) $r.Out
+    # The absence half: the old skip line, which hid the compile error behind whitespace.
+    Check 'the build after a format failure is not reported as skipped' ($r.Out -notmatch 'SKIP\] build -- not run') $r.Out
     [IO.File]::WriteAllText($dnCs, $dnCsClean)
 
     # A game mod's <Reference> HintPath points into a Steam directory, and CI and half
@@ -461,6 +461,26 @@ if ($dnSdks) {
     Check 'a file in a new directory is not called no changed .cs files' `
         ($out -notmatch 'no changed \.cs files') $out
 
+    # -Baseline narrows the whole-project format pass too. Reported from the field: an
+    # upstream fork carries 1091 whitespace errors nobody may reformat, and -Baseline was
+    # wired to golangci alone, so `-Full -Baseline HEAD` failed exactly like `-Full`.
+    # $dnFast has a committed Ugly.cs; restored to HEAD it is a violation nobody touched.
+    $dnBase = Join-Path $tmp 'dotnet-baseline'
+    Copy-Item $dnFast $dnBase -Recurse
+    git -C $dnBase checkout -q -- Ugly.cs 2>$null
+    $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $dnBase -All -Full -Baseline HEAD 2>&1 | Out-String)
+    $dnBaseCode = $LASTEXITCODE
+    Check '-Baseline leaves a committed format violation alone at the full level' `
+        (($dnBaseCode -eq 0) -and ($out -match '\[SKIP\] format Fixture\.csproj -- no changed \.cs files since HEAD') -and
+            ($out -match '\[PASS\] build')) "code=$dnBaseCode $out"
+    # The other half: the file touched since the baseline is still judged, whole.
+    [IO.File]::WriteAllText((Join-Path $dnBase 'Ugly.cs'),
+        "namespace Fixture;`r`n`r`npublic static class Ugly`r`n{`r`n public static int One() => 1;`r`n  public static int Two() => 2;`r`n}`r`n")
+    $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $dnBase -All -Full -Baseline HEAD 2>&1 | Out-String)
+    $dnBaseCode = $LASTEXITCODE
+    Check '-Baseline still judges a file touched since the baseline' `
+        (($dnBaseCode -ne 0) -and ($out -match 'Ugly\.cs\(5,') -and ($out -match 'Ugly\.cs\(6,')) "code=$dnBaseCode $out"
+
     # Two or more dotnet projects in one run share ONE `dotnet format` pass over a
     # temporary solution: measured on ContentTool (13 csproj, warm), 25.6s of per-project
     # calls against 3.3-3.6s for one call over the same projects. The saving is worthless
@@ -492,6 +512,18 @@ if ($dnSdks) {
     Check 'the temporary solution is gone when the run ends' `
         (-not (Get-ChildItem ([IO.Path]::GetTempPath()) -Filter $dnSlnKey -Directory -ErrorAction SilentlyContinue)) `
         $dnSlnKey
+
+    # ...and a whitespace failure in the FIRST project must not skip the second one: the
+    # other stacks are where the semantic checks live. Red run, both stacks on the record.
+    $dnMultiSoft = Join-Path $tmp 'dotnet-multi-soft'
+    Copy-Item $dnMulti $dnMultiSoft -Recurse
+    Move-Item (Join-Path $dnMultiSoft 'B\Ugly.cs') (Join-Path $dnMultiSoft 'A\Ugly.cs')
+    $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $dnMultiSoft -All 2>&1 | Out-String)
+    $dnMultiSoftCode = $LASTEXITCODE
+    Check 'a format failure in one project does not skip the next project' `
+        (($dnMultiSoftCode -ne 0) -and ($out -match '\[FAIL\] dotnet A/') -and ($out -match '\[PASS\] dotnet B/')) `
+        "code=$dnMultiSoftCode $out"
+    Check 'a format failure does not mark later stacks as not run' ($out -notmatch 'an earlier stack failed') $out
 
     # The fast lane narrows the same pass with --include, and the narrowing is what keeps
     # a repository with committed violations committable: B carries one nobody touched,

@@ -141,7 +141,9 @@ if ($stacks.Count -eq 0 -and -not $onlyGiven) {
 # Returns $null when this is not a git repository -- distinct from "no changes",
 # which is an empty list. Conflating the two let a non-git directory pass the
 # default run without a single check.
-function Get-ChangedPaths([string]$Repo) {
+# -Since: the revision the tracked half is diffed against. HEAD for the fast lane;
+# -Baseline passes its own, so "changed" means "changed since the baseline".
+function Get-ChangedPaths([string]$Repo, [string]$Since = 'HEAD') {
     # -z: NUL separated and NOT quoted/escaped. With plain --porcelain git escapes
     # spaces, tabs and every non-ASCII byte, and the escaped string then matches no
     # stack directory -- the gate would check the wrong stack, or none.
@@ -164,7 +166,7 @@ function Get-ChangedPaths([string]$Repo) {
         # destination above is the path that matters.
         if ($e[0] -eq 'R' -or $e[0] -eq 'C' -or $e[1] -eq 'R' -or $e[1] -eq 'C') { $i++ }
     }
-    $paths += @((& git -C $Repo diff --name-only -z HEAD 2>$null | Out-String) -split "`0")
+    $paths += @((& git -C $Repo diff --name-only -z $Since 2>$null | Out-String) -split "`0")
     # The leading comma is the whole contract: PowerShell enumerates a collection on
     # return, so a bare `@(...)` hands an EMPTY result back as $null and the caller
     # reads "no changes" as "not a git repository". That made the [SKIP] no changes
@@ -255,6 +257,10 @@ if ($Baseline) {
 }
 
 $script:Failed = $false
+# A -Soft phase failed: the run is red, but the phases and stacks after it still run.
+# StackSoft is per stack (its [FAIL] header), SoftFailed is the run's (the exit code).
+$script:StackSoft = $false
+$script:SoftFailed = $false
 $script:Lines = @()
 # Set when the custom stack deliberately ran nothing: the checks are not trusted here,
 # or every one of them is full-level and this is the fast lane. Read once, by the
@@ -303,7 +309,11 @@ function Phase {
     # duration of its own -- one `dotnet format` pass shared by several projects, where
     # printing the same 3.4s on each would multiply the run's cost by the number of
     # stacks, and printing 0.0s on the others would deny the work happened at all.
-    param([string]$Name, [scriptblock]$Body, [switch]$FailIfOutput, [double]$Elapsed = -1, [string]$Time)
+    # -Soft: a non-semantic phase (whitespace). Its failure fails the run but does not
+    # skip what follows -- reported from the field: 1091 whitespace errors in an upstream
+    # fork skipped build, analyzers, vuln and every other dotnet stack, and the build was
+    # where the real bug was.
+    param([string]$Name, [scriptblock]$Body, [switch]$FailIfOutput, [double]$Elapsed = -1, [string]$Time, [switch]$Soft)
     # A phase the run never reached must not vanish. Reported from the field: a file with a
     # whitespace nit AND a compile error printed `[FAIL] format` and no `build` line at all,
     # so the report read as "the only thing wrong here is whitespace". Same rule the stack
@@ -342,7 +352,7 @@ function Phase {
         if ($out -match '(?i)out of memory|errno=1455') {
             $script:Lines += '[NOTE] that is an allocation failure on this machine, not a verdict on the code -- retry with less running before believing it. -race is usually the first casualty.'
         }
-        $script:Failed = $true
+        if ($Soft) { $script:StackSoft = $true } else { $script:Failed = $true }
     } else {
         $script:Lines += "[PASS] $Name ($sec)"
     }
@@ -671,22 +681,25 @@ function Invoke-DotnetStack($s) {
     # .editorconfig has no style to enforce beyond it. Measured on two real mods: 1396
     # and 447 violations, so the whole project is a full-level question. The fast lane
     # judges the files this commit touches, or it blocks every commit forever.
+    #
+    # -Baseline narrows the same way at every level: whole files touched since that
+    # revision, like golangci's --whole-files. Reported from the field: an upstream fork
+    # carries 1091 whitespace errors nobody may reformat, and -Baseline was ignored here.
     $fmtArgs = @($proj, '--verify-no-changes', '--no-restore', '-v', 'q')
     $runFormat = $true
     $changed = $null
-    if (-not $Full -and -not $All) {
-        $changed = Get-ChangedPaths $Root
-        if ($null -ne $changed) {
-            $prefix = if ($s.Rel) { "$($s.Rel)/" } else { '' }
-            # --include is resolved against the CURRENT DIRECTORY, and an ABSOLUTE path
-            # matches nothing at all -- silently, exit 0, a green format phase over an
-            # unformatted file. Set-Location above put us in the project directory, so
-            # these are relative to it.
-            $cs = @(Get-DotnetChangedCs $s $changed | ForEach-Object { $_.Substring($prefix.Length) })
-            if ($cs) { $fmtArgs += @('--include') + $cs }
-            # A phase that did not run must never look like a phase that passed.
-            else { $runFormat = $false; $script:Lines += "[SKIP] format $proj -- no changed .cs files" }
-        }
+    if ($Baseline) { $changed = Get-ChangedPaths $Root $Baseline }
+    elseif (-not $Full -and -not $All) { $changed = Get-ChangedPaths $Root }
+    if ($null -ne $changed) {
+        $prefix = if ($s.Rel) { "$($s.Rel)/" } else { '' }
+        # --include is resolved against the CURRENT DIRECTORY, and an ABSOLUTE path
+        # matches nothing at all -- silently, exit 0, a green format phase over an
+        # unformatted file. Set-Location above put us in the project directory, so
+        # these are relative to it.
+        $cs = @(Get-DotnetChangedCs $s $changed | ForEach-Object { $_.Substring($prefix.Length) })
+        if ($cs) { $fmtArgs += @('--include') + $cs }
+        # A phase that did not run must never look like a phase that passed.
+        else { $runFormat = $false; $script:Lines += "[SKIP] format $proj -- no changed .cs files$(if ($Baseline) { " since $Baseline" })" }
     }
     if ($runFormat) {
         # One pass over every dotnet project in this run, when there are two or more of
@@ -744,7 +757,7 @@ function Invoke-DotnetStack($s) {
                 # Every line already names file(line,col); what none of them says is the
                 # one command that fixes all of them.
                 if ($fmtCode -ne 0) { "fix: dotnet format whitespace $proj"; $global:LASTEXITCODE = 1 }
-            } @fmtPhaseArgs
+            } @fmtPhaseArgs -Soft
         }
     }
 
@@ -1708,6 +1721,7 @@ foreach ($s in $stacks) {
     if ($script:Failed) { $report += "[SKIP] $label ($($s.Marker)) -- an earlier stack failed, not run"; continue }
     if ($s.Warn) { $report += "[WARN] $label -- $($s.Warn)" }
     $script:Lines = @()
+    $script:StackSoft = $false
     $before = $script:Phases
     try {
         switch ($s.Stack) {
@@ -1726,7 +1740,8 @@ foreach ($s in $stacks) {
         Fail "${label}: gate crashed -- $($_.Exception.Message)"
     } finally { Set-Location $cwd }
 
-    if ($script:Failed) {
+    if ($script:StackSoft) { $script:SoftFailed = $true }
+    if ($script:Failed -or $script:StackSoft) {
         $out = ($script:Lines -join "`n").TrimEnd()
         if ($out.Length -gt $MaxChars) {
             $extra = $out.Length - $MaxChars
@@ -1754,6 +1769,8 @@ foreach ($s in $stacks) {
         $report += "$(if ($ran) { '[PASS]' } else { '[SKIP]' }) $label ($($s.Marker))$(if (-not $ran) { ' -- no check phase applies here' }) $timings"
     }
 }
+# Every stack has run; from here on a soft failure is a failure like any other.
+if ($script:SoftFailed) { $script:Failed = $true }
 
 # The temporary solution the dotnet format pass ran over is pure by-product: nothing
 # reads it after the pass, and leaving it behind would keep one directory per repository
