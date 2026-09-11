@@ -12,9 +12,9 @@
     "semantic_hash": ""
   },
   "gate/check.ps1": {
-    "mtime": 1789126673.7624223,
-    "seen": 1789127022.3724544,
-    "ast_hash": "23202f8685fbc4aa95d9e6768b714fa0",
+    "mtime": 1789127193.9980624,
+    "seen": 1789127585.996437,
+    "ast_hash": "b0824efd34c480d0c63ccc8cac22d67e",
     "semantic_hash": ""
   },
   "gate/detect.ps1": {
@@ -42,9 +42,9 @@
     "semantic_hash": ""
   },
   "selftest.ps1": {
-    "mtime": 1789126673.7634258,
-    "seen": 1789127022.3724594,
-    "ast_hash": "9c6655969a70cf1f543efc6a901085bf",
+    "mtime": 1789127193.9992836,
+    "seen": 1789127585.9964445,
+    "ast_hash": "38105e22060e36a6f154112621a3bdfd",
     "semantic_hash": ""
   },
   "templates/.stylelintrc.json": {
@@ -126,9 +126,9 @@
     "semantic_hash": "95af656e0dd8b458d943a5b06dd99b55"
   },
   "README.md": {
-    "mtime": 1789126673.6318817,
-    "seen": 1789127022.3724725,
-    "ast_hash": "54a950d4d133adf6f65df5626fb0cf75",
+    "mtime": 1789127193.9980624,
+    "seen": 1789127585.9964623,
+    "ast_hash": "ced032c46f341b08beeadf4df5622f3b",
     "semantic_hash": ""
   },
   "templates/.golangci.yml": {
@@ -207,6 +207,54 @@
     "mtime": 1788282174.5721312,
     "seen": 1788781201.438946,
     "ast_hash": "76664b6e099d2afe3acb7888bddb6c7d",
+    "semantic_hash": ""
+  },
+  "gate/harmony.cs": {
+    "mtime": 1789127193.9980624,
+    "seen": 1789127585.9964392,
+    "ast_hash": "c376e740d8ce67c4f3678fb42ab88b9f",
+    "semantic_hash": ""
+  },
+  "gate/harmony.ps1": {
+    "mtime": 1789127193.9992836,
+    "seen": 1789127585.9964404,
+    "ast_hash": "6be2d9ed810194fd922cc8d26af4a7f2",
+    "semantic_hash": ""
+  },
+  "testdata/harmony-fixture/Game/Game.csproj": {
+    "mtime": 1789127194.0004554,
+    "seen": 1789127585.996452,
+    "ast_hash": "1f7354e049ff38145d76265d671e3edc",
+    "semantic_hash": ""
+  },
+  "testdata/harmony-fixture/Game/Hud.cs": {
+    "mtime": 1789127194.0004554,
+    "seen": 1789127585.9964526,
+    "ast_hash": "a6b27ade7bb5080fa97f86c26fb47e89",
+    "semantic_hash": ""
+  },
+  "testdata/harmony-fixture/Harmony/Harmony.csproj": {
+    "mtime": 1789127194.0004554,
+    "seen": 1789127585.996453,
+    "ast_hash": "d435add75bf3fa5e96d96b5ad9c0adcf",
+    "semantic_hash": ""
+  },
+  "testdata/harmony-fixture/Harmony/HarmonyStub.cs": {
+    "mtime": 1789127194.0004554,
+    "seen": 1789127585.9964535,
+    "ast_hash": "a6e48a3d9cda7e8160cd734f7650e3ab",
+    "semantic_hash": ""
+  },
+  "testdata/harmony-fixture/Mod/Mod.csproj": {
+    "mtime": 1789127194.0014565,
+    "seen": 1789127585.9964545,
+    "ast_hash": "27c496491e7ee370d4191fed0112bb22",
+    "semantic_hash": ""
+  },
+  "testdata/harmony-fixture/Mod/Patches.cs": {
+    "mtime": 1789127194.0014565,
+    "seen": 1789127585.996455,
+    "ast_hash": "5cc917294112890e30b3e48f5c4ad78b",
     "semantic_hash": ""
   }
 }

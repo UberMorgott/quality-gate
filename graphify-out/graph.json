@@ -59,7 +59,7 @@
       "_callable_class": true,
       "_origin": "ast",
       "community": 4,
-      "community_name": "Greeter.cs",
+      "community_name": "MethodType",
       "file_type": "code",
       "metadata": {
         "namespace": "Fixture",
@@ -72,12 +72,234 @@
       "source_location": "L4"
     },
     {
+      "id": "testdata_harmony_fixture_game_hud_hud",
+      "label": "Hud",
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast",
+      "community": 4,
+      "community_name": "MethodType",
+      "file_type": "code",
+      "norm_label": "hud",
+      "source_file": "testdata/harmony-fixture/Game/Hud.cs",
+      "source_location": "L1"
+    },
+    {
+      "id": "testdata_harmony_fixture_harmony_harmonystub_harmonylib_accesstools",
+      "label": "AccessTools",
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast",
+      "community": 4,
+      "community_name": "MethodType",
+      "file_type": "code",
+      "metadata": {
+        "namespace": "HarmonyLib",
+        "scope_chain": [
+          "s43"
+        ]
+      },
+      "norm_label": "accesstools",
+      "source_file": "testdata/harmony-fixture/Harmony/HarmonyStub.cs",
+      "source_location": "L16"
+    },
+    {
+      "id": "testdata_harmony_fixture_harmony_harmonystub_harmonylib_harmonypatch",
+      "label": "HarmonyPatch",
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast",
+      "community": 4,
+      "community_name": "MethodType",
+      "file_type": "code",
+      "metadata": {
+        "namespace": "HarmonyLib",
+        "scope_chain": [
+          "s43"
+        ]
+      },
+      "norm_label": "harmonypatch",
+      "source_file": "testdata/harmony-fixture/Harmony/HarmonyStub.cs",
+      "source_location": "L8"
+    },
+    {
+      "id": "testdata_harmony_fixture_harmony_harmonystub_harmonylib_methodtype",
+      "label": "MethodType",
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast",
+      "community": 4,
+      "community_name": "MethodType",
+      "file_type": "code",
+      "metadata": {
+        "namespace": "HarmonyLib",
+        "scope_chain": [
+          "s43"
+        ]
+      },
+      "norm_label": "methodtype",
+      "source_file": "testdata/harmony-fixture/Harmony/HarmonyStub.cs",
+      "source_location": "L6"
+    },
+    {
+      "id": "testdata_harmony_fixture_mod_patches_fixture_healthgetterpatch",
+      "label": "HealthGetterPatch",
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast",
+      "community": 4,
+      "community_name": "MethodType",
+      "file_type": "code",
+      "metadata": {
+        "namespace": "Fixture",
+        "scope_chain": [
+          "s21"
+        ]
+      },
+      "norm_label": "healthgetterpatch",
+      "source_file": "testdata/harmony-fixture/Mod/Patches.cs",
+      "source_location": "L12"
+    },
+    {
+      "id": "testdata_harmony_fixture_mod_patches_fixture_healthpatch",
+      "label": "HealthPatch",
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast",
+      "community": 4,
+      "community_name": "MethodType",
+      "file_type": "code",
+      "metadata": {
+        "namespace": "Fixture",
+        "scope_chain": [
+          "s21"
+        ]
+      },
+      "norm_label": "healthpatch",
+      "source_file": "testdata/harmony-fixture/Mod/Patches.cs",
+      "source_location": "L6"
+    },
+    {
+      "id": "testdata_harmony_fixture_mod_patches_fixture_lookups",
+      "label": "Lookups",
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast",
+      "community": 4,
+      "community_name": "MethodType",
+      "file_type": "code",
+      "metadata": {
+        "namespace": "Fixture",
+        "scope_chain": [
+          "s21"
+        ]
+      },
+      "norm_label": "lookups",
+      "source_file": "testdata/harmony-fixture/Mod/Patches.cs",
+      "source_location": "L31"
+    },
+    {
+      "id": "testdata_harmony_fixture_mod_patches_fixture_staminapatch",
+      "label": "StaminaPatch",
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast",
+      "community": 4,
+      "community_name": "MethodType",
+      "file_type": "code",
+      "metadata": {
+        "namespace": "Fixture",
+        "scope_chain": [
+          "s21"
+        ]
+      },
+      "norm_label": "staminapatch",
+      "source_file": "testdata/harmony-fixture/Mod/Patches.cs",
+      "source_location": "L25"
+    },
+    {
+      "id": "testdata_harmony_fixture_mod_patches_fixture_statuspatch",
+      "label": "StatusPatch",
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast",
+      "community": 4,
+      "community_name": "MethodType",
+      "file_type": "code",
+      "metadata": {
+        "namespace": "Fixture",
+        "scope_chain": [
+          "s21"
+        ]
+      },
+      "norm_label": "statuspatch",
+      "source_file": "testdata/harmony-fixture/Mod/Patches.cs",
+      "source_location": "L19"
+    },
+    {
+      "id": "gate_harmony_asm",
+      "label": "Asm",
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "QGateHarmony",
+      "file_type": "code",
+      "metadata": {
+        "is_nested_type": true
+      },
+      "norm_label": "asm",
+      "source_file": "gate/harmony.cs",
+      "source_location": "L88"
+    },
+    {
+      "id": "gate_harmony_qgateharmony",
+      "label": "QGateHarmony",
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "QGateHarmony",
+      "file_type": "code",
+      "norm_label": "qgateharmony",
+      "source_file": "gate/harmony.cs",
+      "source_location": "L24"
+    },
+    {
+      "id": "gate_harmony_target",
+      "label": "Target",
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "QGateHarmony",
+      "file_type": "code",
+      "metadata": {
+        "is_nested_type": true
+      },
+      "norm_label": "target",
+      "source_file": "gate/harmony.cs",
+      "source_location": "L89"
+    },
+    {
+      "id": "gate_harmony_qgateharmony_getarraytype",
+      "label": ".GetArrayType()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 31,
+      "community_name": ".GetArrayType",
+      "file_type": "code",
+      "norm_label": ".getarraytype()",
+      "source_file": "gate/harmony.cs",
+      "source_location": "L33"
+    },
+    {
       "id": "testdata_cpp_fixture_src_greeting_greeting",
       "label": "greeting()",
       "_callable": true,
       "_origin": "ast",
       "community": 31,
-      "community_name": "string",
+      "community_name": ".GetArrayType",
       "file_type": "code",
       "norm_label": "greeting()",
       "source_file": "testdata/cpp-fixture/src/greeting.cpp",
@@ -89,7 +311,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 4,
-      "community_name": "Greeter.cs",
+      "community_name": "MethodType",
       "file_type": "code",
       "metadata": {
         "namespace": "Fixture",
@@ -100,6 +322,1028 @@
       "norm_label": ".greet()",
       "source_file": "testdata/dotnet-fixture/Greeter.cs",
       "source_location": "L7"
+    },
+    {
+      "id": "testdata_harmony_fixture_game_hud_hud_updatehealth",
+      "label": ".UpdateHealth()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 4,
+      "community_name": "MethodType",
+      "file_type": "code",
+      "norm_label": ".updatehealth()",
+      "source_file": "testdata/harmony-fixture/Game/Hud.cs",
+      "source_location": "L7"
+    },
+    {
+      "id": "testdata_harmony_fixture_harmony_harmonystub_harmonylib_accesstools_field",
+      "label": ".Field()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 4,
+      "community_name": "MethodType",
+      "file_type": "code",
+      "metadata": {
+        "namespace": "HarmonyLib",
+        "scope_chain": [
+          "s43"
+        ]
+      },
+      "norm_label": ".field()",
+      "source_file": "testdata/harmony-fixture/Harmony/HarmonyStub.cs",
+      "source_location": "L20"
+    },
+    {
+      "id": "testdata_harmony_fixture_harmony_harmonystub_harmonylib_accesstools_method",
+      "label": ".Method()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 4,
+      "community_name": "MethodType",
+      "file_type": "code",
+      "metadata": {
+        "namespace": "HarmonyLib",
+        "scope_chain": [
+          "s43"
+        ]
+      },
+      "norm_label": ".method()",
+      "source_file": "testdata/harmony-fixture/Harmony/HarmonyStub.cs",
+      "source_location": "L18"
+    },
+    {
+      "id": "testdata_harmony_fixture_mod_patches_fixture_healthgetterpatch_postfix",
+      "label": ".Postfix()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 4,
+      "community_name": "MethodType",
+      "file_type": "code",
+      "metadata": {
+        "namespace": "Fixture",
+        "scope_chain": [
+          "s21"
+        ]
+      },
+      "norm_label": ".postfix()",
+      "source_file": "testdata/harmony-fixture/Mod/Patches.cs",
+      "source_location": "L15"
+    },
+    {
+      "id": "testdata_harmony_fixture_mod_patches_fixture_healthpatch_postfix",
+      "label": ".Postfix()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 4,
+      "community_name": "MethodType",
+      "file_type": "code",
+      "metadata": {
+        "namespace": "Fixture",
+        "scope_chain": [
+          "s21"
+        ]
+      },
+      "norm_label": ".postfix()",
+      "source_file": "testdata/harmony-fixture/Mod/Patches.cs",
+      "source_location": "L9"
+    },
+    {
+      "id": "testdata_harmony_fixture_mod_patches_fixture_lookups_dangling",
+      "label": ".Dangling()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 4,
+      "community_name": "MethodType",
+      "file_type": "code",
+      "metadata": {
+        "namespace": "Fixture",
+        "scope_chain": [
+          "s21"
+        ]
+      },
+      "norm_label": ".dangling()",
+      "source_file": "testdata/harmony-fixture/Mod/Patches.cs",
+      "source_location": "L35"
+    },
+    {
+      "id": "testdata_harmony_fixture_mod_patches_fixture_lookups_valid",
+      "label": ".Valid()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 4,
+      "community_name": "MethodType",
+      "file_type": "code",
+      "metadata": {
+        "namespace": "Fixture",
+        "scope_chain": [
+          "s21"
+        ]
+      },
+      "norm_label": ".valid()",
+      "source_file": "testdata/harmony-fixture/Mod/Patches.cs",
+      "source_location": "L33"
+    },
+    {
+      "id": "testdata_harmony_fixture_mod_patches_fixture_staminapatch_prefix",
+      "label": ".Prefix()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 4,
+      "community_name": "MethodType",
+      "file_type": "code",
+      "metadata": {
+        "namespace": "Fixture",
+        "scope_chain": [
+          "s21"
+        ]
+      },
+      "norm_label": ".prefix()",
+      "source_file": "testdata/harmony-fixture/Mod/Patches.cs",
+      "source_location": "L28"
+    },
+    {
+      "id": "testdata_harmony_fixture_mod_patches_fixture_statuspatch_postfix",
+      "label": ".Postfix()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 4,
+      "community_name": "MethodType",
+      "file_type": "code",
+      "metadata": {
+        "namespace": "Fixture",
+        "scope_chain": [
+          "s21"
+        ]
+      },
+      "norm_label": ".postfix()",
+      "source_file": "testdata/harmony-fixture/Mod/Patches.cs",
+      "source_location": "L22"
+    },
+    {
+      "id": "gate_harmony_qgateharmony_attrname",
+      "label": ".AttrName()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "QGateHarmony",
+      "file_type": "code",
+      "metadata": {
+        "unresolved_calls": [
+          {
+            "callee": "GetMethodDefinition",
+            "receiver_type": "MetadataReader",
+            "lang": "csharp",
+            "line": "L155"
+          },
+          {
+            "callee": "GetMemberReference",
+            "receiver_type": "MetadataReader",
+            "lang": "csharp",
+            "line": "L157"
+          }
+        ]
+      },
+      "norm_label": ".attrname()",
+      "source_file": "gate/harmony.cs",
+      "source_location": "L152"
+    },
+    {
+      "id": "gate_harmony_qgateharmony_basename",
+      "label": ".BaseName()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "QGateHarmony",
+      "file_type": "code",
+      "metadata": {
+        "unresolved_calls": [
+          {
+            "callee": "GetTypeSpecification",
+            "receiver_type": "MetadataReader",
+            "lang": "csharp",
+            "line": "L328"
+          }
+        ]
+      },
+      "norm_label": ".basename()",
+      "source_file": "gate/harmony.cs",
+      "source_location": "L324"
+    },
+    {
+      "id": "gate_harmony_qgateharmony_callee",
+      "label": ".Callee()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "QGateHarmony",
+      "file_type": "code",
+      "metadata": {
+        "unresolved_calls": [
+          {
+            "callee": "GetMethodSpecification",
+            "receiver_type": "MetadataReader",
+            "lang": "csharp",
+            "line": "L417"
+          },
+          {
+            "callee": "GetMethodDefinition",
+            "receiver_type": "MetadataReader",
+            "lang": "csharp",
+            "line": "L420"
+          },
+          {
+            "callee": "GetString",
+            "receiver_type": "MetadataReader",
+            "lang": "csharp",
+            "line": "L421"
+          },
+          {
+            "callee": "GetMemberReference",
+            "receiver_type": "MetadataReader",
+            "lang": "csharp",
+            "line": "L424"
+          }
+        ]
+      },
+      "norm_label": ".callee()",
+      "source_file": "gate/harmony.cs",
+      "source_location": "L415"
+    },
+    {
+      "id": "gate_harmony_qgateharmony_checkaccess",
+      "label": ".CheckAccess()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "QGateHarmony",
+      "file_type": "code",
+      "metadata": {
+        "unresolved_calls": [
+          {
+            "callee": "TryGetValue",
+            "receiver_type": "Dictionary",
+            "lang": "csharp",
+            "line": "L441"
+          },
+          {
+            "callee": "Add",
+            "receiver_type": "SortedSet",
+            "lang": "csharp",
+            "line": "L443"
+          }
+        ]
+      },
+      "norm_label": ".checkaccess()",
+      "source_file": "gate/harmony.cs",
+      "source_location": "L431"
+    },
+    {
+      "id": "gate_harmony_qgateharmony_checkaccesstools",
+      "label": ".CheckAccessTools()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "QGateHarmony",
+      "file_type": "code",
+      "metadata": {
+        "unresolved_calls": [
+          {
+            "callee": "ReadByte",
+            "receiver_type": "BlobReader",
+            "lang": "csharp",
+            "line": "L373"
+          },
+          {
+            "callee": "TryGetValue",
+            "receiver_type": "Dictionary",
+            "lang": "csharp",
+            "line": "L375"
+          },
+          {
+            "callee": "ReadInt16",
+            "receiver_type": "BlobReader",
+            "lang": "csharp",
+            "line": "L382"
+          },
+          {
+            "callee": "ReadInt64",
+            "receiver_type": "BlobReader",
+            "lang": "csharp",
+            "line": "L384"
+          },
+          {
+            "callee": "ReadInt32",
+            "receiver_type": "BlobReader",
+            "lang": "csharp",
+            "line": "L385"
+          },
+          {
+            "callee": "EntityHandle",
+            "receiver_type": "MetadataTokens",
+            "lang": "csharp",
+            "line": "L387"
+          },
+          {
+            "callee": "Handle",
+            "receiver_type": "MetadataTokens",
+            "lang": "csharp",
+            "line": "L392"
+          }
+        ]
+      },
+      "norm_label": ".checkaccesstools()",
+      "source_file": "gate/harmony.cs",
+      "source_location": "L360"
+    },
+    {
+      "id": "gate_harmony_qgateharmony_checkattributes",
+      "label": ".CheckAttributes()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "QGateHarmony",
+      "file_type": "code",
+      "metadata": {
+        "unresolved_calls": [
+          {
+            "callee": "Add",
+            "receiver_type": "SortedSet",
+            "lang": "csharp",
+            "line": "L233"
+          }
+        ]
+      },
+      "norm_label": ".checkattributes()",
+      "source_file": "gate/harmony.cs",
+      "source_location": "L208"
+    },
+    {
+      "id": "gate_harmony_qgateharmony_checkparams",
+      "label": ".CheckParams()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "QGateHarmony",
+      "file_type": "code",
+      "metadata": {
+        "unresolved_calls": [
+          {
+            "callee": "DecodeSignature",
+            "receiver_type": "MethodDefinition",
+            "lang": "csharp",
+            "line": "L289"
+          },
+          {
+            "callee": "GetCustomAttributes",
+            "receiver_type": "MethodDefinition",
+            "lang": "csharp",
+            "line": "L291"
+          },
+          {
+            "callee": "GetParameters",
+            "receiver_type": "MethodDefinition",
+            "lang": "csharp",
+            "line": "L293"
+          },
+          {
+            "callee": "Add",
+            "receiver_type": "SortedSet",
+            "lang": "csharp",
+            "line": "L303"
+          }
+        ]
+      },
+      "norm_label": ".checkparams()",
+      "source_file": "gate/harmony.cs",
+      "source_location": "L286"
+    },
+    {
+      "id": "gate_harmony_qgateharmony_getbyreferencetype",
+      "label": ".GetByReferenceType()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "QGateHarmony",
+      "file_type": "code",
+      "norm_label": ".getbyreferencetype()",
+      "source_file": "gate/harmony.cs",
+      "source_location": "L34"
+    },
+    {
+      "id": "gate_harmony_qgateharmony_getfunctionpointertype",
+      "label": ".GetFunctionPointerType()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "QGateHarmony",
+      "file_type": "code",
+      "norm_label": ".getfunctionpointertype()",
+      "source_file": "gate/harmony.cs",
+      "source_location": "L39"
+    },
+    {
+      "id": "gate_harmony_qgateharmony_getgenericinstantiation",
+      "label": ".GetGenericInstantiation()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "QGateHarmony",
+      "file_type": "code",
+      "norm_label": ".getgenericinstantiation()",
+      "source_file": "gate/harmony.cs",
+      "source_location": "L36"
+    },
+    {
+      "id": "gate_harmony_qgateharmony_getgenericmethodparameter",
+      "label": ".GetGenericMethodParameter()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "QGateHarmony",
+      "file_type": "code",
+      "norm_label": ".getgenericmethodparameter()",
+      "source_file": "gate/harmony.cs",
+      "source_location": "L38"
+    },
+    {
+      "id": "gate_harmony_qgateharmony_getgenerictypeparameter",
+      "label": ".GetGenericTypeParameter()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "QGateHarmony",
+      "file_type": "code",
+      "norm_label": ".getgenerictypeparameter()",
+      "source_file": "gate/harmony.cs",
+      "source_location": "L37"
+    },
+    {
+      "id": "gate_harmony_qgateharmony_getmodifiedtype",
+      "label": ".GetModifiedType()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "QGateHarmony",
+      "file_type": "code",
+      "norm_label": ".getmodifiedtype()",
+      "source_file": "gate/harmony.cs",
+      "source_location": "L40"
+    },
+    {
+      "id": "gate_harmony_qgateharmony_getpinnedtype",
+      "label": ".GetPinnedType()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "QGateHarmony",
+      "file_type": "code",
+      "norm_label": ".getpinnedtype()",
+      "source_file": "gate/harmony.cs",
+      "source_location": "L41"
+    },
+    {
+      "id": "gate_harmony_qgateharmony_getpointertype",
+      "label": ".GetPointerType()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "QGateHarmony",
+      "file_type": "code",
+      "norm_label": ".getpointertype()",
+      "source_file": "gate/harmony.cs",
+      "source_location": "L35"
+    },
+    {
+      "id": "gate_harmony_qgateharmony_getprimitivetype",
+      "label": ".GetPrimitiveType()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "QGateHarmony",
+      "file_type": "code",
+      "norm_label": ".getprimitivetype()",
+      "source_file": "gate/harmony.cs",
+      "source_location": "L28"
+    },
+    {
+      "id": "gate_harmony_qgateharmony_getsystemtype",
+      "label": ".GetSystemType()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "QGateHarmony",
+      "file_type": "code",
+      "norm_label": ".getsystemtype()",
+      "source_file": "gate/harmony.cs",
+      "source_location": "L42"
+    },
+    {
+      "id": "gate_harmony_qgateharmony_getszarraytype",
+      "label": ".GetSZArrayType()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "QGateHarmony",
+      "file_type": "code",
+      "norm_label": ".getszarraytype()",
+      "source_file": "gate/harmony.cs",
+      "source_location": "L32"
+    },
+    {
+      "id": "gate_harmony_qgateharmony_gettypefromdefinition",
+      "label": ".GetTypeFromDefinition()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "QGateHarmony",
+      "file_type": "code",
+      "norm_label": ".gettypefromdefinition()",
+      "source_file": "gate/harmony.cs",
+      "source_location": "L29"
+    },
+    {
+      "id": "gate_harmony_qgateharmony_gettypefromreference",
+      "label": ".GetTypeFromReference()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "QGateHarmony",
+      "file_type": "code",
+      "norm_label": ".gettypefromreference()",
+      "source_file": "gate/harmony.cs",
+      "source_location": "L30"
+    },
+    {
+      "id": "gate_harmony_qgateharmony_gettypefromserializedname",
+      "label": ".GetTypeFromSerializedName()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "QGateHarmony",
+      "file_type": "code",
+      "norm_label": ".gettypefromserializedname()",
+      "source_file": "gate/harmony.cs",
+      "source_location": "L44"
+    },
+    {
+      "id": "gate_harmony_qgateharmony_gettypefromspecification",
+      "label": ".GetTypeFromSpecification()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "QGateHarmony",
+      "file_type": "code",
+      "metadata": {
+        "unresolved_calls": [
+          {
+            "callee": "GetTypeSpecification",
+            "receiver_type": "MetadataReader",
+            "lang": "csharp",
+            "line": "L31"
+          }
+        ]
+      },
+      "norm_label": ".gettypefromspecification()",
+      "source_file": "gate/harmony.cs",
+      "source_location": "L31"
+    },
+    {
+      "id": "gate_harmony_qgateharmony_getunderlyingenumtype",
+      "label": ".GetUnderlyingEnumType()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "QGateHarmony",
+      "file_type": "code",
+      "norm_label": ".getunderlyingenumtype()",
+      "source_file": "gate/harmony.cs",
+      "source_location": "L46"
+    },
+    {
+      "id": "gate_harmony_qgateharmony_has",
+      "label": ".Has()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "QGateHarmony",
+      "file_type": "code",
+      "metadata": {
+        "unresolved_calls": [
+          {
+            "callee": "Any",
+            "receiver_type": "CustomAttributeHandleCollection",
+            "lang": "csharp",
+            "line": "L163"
+          },
+          {
+            "callee": "GetCustomAttribute",
+            "receiver_type": "MetadataReader",
+            "lang": "csharp",
+            "line": "L163"
+          }
+        ]
+      },
+      "norm_label": ".has()",
+      "source_file": "gate/harmony.cs",
+      "source_location": "L162"
+    },
+    {
+      "id": "gate_harmony_qgateharmony_hasmember",
+      "label": ".HasMember()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "QGateHarmony",
+      "file_type": "code",
+      "metadata": {
+        "unresolved_calls": [
+          {
+            "callee": "GetFields",
+            "receiver_type": "TypeDefinition",
+            "lang": "csharp",
+            "line": "L340"
+          },
+          {
+            "callee": "GetMethods",
+            "receiver_type": "TypeDefinition",
+            "lang": "csharp",
+            "line": "L341"
+          },
+          {
+            "callee": "GetProperties",
+            "receiver_type": "TypeDefinition",
+            "lang": "csharp",
+            "line": "L342"
+          },
+          {
+            "callee": "TryGetValue",
+            "receiver_type": "Dictionary",
+            "lang": "csharp",
+            "line": "L347"
+          }
+        ]
+      },
+      "norm_label": ".hasmember()",
+      "source_file": "gate/harmony.cs",
+      "source_location": "L333"
+    },
+    {
+      "id": "gate_harmony_qgateharmony_index",
+      "label": ".Index()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "QGateHarmony",
+      "file_type": "code",
+      "metadata": {
+        "unresolved_calls": [
+          {
+            "callee": "TryAdd",
+            "receiver_type": "Dictionary",
+            "lang": "csharp",
+            "line": "L120"
+          }
+        ]
+      },
+      "norm_label": ".index()",
+      "source_file": "gate/harmony.cs",
+      "source_location": "L118"
+    },
+    {
+      "id": "gate_harmony_qgateharmony_isdelegate",
+      "label": ".IsDelegate()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "QGateHarmony",
+      "file_type": "code",
+      "metadata": {
+        "unresolved_calls": [
+          {
+            "callee": "TryGetValue",
+            "receiver_type": "Dictionary",
+            "lang": "csharp",
+            "line": "L319"
+          }
+        ]
+      },
+      "norm_label": ".isdelegate()",
+      "source_file": "gate/harmony.cs",
+      "source_location": "L317"
+    },
+    {
+      "id": "gate_harmony_qgateharmony_issystemtype",
+      "label": ".IsSystemType()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "QGateHarmony",
+      "file_type": "code",
+      "norm_label": ".issystemtype()",
+      "source_file": "gate/harmony.cs",
+      "source_location": "L43"
+    },
+    {
+      "id": "gate_harmony_qgateharmony_load",
+      "label": ".Load()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "QGateHarmony",
+      "file_type": "code",
+      "metadata": {
+        "unresolved_calls": [
+          {
+            "callee": "Create",
+            "receiver_type": "ImmutableArray",
+            "lang": "csharp",
+            "line": "L112"
+          },
+          {
+            "callee": "ReadAllBytes",
+            "receiver_type": "File",
+            "lang": "csharp",
+            "line": "L112"
+          },
+          {
+            "callee": "GetMetadataReader",
+            "receiver_type": "PEReader",
+            "lang": "csharp",
+            "line": "L113"
+          }
+        ]
+      },
+      "norm_label": ".load()",
+      "source_file": "gate/harmony.cs",
+      "source_location": "L108"
+    },
+    {
+      "id": "gate_harmony_qgateharmony_mapsource",
+      "label": ".MapSource()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "QGateHarmony",
+      "file_type": "code",
+      "metadata": {
+        "unresolved_calls": [
+          {
+            "callee": "EnumerateFiles",
+            "receiver_type": "Directory",
+            "lang": "csharp",
+            "line": "L129"
+          },
+          {
+            "callee": "GetRelativePath",
+            "receiver_type": "Path",
+            "lang": "csharp",
+            "line": "L131"
+          },
+          {
+            "callee": "IsMatch",
+            "receiver_type": "Regex",
+            "lang": "csharp",
+            "line": "L132"
+          },
+          {
+            "callee": "ReadAllLines",
+            "receiver_type": "File",
+            "lang": "csharp",
+            "line": "L133"
+          },
+          {
+            "callee": "Matches",
+            "receiver_type": "Regex",
+            "lang": "csharp",
+            "line": "L135"
+          },
+          {
+            "callee": "ContainsKey",
+            "receiver_type": "Dictionary",
+            "lang": "csharp",
+            "line": "L138"
+          }
+        ]
+      },
+      "norm_label": ".mapsource()",
+      "source_file": "gate/harmony.cs",
+      "source_location": "L126"
+    },
+    {
+      "id": "gate_harmony_qgateharmony_merge",
+      "label": ".Merge()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "QGateHarmony",
+      "file_type": "code",
+      "metadata": {
+        "unresolved_calls": [
+          {
+            "callee": "Add",
+            "receiver_type": "List",
+            "lang": "csharp",
+            "line": "L179"
+          },
+          {
+            "callee": "Select",
+            "receiver_type": "ImmutableArray",
+            "lang": "csharp",
+            "line": "L182"
+          }
+        ]
+      },
+      "norm_label": ".merge()",
+      "source_file": "gate/harmony.cs",
+      "source_location": "L167"
+    },
+    {
+      "id": "gate_harmony_qgateharmony_name",
+      "label": ".Name()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "QGateHarmony",
+      "file_type": "code",
+      "metadata": {
+        "unresolved_calls": [
+          {
+            "callee": "GetTypeDefinition",
+            "receiver_type": "MetadataReader",
+            "lang": "csharp",
+            "line": "L50"
+          },
+          {
+            "callee": "GetString",
+            "receiver_type": "MetadataReader",
+            "lang": "csharp",
+            "line": "L52"
+          },
+          {
+            "callee": "GetTypeReference",
+            "receiver_type": "MetadataReader",
+            "lang": "csharp",
+            "line": "L59"
+          }
+        ]
+      },
+      "norm_label": ".name()",
+      "source_file": "gate/harmony.cs",
+      "source_location": "L48"
+    },
+    {
+      "id": "gate_harmony_qgateharmony_norm",
+      "label": ".Norm()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "QGateHarmony",
+      "file_type": "code",
+      "metadata": {
+        "unresolved_calls": [
+          {
+            "callee": "Append",
+            "receiver_type": "StringBuilder",
+            "lang": "csharp",
+            "line": "L83"
+          },
+          {
+            "callee": "ToString",
+            "receiver_type": "StringBuilder",
+            "lang": "csharp",
+            "line": "L85"
+          }
+        ]
+      },
+      "norm_label": ".norm()",
+      "source_file": "gate/harmony.cs",
+      "source_location": "L66"
+    },
+    {
+      "id": "gate_harmony_qgateharmony_patchkind",
+      "label": ".PatchKind()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "QGateHarmony",
+      "file_type": "code",
+      "metadata": {
+        "unresolved_calls": [
+          {
+            "callee": "GetCustomAttributes",
+            "receiver_type": "MethodDefinition",
+            "lang": "csharp",
+            "line": "L194"
+          },
+          {
+            "callee": "GetCustomAttribute",
+            "receiver_type": "MetadataReader",
+            "lang": "csharp",
+            "line": "L195"
+          },
+          {
+            "callee": "GetString",
+            "receiver_type": "MetadataReader",
+            "lang": "csharp",
+            "line": "L204"
+          },
+          {
+            "callee": "Contains",
+            "receiver_type": "PatchNames",
+            "lang": "csharp",
+            "line": "L205"
+          }
+        ]
+      },
+      "norm_label": ".patchkind()",
+      "source_file": "gate/harmony.cs",
+      "source_location": "L192"
+    },
+    {
+      "id": "gate_harmony_qgateharmony_resolve",
+      "label": ".Resolve()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "QGateHarmony",
+      "file_type": "code",
+      "metadata": {
+        "unresolved_calls": [
+          {
+            "callee": "TryGetValue",
+            "receiver_type": "Dictionary",
+            "lang": "csharp",
+            "line": "L245"
+          },
+          {
+            "callee": "GetProperties",
+            "receiver_type": "TypeDefinition",
+            "lang": "csharp",
+            "line": "L253"
+          },
+          {
+            "callee": "GetMethods",
+            "receiver_type": "TypeDefinition",
+            "lang": "csharp",
+            "line": "L267"
+          },
+          {
+            "callee": "Empty<string>",
+            "receiver_type": "Array",
+            "lang": "csharp",
+            "line": "L269"
+          }
+        ]
+      },
+      "norm_label": ".resolve()",
+      "source_file": "gate/harmony.cs",
+      "source_location": "L240"
+    },
+    {
+      "id": "gate_harmony_qgateharmony_run",
+      "label": ".Run()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "QGateHarmony",
+      "file_type": "code",
+      "norm_label": ".run()",
+      "source_file": "gate/harmony.cs",
+      "source_location": "L96"
+    },
+    {
+      "id": "gate_harmony_qgateharmony_where",
+      "label": ".Where()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "QGateHarmony",
+      "file_type": "code",
+      "metadata": {
+        "unresolved_calls": [
+          {
+            "callee": "TryGetValue",
+            "receiver_type": "Dictionary",
+            "lang": "csharp",
+            "line": "L149"
+          }
+        ]
+      },
+      "norm_label": ".where()",
+      "source_file": "gate/harmony.cs",
+      "source_location": "L143"
+    },
+    {
+      "id": "gate_harmony_target_clone",
+      "label": ".Clone()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "QGateHarmony",
+      "file_type": "code",
+      "norm_label": ".clone()",
+      "source_file": "gate/harmony.cs",
+      "source_location": "L89"
     },
     {
       "id": "gate_detect",
@@ -311,6 +1555,28 @@
       "source_location": "L208"
     },
     {
+      "id": "install",
+      "label": "install.ps1",
+      "_origin": "ast",
+      "community": 1,
+      "community_name": "detect.ps1",
+      "file_type": "code",
+      "norm_label": "install.ps1",
+      "source_file": "install.ps1",
+      "source_location": "L1"
+    },
+    {
+      "id": "install_install_lefthook",
+      "label": "Install-Lefthook()",
+      "_origin": "ast",
+      "community": 1,
+      "community_name": "detect.ps1",
+      "file_type": "code",
+      "norm_label": "install-lefthook()",
+      "source_file": "install.ps1",
+      "source_location": "L231"
+    },
+    {
       "id": "install_install_webconfigs",
       "label": "Install-WebConfigs()",
       "_origin": "ast",
@@ -320,6 +1586,28 @@
       "norm_label": "install-webconfigs()",
       "source_file": "install.ps1",
       "source_location": "L33"
+    },
+    {
+      "id": "install_set_agentdoc",
+      "label": "Set-AgentDoc()",
+      "_origin": "ast",
+      "community": 1,
+      "community_name": "detect.ps1",
+      "file_type": "code",
+      "norm_label": "set-agentdoc()",
+      "source_file": "install.ps1",
+      "source_location": "L198"
+    },
+    {
+      "id": "install_set_stophook",
+      "label": "Set-StopHook()",
+      "_origin": "ast",
+      "community": 1,
+      "community_name": "detect.ps1",
+      "file_type": "code",
+      "norm_label": "set-stophook()",
+      "source_file": "install.ps1",
+      "source_location": "L140"
     },
     {
       "id": "go_type_testing_t",
@@ -623,7 +1911,7 @@
       "source_location": null
     },
     {
-      "id": "framework_net8_0",
+      "id": "testdata_dotnet_fixture_fixture_csproj_framework_net8_0",
       "label": "net8.0",
       "_origin": "ast",
       "community": 27,
@@ -634,7 +1922,7 @@
       "source_location": null
     },
     {
-      "id": "sdk_microsoft_net_sdk",
+      "id": "testdata_dotnet_fixture_fixture_csproj_sdk_microsoft_net_sdk",
       "label": "Microsoft.NET.Sdk",
       "_origin": "ast",
       "community": 27,
@@ -645,48 +1933,37 @@
       "source_location": null
     },
     {
-      "id": "install",
-      "label": "install.ps1",
+      "id": "testdata_harmony_fixture_game_game",
+      "label": "Game.csproj",
       "_origin": "ast",
       "community": 28,
-      "community_name": "install.ps1",
+      "community_name": "Game.csproj",
       "file_type": "code",
-      "norm_label": "install.ps1",
-      "source_file": "install.ps1",
-      "source_location": "L1"
+      "norm_label": "game.csproj",
+      "source_file": "testdata/harmony-fixture/Game/Game.csproj",
+      "source_location": null
     },
     {
-      "id": "install_install_lefthook",
-      "label": "Install-Lefthook()",
+      "id": "testdata_harmony_fixture_game_game_csproj_framework_netstandard2_0",
+      "label": "netstandard2.0",
       "_origin": "ast",
       "community": 28,
-      "community_name": "install.ps1",
-      "file_type": "code",
-      "norm_label": "install-lefthook()",
-      "source_file": "install.ps1",
-      "source_location": "L231"
+      "community_name": "Game.csproj",
+      "file_type": "concept",
+      "norm_label": "netstandard2.0",
+      "source_file": "testdata/harmony-fixture/Game/Game.csproj",
+      "source_location": null
     },
     {
-      "id": "install_set_agentdoc",
-      "label": "Set-AgentDoc()",
+      "id": "testdata_harmony_fixture_game_game_csproj_sdk_microsoft_net_sdk",
+      "label": "Microsoft.NET.Sdk",
       "_origin": "ast",
       "community": 28,
-      "community_name": "install.ps1",
-      "file_type": "code",
-      "norm_label": "set-agentdoc()",
-      "source_file": "install.ps1",
-      "source_location": "L198"
-    },
-    {
-      "id": "install_set_stophook",
-      "label": "Set-StopHook()",
-      "_origin": "ast",
-      "community": 28,
-      "community_name": "install.ps1",
-      "file_type": "code",
-      "norm_label": "set-stophook()",
-      "source_file": "install.ps1",
-      "source_location": "L140"
+      "community_name": "Game.csproj",
+      "file_type": "concept",
+      "norm_label": "microsoft.net.sdk",
+      "source_file": "testdata/harmony-fixture/Game/Game.csproj",
+      "source_location": null
     },
     {
       "id": "pkg_rust_fixture",
@@ -725,11 +2002,22 @@
       "source_location": "L33"
     },
     {
+      "id": "arrayshape",
+      "label": "ArrayShape",
+      "_origin": "ast",
+      "community": 31,
+      "community_name": ".GetArrayType",
+      "file_type": "code",
+      "norm_label": "arrayshape",
+      "source_file": "",
+      "source_location": ""
+    },
+    {
       "id": "string",
       "label": "string",
       "_origin": "ast",
       "community": 31,
-      "community_name": "string",
+      "community_name": ".GetArrayType",
       "file_type": "code",
       "norm_label": "string",
       "source_file": "",
@@ -740,7 +2028,7 @@
       "label": "greeting.cpp",
       "_origin": "ast",
       "community": 31,
-      "community_name": "string",
+      "community_name": ".GetArrayType",
       "file_type": "code",
       "norm_label": "greeting.cpp",
       "source_file": "testdata/cpp-fixture/src/greeting.cpp",
@@ -751,18 +2039,106 @@
       "label": "greeting.hpp",
       "_origin": "ast",
       "community": 31,
-      "community_name": "string",
+      "community_name": ".GetArrayType",
       "file_type": "code",
       "norm_label": "greeting.hpp",
       "source_file": "testdata/cpp-fixture/src/greeting.hpp",
       "source_location": "L1"
     },
     {
+      "id": "testdata_harmony_fixture_harmony_harmony",
+      "label": "Harmony.csproj",
+      "_origin": "ast",
+      "community": 32,
+      "community_name": "Harmony.csproj",
+      "file_type": "code",
+      "norm_label": "harmony.csproj",
+      "source_file": "testdata/harmony-fixture/Harmony/Harmony.csproj",
+      "source_location": null
+    },
+    {
+      "id": "testdata_harmony_fixture_harmony_harmony_csproj_framework_netstandard2_0",
+      "label": "netstandard2.0",
+      "_origin": "ast",
+      "community": 32,
+      "community_name": "Harmony.csproj",
+      "file_type": "concept",
+      "norm_label": "netstandard2.0",
+      "source_file": "testdata/harmony-fixture/Harmony/Harmony.csproj",
+      "source_location": null
+    },
+    {
+      "id": "testdata_harmony_fixture_harmony_harmony_csproj_sdk_microsoft_net_sdk",
+      "label": "Microsoft.NET.Sdk",
+      "_origin": "ast",
+      "community": 32,
+      "community_name": "Harmony.csproj",
+      "file_type": "concept",
+      "norm_label": "microsoft.net.sdk",
+      "source_file": "testdata/harmony-fixture/Harmony/Harmony.csproj",
+      "source_location": null
+    },
+    {
+      "id": "testdata_harmony_fixture_mod_mod",
+      "label": "Mod.csproj",
+      "_origin": "ast",
+      "community": 33,
+      "community_name": "Mod.csproj",
+      "file_type": "code",
+      "norm_label": "mod.csproj",
+      "source_file": "testdata/harmony-fixture/Mod/Mod.csproj",
+      "source_location": null
+    },
+    {
+      "id": "testdata_harmony_fixture_mod_mod_csproj_framework_net8_0",
+      "label": "net8.0",
+      "_origin": "ast",
+      "community": 33,
+      "community_name": "Mod.csproj",
+      "file_type": "concept",
+      "norm_label": "net8.0",
+      "source_file": "testdata/harmony-fixture/Mod/Mod.csproj",
+      "source_location": null
+    },
+    {
+      "id": "testdata_harmony_fixture_mod_mod_csproj_sdk_microsoft_net_sdk",
+      "label": "Microsoft.NET.Sdk",
+      "_origin": "ast",
+      "community": 33,
+      "community_name": "Mod.csproj",
+      "file_type": "concept",
+      "norm_label": "microsoft.net.sdk",
+      "source_file": "testdata/harmony-fixture/Mod/Mod.csproj",
+      "source_location": null
+    },
+    {
+      "id": "gate_harmony_ps1_gate_harmony",
+      "label": "harmony.ps1",
+      "_origin": "ast",
+      "community": 34,
+      "community_name": "harmony.ps1",
+      "file_type": "code",
+      "norm_label": "harmony.ps1",
+      "source_file": "gate/harmony.ps1",
+      "source_location": "L1"
+    },
+    {
+      "id": "attribute",
+      "label": "Attribute",
+      "_origin": "ast",
+      "community": 4,
+      "community_name": "MethodType",
+      "file_type": "code",
+      "norm_label": "attribute",
+      "source_file": "",
+      "source_location": ""
+    },
+    {
       "id": "csharp_namespace:b79957adcf9f3730",
       "label": "Fixture",
       "_origin": "ast",
       "community": 4,
-      "community_name": "Greeter.cs",
+      "community_name": "MethodType",
       "file_type": "code",
       "metadata": {
         "kind": "csharp_namespace",
@@ -774,15 +2150,210 @@
       "type": "namespace"
     },
     {
+      "id": "csharp_namespace:d8806e74e794b351",
+      "label": "HarmonyLib",
+      "_origin": "ast",
+      "community": 4,
+      "community_name": "MethodType",
+      "file_type": "code",
+      "metadata": {
+        "kind": "csharp_namespace",
+        "namespace": "HarmonyLib"
+      },
+      "norm_label": "harmonylib",
+      "source_file": "testdata/harmony-fixture/Harmony/HarmonyStub.cs",
+      "source_location": "L4",
+      "type": "namespace"
+    },
+    {
+      "id": "fieldinfo",
+      "label": "FieldInfo",
+      "_origin": "ast",
+      "community": 4,
+      "community_name": "MethodType",
+      "file_type": "code",
+      "norm_label": "fieldinfo",
+      "source_file": "",
+      "source_location": ""
+    },
+    {
+      "id": "methodinfo",
+      "label": "MethodInfo",
+      "_origin": "ast",
+      "community": 4,
+      "community_name": "MethodType",
+      "file_type": "code",
+      "norm_label": "methodinfo",
+      "source_file": "",
+      "source_location": ""
+    },
+    {
       "id": "testdata_dotnet_fixture_greeter",
       "label": "Greeter.cs",
       "_origin": "ast",
       "community": 4,
-      "community_name": "Greeter.cs",
+      "community_name": "MethodType",
       "file_type": "code",
       "norm_label": "greeter.cs",
       "source_file": "testdata/dotnet-fixture/Greeter.cs",
       "source_location": "L1"
+    },
+    {
+      "id": "testdata_harmony_fixture_game_hud",
+      "label": "Hud.cs",
+      "_origin": "ast",
+      "community": 4,
+      "community_name": "MethodType",
+      "file_type": "code",
+      "norm_label": "hud.cs",
+      "source_file": "testdata/harmony-fixture/Game/Hud.cs",
+      "source_location": "L1"
+    },
+    {
+      "id": "testdata_harmony_fixture_game_hud_hud_health",
+      "label": "Health",
+      "_origin": "ast",
+      "community": 4,
+      "community_name": "MethodType",
+      "file_type": "code",
+      "norm_label": "health",
+      "source_file": "testdata/harmony-fixture/Game/Hud.cs",
+      "source_location": "L5"
+    },
+    {
+      "id": "testdata_harmony_fixture_harmony_harmonystub",
+      "label": "HarmonyStub.cs",
+      "_origin": "ast",
+      "community": 4,
+      "community_name": "MethodType",
+      "file_type": "code",
+      "norm_label": "harmonystub.cs",
+      "source_file": "testdata/harmony-fixture/Harmony/HarmonyStub.cs",
+      "source_location": "L1"
+    },
+    {
+      "id": "testdata_harmony_fixture_harmony_harmonystub_harmonylib_methodtype_constructor",
+      "label": "Constructor",
+      "_origin": "ast",
+      "community": 4,
+      "community_name": "MethodType",
+      "file_type": "code",
+      "metadata": {
+        "namespace": "HarmonyLib",
+        "scope_chain": [
+          "s43"
+        ]
+      },
+      "norm_label": "constructor",
+      "source_file": "testdata/harmony-fixture/Harmony/HarmonyStub.cs",
+      "source_location": "L6"
+    },
+    {
+      "id": "testdata_harmony_fixture_harmony_harmonystub_harmonylib_methodtype_enumerator",
+      "label": "Enumerator",
+      "_origin": "ast",
+      "community": 4,
+      "community_name": "MethodType",
+      "file_type": "code",
+      "metadata": {
+        "namespace": "HarmonyLib",
+        "scope_chain": [
+          "s43"
+        ]
+      },
+      "norm_label": "enumerator",
+      "source_file": "testdata/harmony-fixture/Harmony/HarmonyStub.cs",
+      "source_location": "L6"
+    },
+    {
+      "id": "testdata_harmony_fixture_harmony_harmonystub_harmonylib_methodtype_getter",
+      "label": "Getter",
+      "_origin": "ast",
+      "community": 4,
+      "community_name": "MethodType",
+      "file_type": "code",
+      "metadata": {
+        "namespace": "HarmonyLib",
+        "scope_chain": [
+          "s43"
+        ]
+      },
+      "norm_label": "getter",
+      "source_file": "testdata/harmony-fixture/Harmony/HarmonyStub.cs",
+      "source_location": "L6"
+    },
+    {
+      "id": "testdata_harmony_fixture_harmony_harmonystub_harmonylib_methodtype_normal",
+      "label": "Normal",
+      "_origin": "ast",
+      "community": 4,
+      "community_name": "MethodType",
+      "file_type": "code",
+      "metadata": {
+        "namespace": "HarmonyLib",
+        "scope_chain": [
+          "s43"
+        ]
+      },
+      "norm_label": "normal",
+      "source_file": "testdata/harmony-fixture/Harmony/HarmonyStub.cs",
+      "source_location": "L6"
+    },
+    {
+      "id": "testdata_harmony_fixture_harmony_harmonystub_harmonylib_methodtype_setter",
+      "label": "Setter",
+      "_origin": "ast",
+      "community": 4,
+      "community_name": "MethodType",
+      "file_type": "code",
+      "metadata": {
+        "namespace": "HarmonyLib",
+        "scope_chain": [
+          "s43"
+        ]
+      },
+      "norm_label": "setter",
+      "source_file": "testdata/harmony-fixture/Harmony/HarmonyStub.cs",
+      "source_location": "L6"
+    },
+    {
+      "id": "testdata_harmony_fixture_harmony_harmonystub_harmonylib_methodtype_staticconstructor",
+      "label": "StaticConstructor",
+      "_origin": "ast",
+      "community": 4,
+      "community_name": "MethodType",
+      "file_type": "code",
+      "metadata": {
+        "namespace": "HarmonyLib",
+        "scope_chain": [
+          "s43"
+        ]
+      },
+      "norm_label": "staticconstructor",
+      "source_file": "testdata/harmony-fixture/Harmony/HarmonyStub.cs",
+      "source_location": "L6"
+    },
+    {
+      "id": "testdata_harmony_fixture_mod_patches",
+      "label": "Patches.cs",
+      "_origin": "ast",
+      "community": 4,
+      "community_name": "MethodType",
+      "file_type": "code",
+      "norm_label": "patches.cs",
+      "source_file": "testdata/harmony-fixture/Mod/Patches.cs",
+      "source_location": "L1"
+    },
+    {
+      "id": "type",
+      "label": "Type",
+      "_origin": "ast",
+      "community": 4,
+      "community_name": "MethodType",
+      "file_type": "code",
+      "norm_label": "type",
+      "source_file": "",
+      "source_location": ""
     },
     {
       "id": "selftest",
@@ -815,7 +2386,7 @@
       "file_type": "code",
       "norm_label": "get-summary()",
       "source_file": "selftest.ps1",
-      "source_location": "L1443"
+      "source_location": "L1465"
     },
     {
       "id": "selftest_invoke_gate",
@@ -837,7 +2408,7 @@
       "file_type": "code",
       "norm_label": "invoke-stophook()",
       "source_file": "selftest.ps1",
-      "source_location": "L1083"
+      "source_location": "L1105"
     },
     {
       "id": "selftest_invoke_trust",
@@ -848,7 +2419,7 @@
       "file_type": "code",
       "norm_label": "invoke-trust()",
       "source_file": "selftest.ps1",
-      "source_location": "L1776"
+      "source_location": "L1798"
     },
     {
       "id": "selftest_set_deferrals",
@@ -859,7 +2430,7 @@
       "file_type": "code",
       "norm_label": "set-deferrals()",
       "source_file": "selftest.ps1",
-      "source_location": "L1432"
+      "source_location": "L1454"
     },
     {
       "id": "selftest_set_gofile",
@@ -881,7 +2452,260 @@
       "file_type": "code",
       "norm_label": "set-outdatedcache()",
       "source_file": "selftest.ps1",
-      "source_location": "L1439"
+      "source_location": "L1461"
+    },
+    {
+      "id": "a",
+      "label": "A",
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "QGateHarmony",
+      "file_type": "code",
+      "norm_label": "a",
+      "source_file": "",
+      "source_location": ""
+    },
+    {
+      "id": "asm",
+      "label": "Asm",
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "QGateHarmony",
+      "file_type": "code",
+      "norm_label": "asm",
+      "source_file": "",
+      "source_location": ""
+    },
+    {
+      "id": "customattribute",
+      "label": "CustomAttribute",
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "QGateHarmony",
+      "file_type": "code",
+      "norm_label": "customattribute",
+      "source_file": "",
+      "source_location": ""
+    },
+    {
+      "id": "customattributehandlecollection",
+      "label": "CustomAttributeHandleCollection",
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "QGateHarmony",
+      "file_type": "code",
+      "norm_label": "customattributehandlecollection",
+      "source_file": "",
+      "source_location": ""
+    },
+    {
+      "id": "dictionary",
+      "label": "Dictionary",
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "QGateHarmony",
+      "file_type": "code",
+      "norm_label": "dictionary",
+      "source_file": "",
+      "source_location": ""
+    },
+    {
+      "id": "entityhandle",
+      "label": "EntityHandle",
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "QGateHarmony",
+      "file_type": "code",
+      "norm_label": "entityhandle",
+      "source_file": "",
+      "source_location": ""
+    },
+    {
+      "id": "gate_harmony_cs_gate_harmony",
+      "label": "harmony.cs",
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "QGateHarmony",
+      "file_type": "code",
+      "norm_label": "harmony.cs",
+      "source_file": "gate/harmony.cs",
+      "source_location": "L1"
+    },
+    {
+      "id": "h",
+      "label": "H",
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "QGateHarmony",
+      "file_type": "code",
+      "norm_label": "h",
+      "source_file": "",
+      "source_location": ""
+    },
+    {
+      "id": "icustomattributetypeprovider",
+      "label": "ICustomAttributeTypeProvider",
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "QGateHarmony",
+      "file_type": "code",
+      "norm_label": "icustomattributetypeprovider",
+      "source_file": "",
+      "source_location": ""
+    },
+    {
+      "id": "immutablearray",
+      "label": "ImmutableArray",
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "QGateHarmony",
+      "file_type": "code",
+      "norm_label": "immutablearray",
+      "source_file": "",
+      "source_location": ""
+    },
+    {
+      "id": "isignaturetypeprovider",
+      "label": "ISignatureTypeProvider",
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "QGateHarmony",
+      "file_type": "code",
+      "norm_label": "isignaturetypeprovider",
+      "source_file": "",
+      "source_location": ""
+    },
+    {
+      "id": "metadatareader",
+      "label": "MetadataReader",
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "QGateHarmony",
+      "file_type": "code",
+      "norm_label": "metadatareader",
+      "source_file": "",
+      "source_location": ""
+    },
+    {
+      "id": "methoddefinition",
+      "label": "MethodDefinition",
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "QGateHarmony",
+      "file_type": "code",
+      "norm_label": "methoddefinition",
+      "source_file": "",
+      "source_location": ""
+    },
+    {
+      "id": "methodsignature",
+      "label": "MethodSignature",
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "QGateHarmony",
+      "file_type": "code",
+      "norm_label": "methodsignature",
+      "source_file": "",
+      "source_location": ""
+    },
+    {
+      "id": "operandtype",
+      "label": "OperandType",
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "QGateHarmony",
+      "file_type": "code",
+      "norm_label": "operandtype",
+      "source_file": "",
+      "source_location": ""
+    },
+    {
+      "id": "pereader",
+      "label": "PEReader",
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "QGateHarmony",
+      "file_type": "code",
+      "norm_label": "pereader",
+      "source_file": "",
+      "source_location": ""
+    },
+    {
+      "id": "primitivetypecode",
+      "label": "PrimitiveTypeCode",
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "QGateHarmony",
+      "file_type": "code",
+      "norm_label": "primitivetypecode",
+      "source_file": "",
+      "source_location": ""
+    },
+    {
+      "id": "sortedset",
+      "label": "SortedSet",
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "QGateHarmony",
+      "file_type": "code",
+      "norm_label": "sortedset",
+      "source_file": "",
+      "source_location": ""
+    },
+    {
+      "id": "target",
+      "label": "Target",
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "QGateHarmony",
+      "file_type": "code",
+      "norm_label": "target",
+      "source_file": "",
+      "source_location": ""
+    },
+    {
+      "id": "typedefinition",
+      "label": "TypeDefinition",
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "QGateHarmony",
+      "file_type": "code",
+      "norm_label": "typedefinition",
+      "source_file": "",
+      "source_location": ""
+    },
+    {
+      "id": "typedefinitionhandle",
+      "label": "TypeDefinitionHandle",
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "QGateHarmony",
+      "file_type": "code",
+      "norm_label": "typedefinitionhandle",
+      "source_file": "",
+      "source_location": ""
+    },
+    {
+      "id": "typereferencehandle",
+      "label": "TypeReferenceHandle",
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "QGateHarmony",
+      "file_type": "code",
+      "norm_label": "typereferencehandle",
+      "source_file": "",
+      "source_location": ""
+    },
+    {
+      "id": "typespecificationhandle",
+      "label": "TypeSpecificationHandle",
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "QGateHarmony",
+      "file_type": "code",
+      "norm_label": "typespecificationhandle",
+      "source_file": "",
+      "source_location": ""
     },
     {
       "id": "templates_stylelintrc",
@@ -1057,7 +2881,7 @@
       "file_type": "code",
       "norm_label": "get-cppcompiledb()",
       "source_file": "gate/check.ps1",
-      "source_location": "L1228"
+      "source_location": "L1236"
     },
     {
       "id": "gate_check_get_descendants",
@@ -1068,7 +2892,7 @@
       "file_type": "code",
       "norm_label": "get-descendants()",
       "source_file": "gate/check.ps1",
-      "source_location": "L1607"
+      "source_location": "L1615"
     },
     {
       "id": "gate_check_get_dotnetchangedcs",
@@ -1134,7 +2958,7 @@
       "file_type": "code",
       "norm_label": "get-leakreport()",
       "source_file": "gate/check.ps1",
-      "source_location": "L1626"
+      "source_location": "L1634"
     },
     {
       "id": "gate_check_have",
@@ -1156,7 +2980,7 @@
       "file_type": "code",
       "norm_label": "invoke-basestack()",
       "source_file": "gate/check.ps1",
-      "source_location": "L1387"
+      "source_location": "L1395"
     },
     {
       "id": "gate_check_invoke_cppstack",
@@ -1167,7 +2991,7 @@
       "file_type": "code",
       "norm_label": "invoke-cppstack()",
       "source_file": "gate/check.ps1",
-      "source_location": "L1239"
+      "source_location": "L1247"
     },
     {
       "id": "gate_check_invoke_customstack",
@@ -1178,7 +3002,7 @@
       "file_type": "code",
       "norm_label": "invoke-customstack()",
       "source_file": "gate/check.ps1",
-      "source_location": "L1656"
+      "source_location": "L1664"
     },
     {
       "id": "gate_check_invoke_dotnetstack",
@@ -1200,7 +3024,7 @@
       "file_type": "code",
       "norm_label": "invoke-godotstack()",
       "source_file": "gate/check.ps1",
-      "source_location": "L1082"
+      "source_location": "L1090"
     },
     {
       "id": "gate_check_phase",
@@ -1371,6 +3195,21 @@
       "file_type": "concept",
       "norm_label": "detect stacks step (monorepo-aware marker search)",
       "source_file": "templates/ci.yml",
+      "source_location": null,
+      "source_url": null
+    },
+    {
+      "id": "readme_quality_gate",
+      "label": "quality-gate (qgate)",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 0,
+      "community_name": "GitHub Actions quality-gate workflow",
+      "contributor": null,
+      "file_type": "document",
+      "norm_label": "quality-gate (qgate)",
+      "source_file": "README.md",
       "source_location": null,
       "source_url": null
     },
@@ -1756,11 +3595,26 @@
       "author": null,
       "captured_at": null,
       "community": 2,
-      "community_name": "A right outcome does not prove the right cause (\u00a70.1)",
+      "community_name": "Coverage measures happy paths; a green suite proves nothing",
       "contributor": null,
       "file_type": "concept",
       "norm_label": "selftest counts 121 online / 115 offline",
       "source_file": "HANDOFF.md",
+      "source_location": null,
+      "source_url": null
+    },
+    {
+      "id": "playbook_mutation_check",
+      "label": "Mutation check of existing tests",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 2,
+      "community_name": "Coverage measures happy paths; a green suite proves nothing",
+      "contributor": null,
+      "file_type": "concept",
+      "norm_label": "mutation check of existing tests",
+      "source_file": "PLAYBOOK.md",
       "source_location": null,
       "source_url": null
     },
@@ -1771,7 +3625,7 @@
       "author": null,
       "captured_at": null,
       "community": 2,
-      "community_name": "A right outcome does not prove the right cause (\u00a70.1)",
+      "community_name": "Coverage measures happy paths; a green suite proves nothing",
       "contributor": null,
       "file_type": "concept",
       "norm_label": "red-then-green verification",
@@ -1786,7 +3640,7 @@
       "author": null,
       "captured_at": null,
       "community": 2,
-      "community_name": "A right outcome does not prove the right cause (\u00a70.1)",
+      "community_name": "Coverage measures happy paths; a green suite proves nothing",
       "contributor": null,
       "file_type": "concept",
       "norm_label": "negative check asserts outcome + applied cause + absent cause",
@@ -1801,7 +3655,7 @@
       "author": null,
       "captured_at": null,
       "community": 2,
-      "community_name": "A right outcome does not prove the right cause (\u00a70.1)",
+      "community_name": "Coverage measures happy paths; a green suite proves nothing",
       "contributor": null,
       "file_type": "concept",
       "norm_label": "godot stack phases",
@@ -1816,7 +3670,7 @@
       "author": null,
       "captured_at": null,
       "community": 2,
-      "community_name": "A right outcome does not prove the right cause (\u00a70.1)",
+      "community_name": "Coverage measures happy paths; a green suite proves nothing",
       "contributor": null,
       "file_type": "concept",
       "norm_label": "-only stack selection",
@@ -1831,7 +3685,7 @@
       "author": null,
       "captured_at": null,
       "community": 2,
-      "community_name": "A right outcome does not prove the right cause (\u00a70.1)",
+      "community_name": "Coverage measures happy paths; a green suite proves nothing",
       "contributor": null,
       "file_type": "concept",
       "norm_label": "qgate selftest (red-then-green on the gate itself)",
@@ -1846,11 +3700,26 @@
       "author": null,
       "captured_at": null,
       "community": 2,
-      "community_name": "A right outcome does not prove the right cause (\u00a70.1)",
+      "community_name": "Coverage measures happy paths; a green suite proves nothing",
       "contributor": null,
       "file_type": "rationale",
       "norm_label": "git check-ignore exit codes; --stdin batch unusable on windows",
       "source_file": "HANDOFF.md",
+      "source_location": null,
+      "source_url": null
+    },
+    {
+      "id": "playbook_coverage_illusion",
+      "label": "Coverage measures happy paths; a green suite proves nothing",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 2,
+      "community_name": "Coverage measures happy paths; a green suite proves nothing",
+      "contributor": null,
+      "file_type": "rationale",
+      "norm_label": "coverage measures happy paths; a green suite proves nothing",
+      "source_file": "PLAYBOOK.md",
       "source_location": null,
       "source_url": null
     },
@@ -1861,7 +3730,7 @@
       "author": null,
       "captured_at": null,
       "community": 2,
-      "community_name": "A right outcome does not prove the right cause (\u00a70.1)",
+      "community_name": "Coverage measures happy paths; a green suite proves nothing",
       "contributor": null,
       "file_type": "rationale",
       "norm_label": "powershell reads an empty value as absence",
@@ -1876,7 +3745,7 @@
       "author": null,
       "captured_at": null,
       "community": 2,
-      "community_name": "A right outcome does not prove the right cause (\u00a70.1)",
+      "community_name": "Coverage measures happy paths; a green suite proves nothing",
       "contributor": null,
       "file_type": "rationale",
       "norm_label": "a right outcome does not prove the right cause (\u00a70.1)",
@@ -1891,7 +3760,7 @@
       "author": null,
       "captured_at": null,
       "community": 2,
-      "community_name": "A right outcome does not prove the right cause (\u00a70.1)",
+      "community_name": "Coverage measures happy paths; a green suite proves nothing",
       "contributor": null,
       "file_type": "rationale",
       "norm_label": "fail closed invariant (no check phase ran)",
@@ -1906,11 +3775,41 @@
       "author": null,
       "captured_at": null,
       "community": 2,
-      "community_name": "A right outcome does not prove the right cause (\u00a70.1)",
+      "community_name": "Coverage measures happy paths; a green suite proves nothing",
       "contributor": null,
       "file_type": "rationale",
       "norm_label": "godot writes errors to stdout and exits 0",
       "source_file": "README.md",
+      "source_location": null,
+      "source_url": null
+    },
+    {
+      "id": "handoff_git_index_file_marker",
+      "label": "GIT_INDEX_FILE marks that we are inside a commit",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 3,
+      "community_name": ".golangci.yml template",
+      "contributor": null,
+      "file_type": "concept",
+      "norm_label": "git_index_file marks that we are inside a commit",
+      "source_file": "HANDOFF.md",
+      "source_location": null,
+      "source_url": null
+    },
+    {
+      "id": "playbook_commit_discipline",
+      "label": "Commit discipline (per module, explicit paths, consequence in message)",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 3,
+      "community_name": ".golangci.yml template",
+      "contributor": null,
+      "file_type": "concept",
+      "norm_label": "commit discipline (per module, explicit paths, consequence in message)",
+      "source_file": "PLAYBOOK.md",
       "source_location": null,
       "source_url": null
     },
@@ -1925,21 +3824,6 @@
       "contributor": null,
       "file_type": "concept",
       "norm_label": "cancellability findings (context propagation)",
-      "source_file": "PLAYBOOK.md",
-      "source_location": null,
-      "source_url": null
-    },
-    {
-      "id": "playbook_mutation_check",
-      "label": "Mutation check of existing tests",
-      "_origin": "semantic",
-      "author": null,
-      "captured_at": null,
-      "community": 3,
-      "community_name": ".golangci.yml template",
-      "contributor": null,
-      "file_type": "concept",
-      "norm_label": "mutation check of existing tests",
       "source_file": "PLAYBOOK.md",
       "source_location": null,
       "source_url": null
@@ -2005,6 +3889,36 @@
       "source_url": null
     },
     {
+      "id": "readme_qgate_wire",
+      "label": "qgate wire (repo wiring, config only)",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 3,
+      "community_name": ".golangci.yml template",
+      "contributor": null,
+      "file_type": "concept",
+      "norm_label": "qgate wire (repo wiring, config only)",
+      "source_file": "README.md",
+      "source_location": null,
+      "source_url": null
+    },
+    {
+      "id": "readme_stop_hook",
+      "label": "Claude Code Stop hook (exit code 2)",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 3,
+      "community_name": ".golangci.yml template",
+      "contributor": null,
+      "file_type": "concept",
+      "norm_label": "claude code stop hook (exit code 2)",
+      "source_file": "README.md",
+      "source_location": null,
+      "source_url": null
+    },
+    {
       "id": "_github_issue_template_gate_bug_template",
       "label": "\"Gate is wrong\" issue template",
       "_origin": "semantic",
@@ -2016,21 +3930,6 @@
       "file_type": "document",
       "norm_label": "\"gate is wrong\" issue template",
       "source_file": ".github/ISSUE_TEMPLATE/gate-bug.md",
-      "source_location": null,
-      "source_url": null
-    },
-    {
-      "id": "readme_quality_gate",
-      "label": "quality-gate (qgate)",
-      "_origin": "semantic",
-      "author": null,
-      "captured_at": null,
-      "community": 3,
-      "community_name": ".golangci.yml template",
-      "contributor": null,
-      "file_type": "document",
-      "norm_label": "quality-gate (qgate)",
-      "source_file": "README.md",
       "source_location": null,
       "source_url": null
     },
@@ -2050,6 +3949,66 @@
       "source_url": null
     },
     {
+      "id": "templates_lefthook_config",
+      "label": "lefthook.yml template",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 3,
+      "community_name": ".golangci.yml template",
+      "contributor": null,
+      "file_type": "document",
+      "norm_label": "lefthook.yml template",
+      "source_file": "templates/lefthook.yml",
+      "source_location": null,
+      "source_url": null
+    },
+    {
+      "id": "handoff_cherry_pick_revert_uncovered",
+      "label": "cherry-pick and revert cannot be covered cheaply",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 3,
+      "community_name": ".golangci.yml template",
+      "contributor": null,
+      "file_type": "rationale",
+      "norm_label": "cherry-pick and revert cannot be covered cheaply",
+      "source_file": "HANDOFF.md",
+      "source_location": null,
+      "source_url": null
+    },
+    {
+      "id": "handoff_chosen_boundaries",
+      "label": "Deliberately chosen boundaries (not TODOs)",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 3,
+      "community_name": ".golangci.yml template",
+      "contributor": null,
+      "file_type": "rationale",
+      "norm_label": "deliberately chosen boundaries (not todos)",
+      "source_file": "HANDOFF.md",
+      "source_location": null,
+      "source_url": null
+    },
+    {
+      "id": "handoff_hook_coverage_matrix",
+      "label": "Measured git hook coverage matrix (git 2.53)",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 3,
+      "community_name": ".golangci.yml template",
+      "contributor": null,
+      "file_type": "rationale",
+      "norm_label": "measured git hook coverage matrix (git 2.53)",
+      "source_file": "HANDOFF.md",
+      "source_location": null,
+      "source_url": null
+    },
+    {
       "id": "handoff_incoming_reports",
       "label": "Incoming agent reports: symptom right, cause wrong half the time",
       "_origin": "semantic",
@@ -2060,6 +4019,21 @@
       "contributor": null,
       "file_type": "rationale",
       "norm_label": "incoming agent reports: symptom right, cause wrong half the time",
+      "source_file": "HANDOFF.md",
+      "source_location": null,
+      "source_url": null
+    },
+    {
+      "id": "handoff_parallel_commit_race",
+      "label": "Parallel commits in one worktree swallow each other's staged files",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 3,
+      "community_name": ".golangci.yml template",
+      "contributor": null,
+      "file_type": "rationale",
+      "norm_label": "parallel commits in one worktree swallow each other's staged files",
       "source_file": "HANDOFF.md",
       "source_location": null,
       "source_url": null
@@ -2080,8 +4054,8 @@
       "source_url": null
     },
     {
-      "id": "playbook_coverage_illusion",
-      "label": "Coverage measures happy paths; a green suite proves nothing",
+      "id": "playbook_bisectable_signature_commit",
+      "label": "A signature-changing commit must carry its callers",
       "_origin": "semantic",
       "author": null,
       "captured_at": null,
@@ -2089,7 +4063,7 @@
       "community_name": ".golangci.yml template",
       "contributor": null,
       "file_type": "rationale",
-      "norm_label": "coverage measures happy paths; a green suite proves nothing",
+      "norm_label": "a signature-changing commit must carry its callers",
       "source_file": "PLAYBOOK.md",
       "source_location": null,
       "source_url": null
@@ -2110,6 +4084,21 @@
       "source_url": null
     },
     {
+      "id": "playbook_hook_actually_runs",
+      "label": "Verify the hook actually executes (relative path silently skipped it)",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 3,
+      "community_name": ".golangci.yml template",
+      "contributor": null,
+      "file_type": "rationale",
+      "norm_label": "verify the hook actually executes (relative path silently skipped it)",
+      "source_file": "PLAYBOOK.md",
+      "source_location": null,
+      "source_url": null
+    },
+    {
       "id": "playbook_taint_rules_nondeterminism",
       "label": "Taint rules report one finding at a time and are inter-package",
       "_origin": "semantic",
@@ -2121,6 +4110,36 @@
       "file_type": "rationale",
       "norm_label": "taint rules report one finding at a time and are inter-package",
       "source_file": "PLAYBOOK.md",
+      "source_location": null,
+      "source_url": null
+    },
+    {
+      "id": "readme_green_commit_marker",
+      "label": "Green-commit marker in TEMP for the Stop hook",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 3,
+      "community_name": ".golangci.yml template",
+      "contributor": null,
+      "file_type": "rationale",
+      "norm_label": "green-commit marker in temp for the stop hook",
+      "source_file": "README.md",
+      "source_location": null,
+      "source_url": null
+    },
+    {
+      "id": "readme_staged_index_guard",
+      "label": "Staged-tree guard via git write-tree",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 3,
+      "community_name": ".golangci.yml template",
+      "contributor": null,
+      "file_type": "rationale",
+      "norm_label": "staged-tree guard via git write-tree",
+      "source_file": "README.md",
       "source_location": null,
       "source_url": null
     },
@@ -2185,208 +4204,13 @@
       "source_url": null
     },
     {
-      "id": "handoff_git_index_file_marker",
-      "label": "GIT_INDEX_FILE marks that we are inside a commit",
-      "_origin": "semantic",
-      "author": null,
-      "captured_at": null,
-      "community": 6,
-      "community_name": "qgate wire (repo wiring, config only)",
-      "contributor": null,
-      "file_type": "concept",
-      "norm_label": "git_index_file marks that we are inside a commit",
-      "source_file": "HANDOFF.md",
-      "source_location": null,
-      "source_url": null
-    },
-    {
-      "id": "playbook_commit_discipline",
-      "label": "Commit discipline (per module, explicit paths, consequence in message)",
-      "_origin": "semantic",
-      "author": null,
-      "captured_at": null,
-      "community": 6,
-      "community_name": "qgate wire (repo wiring, config only)",
-      "contributor": null,
-      "file_type": "concept",
-      "norm_label": "commit discipline (per module, explicit paths, consequence in message)",
-      "source_file": "PLAYBOOK.md",
-      "source_location": null,
-      "source_url": null
-    },
-    {
-      "id": "readme_qgate_wire",
-      "label": "qgate wire (repo wiring, config only)",
-      "_origin": "semantic",
-      "author": null,
-      "captured_at": null,
-      "community": 6,
-      "community_name": "qgate wire (repo wiring, config only)",
-      "contributor": null,
-      "file_type": "concept",
-      "norm_label": "qgate wire (repo wiring, config only)",
-      "source_file": "README.md",
-      "source_location": null,
-      "source_url": null
-    },
-    {
-      "id": "readme_stop_hook",
-      "label": "Claude Code Stop hook (exit code 2)",
-      "_origin": "semantic",
-      "author": null,
-      "captured_at": null,
-      "community": 6,
-      "community_name": "qgate wire (repo wiring, config only)",
-      "contributor": null,
-      "file_type": "concept",
-      "norm_label": "claude code stop hook (exit code 2)",
-      "source_file": "README.md",
-      "source_location": null,
-      "source_url": null
-    },
-    {
-      "id": "templates_lefthook_config",
-      "label": "lefthook.yml template",
-      "_origin": "semantic",
-      "author": null,
-      "captured_at": null,
-      "community": 6,
-      "community_name": "qgate wire (repo wiring, config only)",
-      "contributor": null,
-      "file_type": "document",
-      "norm_label": "lefthook.yml template",
-      "source_file": "templates/lefthook.yml",
-      "source_location": null,
-      "source_url": null
-    },
-    {
-      "id": "handoff_cherry_pick_revert_uncovered",
-      "label": "cherry-pick and revert cannot be covered cheaply",
-      "_origin": "semantic",
-      "author": null,
-      "captured_at": null,
-      "community": 6,
-      "community_name": "qgate wire (repo wiring, config only)",
-      "contributor": null,
-      "file_type": "rationale",
-      "norm_label": "cherry-pick and revert cannot be covered cheaply",
-      "source_file": "HANDOFF.md",
-      "source_location": null,
-      "source_url": null
-    },
-    {
-      "id": "handoff_chosen_boundaries",
-      "label": "Deliberately chosen boundaries (not TODOs)",
-      "_origin": "semantic",
-      "author": null,
-      "captured_at": null,
-      "community": 6,
-      "community_name": "qgate wire (repo wiring, config only)",
-      "contributor": null,
-      "file_type": "rationale",
-      "norm_label": "deliberately chosen boundaries (not todos)",
-      "source_file": "HANDOFF.md",
-      "source_location": null,
-      "source_url": null
-    },
-    {
-      "id": "handoff_hook_coverage_matrix",
-      "label": "Measured git hook coverage matrix (git 2.53)",
-      "_origin": "semantic",
-      "author": null,
-      "captured_at": null,
-      "community": 6,
-      "community_name": "qgate wire (repo wiring, config only)",
-      "contributor": null,
-      "file_type": "rationale",
-      "norm_label": "measured git hook coverage matrix (git 2.53)",
-      "source_file": "HANDOFF.md",
-      "source_location": null,
-      "source_url": null
-    },
-    {
-      "id": "handoff_parallel_commit_race",
-      "label": "Parallel commits in one worktree swallow each other's staged files",
-      "_origin": "semantic",
-      "author": null,
-      "captured_at": null,
-      "community": 6,
-      "community_name": "qgate wire (repo wiring, config only)",
-      "contributor": null,
-      "file_type": "rationale",
-      "norm_label": "parallel commits in one worktree swallow each other's staged files",
-      "source_file": "HANDOFF.md",
-      "source_location": null,
-      "source_url": null
-    },
-    {
-      "id": "playbook_bisectable_signature_commit",
-      "label": "A signature-changing commit must carry its callers",
-      "_origin": "semantic",
-      "author": null,
-      "captured_at": null,
-      "community": 6,
-      "community_name": "qgate wire (repo wiring, config only)",
-      "contributor": null,
-      "file_type": "rationale",
-      "norm_label": "a signature-changing commit must carry its callers",
-      "source_file": "PLAYBOOK.md",
-      "source_location": null,
-      "source_url": null
-    },
-    {
-      "id": "playbook_hook_actually_runs",
-      "label": "Verify the hook actually executes (relative path silently skipped it)",
-      "_origin": "semantic",
-      "author": null,
-      "captured_at": null,
-      "community": 6,
-      "community_name": "qgate wire (repo wiring, config only)",
-      "contributor": null,
-      "file_type": "rationale",
-      "norm_label": "verify the hook actually executes (relative path silently skipped it)",
-      "source_file": "PLAYBOOK.md",
-      "source_location": null,
-      "source_url": null
-    },
-    {
-      "id": "readme_green_commit_marker",
-      "label": "Green-commit marker in TEMP for the Stop hook",
-      "_origin": "semantic",
-      "author": null,
-      "captured_at": null,
-      "community": 6,
-      "community_name": "qgate wire (repo wiring, config only)",
-      "contributor": null,
-      "file_type": "rationale",
-      "norm_label": "green-commit marker in temp for the stop hook",
-      "source_file": "README.md",
-      "source_location": null,
-      "source_url": null
-    },
-    {
-      "id": "readme_staged_index_guard",
-      "label": "Staged-tree guard via git write-tree",
-      "_origin": "semantic",
-      "author": null,
-      "captured_at": null,
-      "community": 6,
-      "community_name": "qgate wire (repo wiring, config only)",
-      "contributor": null,
-      "file_type": "rationale",
-      "norm_label": "staged-tree guard via git write-tree",
-      "source_file": "README.md",
-      "source_location": null,
-      "source_url": null
-    },
-    {
       "id": "templates_lefthook_ai_key_rejected",
       "label": "lefthook ai: key rejected (exits 1, Claude blocks only on 2)",
       "_origin": "semantic",
       "author": null,
       "captured_at": null,
-      "community": 6,
-      "community_name": "qgate wire (repo wiring, config only)",
+      "community": 3,
+      "community_name": ".golangci.yml template",
       "contributor": null,
       "file_type": "rationale",
       "norm_label": "lefthook ai: key rejected (exits 1, claude blocks only on 2)",
@@ -2400,8 +4224,8 @@
       "_origin": "semantic",
       "author": null,
       "captured_at": null,
-      "community": 6,
-      "community_name": "qgate wire (repo wiring, config only)",
+      "community": 3,
+      "community_name": ".golangci.yml template",
       "contributor": null,
       "file_type": "rationale",
       "norm_label": "lefthook swallows the exit code of pwsh -command",
@@ -2412,6 +4236,426 @@
   ],
   "links": [
     {
+      "source": "gate_harmony_qgateharmony_attrname",
+      "target": "gate_harmony_qgateharmony_name",
+      "relation": "calls",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "call",
+      "source_file": "gate/harmony.cs",
+      "source_location": "L155",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony_basename",
+      "target": "gate_harmony_qgateharmony_name",
+      "relation": "calls",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "call",
+      "source_file": "gate/harmony.cs",
+      "source_location": "L326",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony_callee",
+      "target": "gate_harmony_qgateharmony_name",
+      "relation": "calls",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "call",
+      "source_file": "gate/harmony.cs",
+      "source_location": "L421",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony_checkaccess",
+      "target": "gate_harmony_qgateharmony_hasmember",
+      "relation": "calls",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "call",
+      "source_file": "gate/harmony.cs",
+      "source_location": "L442",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony_checkaccesstools",
+      "target": "gate_harmony_qgateharmony_name",
+      "relation": "calls",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "call",
+      "source_file": "gate/harmony.cs",
+      "source_location": "L388",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony_checkaccesstools",
+      "target": "gate_harmony_qgateharmony_callee",
+      "relation": "calls",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "call",
+      "source_file": "gate/harmony.cs",
+      "source_location": "L396",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony_checkaccesstools",
+      "target": "gate_harmony_qgateharmony_checkaccess",
+      "relation": "calls",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "call",
+      "source_file": "gate/harmony.cs",
+      "source_location": "L404",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony_checkaccesstools",
+      "target": "gate_harmony_qgateharmony_where",
+      "relation": "calls",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "call",
+      "source_file": "gate/harmony.cs",
+      "source_location": "L404",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony_checkattributes",
+      "target": "gate_harmony_qgateharmony_has",
+      "relation": "calls",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "call",
+      "source_file": "gate/harmony.cs",
+      "source_location": "L215",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony_checkattributes",
+      "target": "gate_harmony_target",
+      "relation": "calls",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "call",
+      "source_file": "gate/harmony.cs",
+      "source_location": "L220",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony_checkattributes",
+      "target": "gate_harmony_qgateharmony_merge",
+      "relation": "calls",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "call",
+      "source_file": "gate/harmony.cs",
+      "source_location": "L221",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony_checkattributes",
+      "target": "gate_harmony_qgateharmony_name",
+      "relation": "calls",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "call",
+      "source_file": "gate/harmony.cs",
+      "source_location": "L222",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony_checkattributes",
+      "target": "gate_harmony_qgateharmony_patchkind",
+      "relation": "calls",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "call",
+      "source_file": "gate/harmony.cs",
+      "source_location": "L225",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony_checkattributes",
+      "target": "gate_harmony_qgateharmony_where",
+      "relation": "calls",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "call",
+      "source_file": "gate/harmony.cs",
+      "source_location": "L231",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony_checkattributes",
+      "target": "gate_harmony_qgateharmony_resolve",
+      "relation": "calls",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "call",
+      "source_file": "gate/harmony.cs",
+      "source_location": "L232",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony_checkattributes",
+      "target": "gate_harmony_qgateharmony_checkparams",
+      "relation": "calls",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "call",
+      "source_file": "gate/harmony.cs",
+      "source_location": "L234",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony_checkparams",
+      "target": "gate_harmony_qgateharmony_has",
+      "relation": "calls",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "call",
+      "source_file": "gate/harmony.cs",
+      "source_location": "L291",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony_checkparams",
+      "target": "gate_harmony_qgateharmony_where",
+      "relation": "calls",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "call",
+      "source_file": "gate/harmony.cs",
+      "source_location": "L293",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony_checkparams",
+      "target": "gate_harmony_qgateharmony_hasmember",
+      "relation": "calls",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "call",
+      "source_file": "gate/harmony.cs",
+      "source_location": "L302",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony_checkparams",
+      "target": "gate_harmony_qgateharmony_isdelegate",
+      "relation": "calls",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "call",
+      "source_file": "gate/harmony.cs",
+      "source_location": "L312",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony_gettypefromdefinition",
+      "target": "gate_harmony_qgateharmony_name",
+      "relation": "calls",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "call",
+      "source_file": "gate/harmony.cs",
+      "source_location": "L29",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony_gettypefromreference",
+      "target": "gate_harmony_qgateharmony_name",
+      "relation": "calls",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "call",
+      "source_file": "gate/harmony.cs",
+      "source_location": "L30",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony_has",
+      "target": "gate_harmony_qgateharmony_attrname",
+      "relation": "calls",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "call",
+      "source_file": "gate/harmony.cs",
+      "source_location": "L163",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony_hasmember",
+      "target": "gate_harmony_qgateharmony_basename",
+      "relation": "calls",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "call",
+      "source_file": "gate/harmony.cs",
+      "source_location": "L346",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony_index",
+      "target": "gate_harmony_qgateharmony_name",
+      "relation": "calls",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "call",
+      "source_file": "gate/harmony.cs",
+      "source_location": "L120",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony_isdelegate",
+      "target": "gate_harmony_qgateharmony_basename",
+      "relation": "calls",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "call",
+      "source_file": "gate/harmony.cs",
+      "source_location": "L321",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony_load",
+      "target": "pereader",
+      "relation": "calls",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "call",
+      "source_file": "gate/harmony.cs",
+      "source_location": "L112",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony_load",
+      "target": "gate_harmony_asm",
+      "relation": "calls",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "call",
+      "source_file": "gate/harmony.cs",
+      "source_location": "L113",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony_merge",
+      "target": "gate_harmony_qgateharmony_attrname",
+      "relation": "calls",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "call",
+      "source_file": "gate/harmony.cs",
+      "source_location": "L173",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony_merge",
+      "target": "gate_harmony_qgateharmony_norm",
+      "relation": "calls",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "call",
+      "source_file": "gate/harmony.cs",
+      "source_location": "L182",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony_patchkind",
+      "target": "gate_harmony_qgateharmony_attrname",
+      "relation": "calls",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "call",
+      "source_file": "gate/harmony.cs",
+      "source_location": "L195",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony_resolve",
+      "target": "gate_harmony_qgateharmony_norm",
+      "relation": "calls",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "call",
+      "source_file": "gate/harmony.cs",
+      "source_location": "L243",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony_resolve",
+      "target": "gate_harmony_qgateharmony_where",
+      "relation": "calls",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "call",
+      "source_file": "gate/harmony.cs",
+      "source_location": "L267",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony_run",
+      "target": "gate_harmony_qgateharmony",
+      "relation": "calls",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "call",
+      "source_file": "gate/harmony.cs",
+      "source_location": "L98",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony_run",
+      "target": "gate_harmony_qgateharmony_load",
+      "relation": "calls",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "call",
+      "source_file": "gate/harmony.cs",
+      "source_location": "L99",
+      "weight": 1.0
+    },
+    {
       "source": "testdata_go_fixture_main_main",
       "target": "testdata_go_fixture_main_add",
       "relation": "calls",
@@ -2421,6 +4665,194 @@
       "context": "call",
       "source_file": "testdata/go-fixture/main.go",
       "source_location": "L8",
+      "weight": 1.0
+    },
+    {
+      "source": "testdata_harmony_fixture_mod_patches_fixture_lookups_dangling",
+      "target": "testdata_harmony_fixture_harmony_harmonystub_harmonylib_accesstools_method",
+      "relation": "calls",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "call",
+      "source_file": "testdata/harmony-fixture/Mod/Patches.cs",
+      "source_location": "L35",
+      "weight": 1.0
+    },
+    {
+      "source": "testdata_harmony_fixture_mod_patches_fixture_lookups_valid",
+      "target": "testdata_harmony_fixture_harmony_harmonystub_harmonylib_accesstools_field",
+      "relation": "calls",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "call",
+      "source_file": "testdata/harmony-fixture/Mod/Patches.cs",
+      "source_location": "L33",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony",
+      "target": "asm",
+      "relation": "references",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "field",
+      "metadata": {
+        "ref_token": "Asm"
+      },
+      "source_file": "gate/harmony.cs",
+      "source_location": "L94",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony",
+      "target": "dictionary",
+      "relation": "references",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "field",
+      "metadata": {
+        "ref_token": "Dictionary"
+      },
+      "source_file": "gate/harmony.cs",
+      "source_location": "L354",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_asm",
+      "target": "metadatareader",
+      "relation": "references",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "field",
+      "metadata": {
+        "ref_token": "MetadataReader"
+      },
+      "source_file": "gate/harmony.cs",
+      "source_location": "L88",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_asm",
+      "target": "pereader",
+      "relation": "references",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "field",
+      "metadata": {
+        "ref_token": "PEReader"
+      },
+      "source_file": "gate/harmony.cs",
+      "source_location": "L88",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony",
+      "target": "sortedset",
+      "relation": "references",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "field",
+      "metadata": {
+        "ref_token": "SortedSet"
+      },
+      "source_file": "gate/harmony.cs",
+      "source_location": "L93",
+      "weight": 1.0
+    },
+    {
+      "source": "testdata_harmony_fixture_game_hud_hud",
+      "target": "testdata_harmony_fixture_game_hud_hud_health",
+      "relation": "defines",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "field",
+      "source_file": "testdata/harmony-fixture/Game/Hud.cs",
+      "source_location": "L5",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony",
+      "target": "a",
+      "relation": "references",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "generic_arg",
+      "metadata": {
+        "ref_token": "A"
+      },
+      "source_file": "gate/harmony.cs",
+      "source_location": "L91",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony",
+      "target": "h",
+      "relation": "references",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "generic_arg",
+      "metadata": {
+        "ref_token": "H"
+      },
+      "source_file": "gate/harmony.cs",
+      "source_location": "L91",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony",
+      "target": "operandtype",
+      "relation": "references",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "generic_arg",
+      "metadata": {
+        "ref_token": "OperandType"
+      },
+      "source_file": "gate/harmony.cs",
+      "source_location": "L354",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony",
+      "target": "typedefinitionhandle",
+      "relation": "references",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "generic_arg",
+      "metadata": {
+        "ref_token": "TypeDefinitionHandle"
+      },
+      "source_file": "gate/harmony.cs",
+      "source_location": "L91",
+      "weight": 1.0
+    },
+    {
+      "source": "testdata_harmony_fixture_mod_patches",
+      "target": "csharp_namespace:d8806e74e794b351",
+      "relation": "imports",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "import",
+      "metadata": {
+        "using_kind": "namespace",
+        "target_fqn": "HarmonyLib",
+        "scope_kind": "file"
+      },
+      "source_file": "testdata/harmony-fixture/Mod/Patches.cs",
+      "source_location": "L1",
       "weight": 1.0
     },
     {
@@ -2472,6 +4904,576 @@
       "weight": 1.0
     },
     {
+      "source": "gate_harmony_qgateharmony_getarraytype",
+      "target": "arrayshape",
+      "relation": "references",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "parameter_type",
+      "metadata": {
+        "ref_token": "ArrayShape"
+      },
+      "source_file": "gate/harmony.cs",
+      "source_location": "L33",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony_checkparams",
+      "target": "asm",
+      "relation": "references",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "parameter_type",
+      "metadata": {
+        "ref_token": "Asm"
+      },
+      "source_file": "gate/harmony.cs",
+      "source_location": "L286",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony_hasmember",
+      "target": "asm",
+      "relation": "references",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "parameter_type",
+      "metadata": {
+        "ref_token": "Asm"
+      },
+      "source_file": "gate/harmony.cs",
+      "source_location": "L333",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony_index",
+      "target": "asm",
+      "relation": "references",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "parameter_type",
+      "metadata": {
+        "ref_token": "Asm"
+      },
+      "source_file": "gate/harmony.cs",
+      "source_location": "L118",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony_resolve",
+      "target": "asm",
+      "relation": "references",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "parameter_type",
+      "metadata": {
+        "ref_token": "Asm"
+      },
+      "source_file": "gate/harmony.cs",
+      "source_location": "L240",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony_attrname",
+      "target": "customattribute",
+      "relation": "references",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "parameter_type",
+      "metadata": {
+        "ref_token": "CustomAttribute"
+      },
+      "source_file": "gate/harmony.cs",
+      "source_location": "L152",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony_has",
+      "target": "customattributehandlecollection",
+      "relation": "references",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "parameter_type",
+      "metadata": {
+        "ref_token": "CustomAttributeHandleCollection"
+      },
+      "source_file": "gate/harmony.cs",
+      "source_location": "L162",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony_merge",
+      "target": "customattributehandlecollection",
+      "relation": "references",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "parameter_type",
+      "metadata": {
+        "ref_token": "CustomAttributeHandleCollection"
+      },
+      "source_file": "gate/harmony.cs",
+      "source_location": "L167",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony_basename",
+      "target": "entityhandle",
+      "relation": "references",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "parameter_type",
+      "metadata": {
+        "ref_token": "EntityHandle"
+      },
+      "source_file": "gate/harmony.cs",
+      "source_location": "L324",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony_callee",
+      "target": "entityhandle",
+      "relation": "references",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "parameter_type",
+      "metadata": {
+        "ref_token": "EntityHandle"
+      },
+      "source_file": "gate/harmony.cs",
+      "source_location": "L415",
+      "weight": 1.0
+    },
+    {
+      "source": "testdata_harmony_fixture_mod_patches_fixture_healthpatch_postfix",
+      "target": "testdata_harmony_fixture_game_hud_hud",
+      "relation": "references",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "parameter_type",
+      "metadata": {
+        "ref_token": "Hud"
+      },
+      "source_file": "testdata/harmony-fixture/Mod/Patches.cs",
+      "source_location": "L9",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony_getgenericinstantiation",
+      "target": "immutablearray",
+      "relation": "references",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "parameter_type",
+      "metadata": {
+        "ref_token": "ImmutableArray"
+      },
+      "source_file": "gate/harmony.cs",
+      "source_location": "L36",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony_attrname",
+      "target": "metadatareader",
+      "relation": "references",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "parameter_type",
+      "metadata": {
+        "ref_token": "MetadataReader"
+      },
+      "source_file": "gate/harmony.cs",
+      "source_location": "L152",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony_basename",
+      "target": "metadatareader",
+      "relation": "references",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "parameter_type",
+      "metadata": {
+        "ref_token": "MetadataReader"
+      },
+      "source_file": "gate/harmony.cs",
+      "source_location": "L324",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony_callee",
+      "target": "metadatareader",
+      "relation": "references",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "parameter_type",
+      "metadata": {
+        "ref_token": "MetadataReader"
+      },
+      "source_file": "gate/harmony.cs",
+      "source_location": "L415",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony_gettypefromdefinition",
+      "target": "metadatareader",
+      "relation": "references",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "parameter_type",
+      "metadata": {
+        "ref_token": "MetadataReader"
+      },
+      "source_file": "gate/harmony.cs",
+      "source_location": "L29",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony_gettypefromreference",
+      "target": "metadatareader",
+      "relation": "references",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "parameter_type",
+      "metadata": {
+        "ref_token": "MetadataReader"
+      },
+      "source_file": "gate/harmony.cs",
+      "source_location": "L30",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony_gettypefromspecification",
+      "target": "metadatareader",
+      "relation": "references",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "parameter_type",
+      "metadata": {
+        "ref_token": "MetadataReader"
+      },
+      "source_file": "gate/harmony.cs",
+      "source_location": "L31",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony_has",
+      "target": "metadatareader",
+      "relation": "references",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "parameter_type",
+      "metadata": {
+        "ref_token": "MetadataReader"
+      },
+      "source_file": "gate/harmony.cs",
+      "source_location": "L162",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony_name",
+      "target": "metadatareader",
+      "relation": "references",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "parameter_type",
+      "metadata": {
+        "ref_token": "MetadataReader"
+      },
+      "source_file": "gate/harmony.cs",
+      "source_location": "L57",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony_patchkind",
+      "target": "metadatareader",
+      "relation": "references",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "parameter_type",
+      "metadata": {
+        "ref_token": "MetadataReader"
+      },
+      "source_file": "gate/harmony.cs",
+      "source_location": "L192",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony_checkparams",
+      "target": "methoddefinition",
+      "relation": "references",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "parameter_type",
+      "metadata": {
+        "ref_token": "MethodDefinition"
+      },
+      "source_file": "gate/harmony.cs",
+      "source_location": "L286",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony_patchkind",
+      "target": "methoddefinition",
+      "relation": "references",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "parameter_type",
+      "metadata": {
+        "ref_token": "MethodDefinition"
+      },
+      "source_file": "gate/harmony.cs",
+      "source_location": "L192",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony_resolve",
+      "target": "methoddefinition",
+      "relation": "references",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "parameter_type",
+      "metadata": {
+        "ref_token": "MethodDefinition"
+      },
+      "source_file": "gate/harmony.cs",
+      "source_location": "L240",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony_getfunctionpointertype",
+      "target": "methodsignature",
+      "relation": "references",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "parameter_type",
+      "metadata": {
+        "ref_token": "MethodSignature"
+      },
+      "source_file": "gate/harmony.cs",
+      "source_location": "L39",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony_getprimitivetype",
+      "target": "primitivetypecode",
+      "relation": "references",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "parameter_type",
+      "metadata": {
+        "ref_token": "PrimitiveTypeCode"
+      },
+      "source_file": "gate/harmony.cs",
+      "source_location": "L28",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony_merge",
+      "target": "target",
+      "relation": "references",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "parameter_type",
+      "metadata": {
+        "ref_token": "Target"
+      },
+      "source_file": "gate/harmony.cs",
+      "source_location": "L167",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony_resolve",
+      "target": "target",
+      "relation": "references",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "parameter_type",
+      "metadata": {
+        "ref_token": "Target"
+      },
+      "source_file": "gate/harmony.cs",
+      "source_location": "L240",
+      "weight": 1.0
+    },
+    {
+      "source": "testdata_harmony_fixture_harmony_harmonystub_harmonylib_accesstools_field",
+      "target": "type",
+      "relation": "references",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "parameter_type",
+      "metadata": {
+        "ref_token": "Type"
+      },
+      "source_file": "testdata/harmony-fixture/Harmony/HarmonyStub.cs",
+      "source_location": "L20",
+      "weight": 1.0
+    },
+    {
+      "source": "testdata_harmony_fixture_harmony_harmonystub_harmonylib_accesstools_method",
+      "target": "type",
+      "relation": "references",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "parameter_type",
+      "metadata": {
+        "ref_token": "Type"
+      },
+      "source_file": "testdata/harmony-fixture/Harmony/HarmonyStub.cs",
+      "source_location": "L18",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony_checkparams",
+      "target": "typedefinition",
+      "relation": "references",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "parameter_type",
+      "metadata": {
+        "ref_token": "TypeDefinition"
+      },
+      "source_file": "gate/harmony.cs",
+      "source_location": "L286",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony_hasmember",
+      "target": "typedefinition",
+      "relation": "references",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "parameter_type",
+      "metadata": {
+        "ref_token": "TypeDefinition"
+      },
+      "source_file": "gate/harmony.cs",
+      "source_location": "L333",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony_resolve",
+      "target": "typedefinition",
+      "relation": "references",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "parameter_type",
+      "metadata": {
+        "ref_token": "TypeDefinition"
+      },
+      "source_file": "gate/harmony.cs",
+      "source_location": "L240",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony_gettypefromdefinition",
+      "target": "typedefinitionhandle",
+      "relation": "references",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "parameter_type",
+      "metadata": {
+        "ref_token": "TypeDefinitionHandle"
+      },
+      "source_file": "gate/harmony.cs",
+      "source_location": "L29",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony_name",
+      "target": "typedefinitionhandle",
+      "relation": "references",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "parameter_type",
+      "metadata": {
+        "ref_token": "TypeDefinitionHandle"
+      },
+      "source_file": "gate/harmony.cs",
+      "source_location": "L48",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony_gettypefromreference",
+      "target": "typereferencehandle",
+      "relation": "references",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "parameter_type",
+      "metadata": {
+        "ref_token": "TypeReferenceHandle"
+      },
+      "source_file": "gate/harmony.cs",
+      "source_location": "L30",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony_name",
+      "target": "typereferencehandle",
+      "relation": "references",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "parameter_type",
+      "metadata": {
+        "ref_token": "TypeReferenceHandle"
+      },
+      "source_file": "gate/harmony.cs",
+      "source_location": "L57",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony_gettypefromspecification",
+      "target": "typespecificationhandle",
+      "relation": "references",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "parameter_type",
+      "metadata": {
+        "ref_token": "TypeSpecificationHandle"
+      },
+      "source_file": "gate/harmony.cs",
+      "source_location": "L31",
+      "weight": 1.0
+    },
+    {
       "source": "testdata_go_fixture_main_test_testadd",
       "target": "go_type_testing_t",
       "relation": "references",
@@ -2481,6 +5483,81 @@
       "context": "parameter_type",
       "source_file": "testdata/go-fixture/main_test.go",
       "source_location": "L5",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony_load",
+      "target": "asm",
+      "relation": "references",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "return_type",
+      "metadata": {
+        "ref_token": "Asm"
+      },
+      "source_file": "gate/harmony.cs",
+      "source_location": "L108",
+      "weight": 1.0
+    },
+    {
+      "source": "testdata_harmony_fixture_harmony_harmonystub_harmonylib_accesstools_field",
+      "target": "fieldinfo",
+      "relation": "references",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "return_type",
+      "metadata": {
+        "ref_token": "FieldInfo"
+      },
+      "source_file": "testdata/harmony-fixture/Harmony/HarmonyStub.cs",
+      "source_location": "L20",
+      "weight": 1.0
+    },
+    {
+      "source": "testdata_harmony_fixture_harmony_harmonystub_harmonylib_accesstools_method",
+      "target": "methodinfo",
+      "relation": "references",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "return_type",
+      "metadata": {
+        "ref_token": "MethodInfo"
+      },
+      "source_file": "testdata/harmony-fixture/Harmony/HarmonyStub.cs",
+      "source_location": "L18",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony_getunderlyingenumtype",
+      "target": "primitivetypecode",
+      "relation": "references",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "return_type",
+      "metadata": {
+        "ref_token": "PrimitiveTypeCode"
+      },
+      "source_file": "gate/harmony.cs",
+      "source_location": "L46",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_target_clone",
+      "target": "target",
+      "relation": "references",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "return_type",
+      "metadata": {
+        "ref_token": "Target"
+      },
+      "source_file": "gate/harmony.cs",
+      "source_location": "L89",
       "weight": 1.0
     },
     {
@@ -2496,6 +5573,48 @@
       "weight": 1.0
     },
     {
+      "source": "testdata_harmony_fixture_harmony_harmonystub_harmonylib_harmonypatch",
+      "target": "attribute",
+      "relation": "inherits",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "metadata": {
+        "ref_token": "Attribute"
+      },
+      "source_file": "testdata/harmony-fixture/Harmony/HarmonyStub.cs",
+      "source_location": "L8",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony",
+      "target": "icustomattributetypeprovider",
+      "relation": "implements",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "metadata": {
+        "ref_token": "ICustomAttributeTypeProvider"
+      },
+      "source_file": "gate/harmony.cs",
+      "source_location": "L24",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony",
+      "target": "isignaturetypeprovider",
+      "relation": "implements",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "metadata": {
+        "ref_token": "ISignatureTypeProvider"
+      },
+      "source_file": "gate/harmony.cs",
+      "source_location": "L24",
+      "weight": 1.0
+    },
+    {
       "source": "gate_check_get_cppcompiledb",
       "target": "gate_check_have",
       "relation": "calls",
@@ -2503,7 +5622,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "gate/check.ps1",
-      "source_location": "L1229",
+      "source_location": "L1237",
       "weight": 1.0
     },
     {
@@ -2558,7 +5677,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "gate/check.ps1",
-      "source_location": "L1630",
+      "source_location": "L1638",
       "weight": 1.0
     },
     {
@@ -2569,7 +5688,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "gate/check.ps1",
-      "source_location": "L1399",
+      "source_location": "L1407",
       "weight": 1.0
     },
     {
@@ -2580,7 +5699,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "gate/check.ps1",
-      "source_location": "L1442",
+      "source_location": "L1450",
       "weight": 1.0
     },
     {
@@ -2591,7 +5710,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "gate/check.ps1",
-      "source_location": "L1473",
+      "source_location": "L1481",
       "weight": 1.0
     },
     {
@@ -2602,7 +5721,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "gate/check.ps1",
-      "source_location": "L1250",
+      "source_location": "L1258",
       "weight": 1.0
     },
     {
@@ -2613,7 +5732,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "gate/check.ps1",
-      "source_location": "L1260",
+      "source_location": "L1268",
       "weight": 1.0
     },
     {
@@ -2624,7 +5743,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "gate/check.ps1",
-      "source_location": "L1270",
+      "source_location": "L1278",
       "weight": 1.0
     },
     {
@@ -2635,7 +5754,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "gate/check.ps1",
-      "source_location": "L1283",
+      "source_location": "L1291",
       "weight": 1.0
     },
     {
@@ -2646,7 +5765,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "gate/check.ps1",
-      "source_location": "L1304",
+      "source_location": "L1312",
       "weight": 1.0
     },
     {
@@ -2657,7 +5776,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "gate/check.ps1",
-      "source_location": "L1659",
+      "source_location": "L1667",
       "weight": 1.0
     },
     {
@@ -2668,7 +5787,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "gate/check.ps1",
-      "source_location": "L1700",
+      "source_location": "L1708",
       "weight": 1.0
     },
     {
@@ -2679,7 +5798,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "gate/check.ps1",
-      "source_location": "L1708",
+      "source_location": "L1716",
       "weight": 1.0
     },
     {
@@ -2789,7 +5908,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "gate/check.ps1",
-      "source_location": "L1100",
+      "source_location": "L1108",
       "weight": 1.0
     },
     {
@@ -2800,7 +5919,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "gate/check.ps1",
-      "source_location": "L1106",
+      "source_location": "L1114",
       "weight": 1.0
     },
     {
@@ -2811,7 +5930,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "gate/check.ps1",
-      "source_location": "L1109",
+      "source_location": "L1117",
       "weight": 1.0
     },
     {
@@ -2822,7 +5941,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "gate/check.ps1",
-      "source_location": "L1120",
+      "source_location": "L1128",
       "weight": 1.0
     },
     {
@@ -2958,6 +6077,72 @@
       "weight": 1.0
     },
     {
+      "source": "testdata_harmony_fixture_harmony_harmonystub_harmonylib_methodtype",
+      "target": "testdata_harmony_fixture_harmony_harmonystub_harmonylib_methodtype_constructor",
+      "relation": "case_of",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "testdata/harmony-fixture/Harmony/HarmonyStub.cs",
+      "source_location": "L6",
+      "weight": 1.0
+    },
+    {
+      "source": "testdata_harmony_fixture_harmony_harmonystub_harmonylib_methodtype",
+      "target": "testdata_harmony_fixture_harmony_harmonystub_harmonylib_methodtype_enumerator",
+      "relation": "case_of",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "testdata/harmony-fixture/Harmony/HarmonyStub.cs",
+      "source_location": "L6",
+      "weight": 1.0
+    },
+    {
+      "source": "testdata_harmony_fixture_harmony_harmonystub_harmonylib_methodtype",
+      "target": "testdata_harmony_fixture_harmony_harmonystub_harmonylib_methodtype_getter",
+      "relation": "case_of",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "testdata/harmony-fixture/Harmony/HarmonyStub.cs",
+      "source_location": "L6",
+      "weight": 1.0
+    },
+    {
+      "source": "testdata_harmony_fixture_harmony_harmonystub_harmonylib_methodtype",
+      "target": "testdata_harmony_fixture_harmony_harmonystub_harmonylib_methodtype_normal",
+      "relation": "case_of",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "testdata/harmony-fixture/Harmony/HarmonyStub.cs",
+      "source_location": "L6",
+      "weight": 1.0
+    },
+    {
+      "source": "testdata_harmony_fixture_harmony_harmonystub_harmonylib_methodtype",
+      "target": "testdata_harmony_fixture_harmony_harmonystub_harmonylib_methodtype_setter",
+      "relation": "case_of",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "testdata/harmony-fixture/Harmony/HarmonyStub.cs",
+      "source_location": "L6",
+      "weight": 1.0
+    },
+    {
+      "source": "testdata_harmony_fixture_harmony_harmonystub_harmonylib_methodtype",
+      "target": "testdata_harmony_fixture_harmony_harmonystub_harmonylib_methodtype_staticconstructor",
+      "relation": "case_of",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "testdata/harmony-fixture/Harmony/HarmonyStub.cs",
+      "source_location": "L6",
+      "weight": 1.0
+    },
+    {
       "source": "bin_qgate",
       "target": "bin_qgate_invoke_child",
       "relation": "contains",
@@ -2987,7 +6172,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "gate/check.ps1",
-      "source_location": "L1082",
+      "source_location": "L1090",
       "weight": 1.0
     },
     {
@@ -2998,7 +6183,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "gate/check.ps1",
-      "source_location": "L1228",
+      "source_location": "L1236",
       "weight": 1.0
     },
     {
@@ -3009,7 +6194,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "gate/check.ps1",
-      "source_location": "L1239",
+      "source_location": "L1247",
       "weight": 1.0
     },
     {
@@ -3020,7 +6205,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "gate/check.ps1",
-      "source_location": "L1387",
+      "source_location": "L1395",
       "weight": 1.0
     },
     {
@@ -3042,7 +6227,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "gate/check.ps1",
-      "source_location": "L1607",
+      "source_location": "L1615",
       "weight": 1.0
     },
     {
@@ -3053,7 +6238,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "gate/check.ps1",
-      "source_location": "L1626",
+      "source_location": "L1634",
       "weight": 1.0
     },
     {
@@ -3064,7 +6249,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "gate/check.ps1",
-      "source_location": "L1656",
+      "source_location": "L1664",
       "weight": 1.0
     },
     {
@@ -3376,6 +6561,39 @@
       "weight": 1.0
     },
     {
+      "source": "gate_harmony_cs_gate_harmony",
+      "target": "gate_harmony_qgateharmony",
+      "relation": "contains",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "gate/harmony.cs",
+      "source_location": "L24",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony",
+      "target": "gate_harmony_asm",
+      "relation": "contains",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "gate/harmony.cs",
+      "source_location": "L88",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony",
+      "target": "gate_harmony_target",
+      "relation": "contains",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "gate/harmony.cs",
+      "source_location": "L89",
+      "weight": 1.0
+    },
+    {
       "source": "gate_outdated",
       "target": "gate_outdated_get_latest",
       "relation": "contains",
@@ -3460,7 +6678,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "selftest.ps1",
-      "source_location": "L1083",
+      "source_location": "L1105",
       "weight": 1.0
     },
     {
@@ -3471,7 +6689,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "selftest.ps1",
-      "source_location": "L1432",
+      "source_location": "L1454",
       "weight": 1.0
     },
     {
@@ -3482,7 +6700,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "selftest.ps1",
-      "source_location": "L1439",
+      "source_location": "L1461",
       "weight": 1.0
     },
     {
@@ -3493,7 +6711,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "selftest.ps1",
-      "source_location": "L1443",
+      "source_location": "L1465",
       "weight": 1.0
     },
     {
@@ -3504,7 +6722,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "selftest.ps1",
-      "source_location": "L1776",
+      "source_location": "L1798",
       "weight": 1.0
     },
     {
@@ -3640,6 +6858,127 @@
       "weight": 1.0
     },
     {
+      "source": "testdata_harmony_fixture_game_hud",
+      "target": "testdata_harmony_fixture_game_hud_hud",
+      "relation": "contains",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "testdata/harmony-fixture/Game/Hud.cs",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "testdata_harmony_fixture_harmony_harmonystub",
+      "target": "testdata_harmony_fixture_harmony_harmonystub_harmonylib_accesstools",
+      "relation": "contains",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "testdata/harmony-fixture/Harmony/HarmonyStub.cs",
+      "source_location": "L16",
+      "weight": 1.0
+    },
+    {
+      "source": "testdata_harmony_fixture_harmony_harmonystub",
+      "target": "csharp_namespace:d8806e74e794b351",
+      "relation": "contains",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "testdata/harmony-fixture/Harmony/HarmonyStub.cs",
+      "source_location": "L4",
+      "weight": 1.0
+    },
+    {
+      "source": "testdata_harmony_fixture_harmony_harmonystub",
+      "target": "testdata_harmony_fixture_harmony_harmonystub_harmonylib_methodtype",
+      "relation": "contains",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "testdata/harmony-fixture/Harmony/HarmonyStub.cs",
+      "source_location": "L6",
+      "weight": 1.0
+    },
+    {
+      "source": "testdata_harmony_fixture_harmony_harmonystub",
+      "target": "testdata_harmony_fixture_harmony_harmonystub_harmonylib_harmonypatch",
+      "relation": "contains",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "testdata/harmony-fixture/Harmony/HarmonyStub.cs",
+      "source_location": "L8",
+      "weight": 1.0
+    },
+    {
+      "source": "testdata_harmony_fixture_mod_patches",
+      "target": "testdata_harmony_fixture_mod_patches_fixture_healthgetterpatch",
+      "relation": "contains",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "testdata/harmony-fixture/Mod/Patches.cs",
+      "source_location": "L12",
+      "weight": 1.0
+    },
+    {
+      "source": "testdata_harmony_fixture_mod_patches",
+      "target": "testdata_harmony_fixture_mod_patches_fixture_statuspatch",
+      "relation": "contains",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "testdata/harmony-fixture/Mod/Patches.cs",
+      "source_location": "L19",
+      "weight": 1.0
+    },
+    {
+      "source": "testdata_harmony_fixture_mod_patches",
+      "target": "testdata_harmony_fixture_mod_patches_fixture_staminapatch",
+      "relation": "contains",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "testdata/harmony-fixture/Mod/Patches.cs",
+      "source_location": "L25",
+      "weight": 1.0
+    },
+    {
+      "source": "testdata_harmony_fixture_mod_patches",
+      "target": "csharp_namespace:b79957adcf9f3730",
+      "relation": "contains",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "testdata/harmony-fixture/Mod/Patches.cs",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "testdata_harmony_fixture_mod_patches",
+      "target": "testdata_harmony_fixture_mod_patches_fixture_lookups",
+      "relation": "contains",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "testdata/harmony-fixture/Mod/Patches.cs",
+      "source_location": "L31",
+      "weight": 1.0
+    },
+    {
+      "source": "testdata_harmony_fixture_mod_patches",
+      "target": "testdata_harmony_fixture_mod_patches_fixture_healthpatch",
+      "relation": "contains",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "testdata/harmony-fixture/Mod/Patches.cs",
+      "source_location": "L6",
+      "weight": 1.0
+    },
+    {
       "source": "testdata_rust_fixture_src_main",
       "target": "testdata_rust_fixture_src_main_adds",
       "relation": "contains",
@@ -3739,6 +7078,424 @@
       "weight": 1.0
     },
     {
+      "source": "gate_harmony_qgateharmony",
+      "target": "gate_harmony_qgateharmony_load",
+      "relation": "method",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "gate/harmony.cs",
+      "source_location": "L108",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony",
+      "target": "gate_harmony_qgateharmony_index",
+      "relation": "method",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "gate/harmony.cs",
+      "source_location": "L118",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony",
+      "target": "gate_harmony_qgateharmony_mapsource",
+      "relation": "method",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "gate/harmony.cs",
+      "source_location": "L126",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony",
+      "target": "gate_harmony_qgateharmony_where",
+      "relation": "method",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "gate/harmony.cs",
+      "source_location": "L143",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony",
+      "target": "gate_harmony_qgateharmony_attrname",
+      "relation": "method",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "gate/harmony.cs",
+      "source_location": "L152",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony",
+      "target": "gate_harmony_qgateharmony_has",
+      "relation": "method",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "gate/harmony.cs",
+      "source_location": "L162",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony",
+      "target": "gate_harmony_qgateharmony_merge",
+      "relation": "method",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "gate/harmony.cs",
+      "source_location": "L167",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony",
+      "target": "gate_harmony_qgateharmony_patchkind",
+      "relation": "method",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "gate/harmony.cs",
+      "source_location": "L192",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony",
+      "target": "gate_harmony_qgateharmony_checkattributes",
+      "relation": "method",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "gate/harmony.cs",
+      "source_location": "L208",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony",
+      "target": "gate_harmony_qgateharmony_resolve",
+      "relation": "method",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "gate/harmony.cs",
+      "source_location": "L240",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony",
+      "target": "gate_harmony_qgateharmony_getprimitivetype",
+      "relation": "method",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "gate/harmony.cs",
+      "source_location": "L28",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony",
+      "target": "gate_harmony_qgateharmony_checkparams",
+      "relation": "method",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "gate/harmony.cs",
+      "source_location": "L286",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony",
+      "target": "gate_harmony_qgateharmony_gettypefromdefinition",
+      "relation": "method",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "gate/harmony.cs",
+      "source_location": "L29",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony",
+      "target": "gate_harmony_qgateharmony_gettypefromreference",
+      "relation": "method",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "gate/harmony.cs",
+      "source_location": "L30",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony",
+      "target": "gate_harmony_qgateharmony_gettypefromspecification",
+      "relation": "method",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "gate/harmony.cs",
+      "source_location": "L31",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony",
+      "target": "gate_harmony_qgateharmony_isdelegate",
+      "relation": "method",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "gate/harmony.cs",
+      "source_location": "L317",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony",
+      "target": "gate_harmony_qgateharmony_getszarraytype",
+      "relation": "method",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "gate/harmony.cs",
+      "source_location": "L32",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony",
+      "target": "gate_harmony_qgateharmony_basename",
+      "relation": "method",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "gate/harmony.cs",
+      "source_location": "L324",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony",
+      "target": "gate_harmony_qgateharmony_getarraytype",
+      "relation": "method",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "gate/harmony.cs",
+      "source_location": "L33",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony",
+      "target": "gate_harmony_qgateharmony_hasmember",
+      "relation": "method",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "gate/harmony.cs",
+      "source_location": "L333",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony",
+      "target": "gate_harmony_qgateharmony_getbyreferencetype",
+      "relation": "method",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "gate/harmony.cs",
+      "source_location": "L34",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony",
+      "target": "gate_harmony_qgateharmony_getpointertype",
+      "relation": "method",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "gate/harmony.cs",
+      "source_location": "L35",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony",
+      "target": "gate_harmony_qgateharmony_getgenericinstantiation",
+      "relation": "method",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "gate/harmony.cs",
+      "source_location": "L36",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony",
+      "target": "gate_harmony_qgateharmony_checkaccesstools",
+      "relation": "method",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "gate/harmony.cs",
+      "source_location": "L360",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony",
+      "target": "gate_harmony_qgateharmony_getgenerictypeparameter",
+      "relation": "method",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "gate/harmony.cs",
+      "source_location": "L37",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony",
+      "target": "gate_harmony_qgateharmony_getgenericmethodparameter",
+      "relation": "method",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "gate/harmony.cs",
+      "source_location": "L38",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony",
+      "target": "gate_harmony_qgateharmony_getfunctionpointertype",
+      "relation": "method",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "gate/harmony.cs",
+      "source_location": "L39",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony",
+      "target": "gate_harmony_qgateharmony_getmodifiedtype",
+      "relation": "method",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "gate/harmony.cs",
+      "source_location": "L40",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony",
+      "target": "gate_harmony_qgateharmony_getpinnedtype",
+      "relation": "method",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "gate/harmony.cs",
+      "source_location": "L41",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony",
+      "target": "gate_harmony_qgateharmony_callee",
+      "relation": "method",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "gate/harmony.cs",
+      "source_location": "L415",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony",
+      "target": "gate_harmony_qgateharmony_getsystemtype",
+      "relation": "method",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "gate/harmony.cs",
+      "source_location": "L42",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony",
+      "target": "gate_harmony_qgateharmony_issystemtype",
+      "relation": "method",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "gate/harmony.cs",
+      "source_location": "L43",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony",
+      "target": "gate_harmony_qgateharmony_checkaccess",
+      "relation": "method",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "gate/harmony.cs",
+      "source_location": "L431",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony",
+      "target": "gate_harmony_qgateharmony_gettypefromserializedname",
+      "relation": "method",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "gate/harmony.cs",
+      "source_location": "L44",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony",
+      "target": "gate_harmony_qgateharmony_getunderlyingenumtype",
+      "relation": "method",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "gate/harmony.cs",
+      "source_location": "L46",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony",
+      "target": "gate_harmony_qgateharmony_name",
+      "relation": "method",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "gate/harmony.cs",
+      "source_location": "L57",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony",
+      "target": "gate_harmony_qgateharmony_norm",
+      "relation": "method",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "gate/harmony.cs",
+      "source_location": "L66",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_target",
+      "target": "gate_harmony_target_clone",
+      "relation": "method",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "gate/harmony.cs",
+      "source_location": "L89",
+      "weight": 1.0
+    },
+    {
       "source": "testdata_dotnet_fixture_greeter_fixture_greeter",
       "target": "testdata_dotnet_fixture_greeter_fixture_greeter_greet",
       "relation": "method",
@@ -3750,8 +7507,107 @@
       "weight": 1.0
     },
     {
+      "source": "testdata_harmony_fixture_game_hud_hud",
+      "target": "testdata_harmony_fixture_game_hud_hud_updatehealth",
+      "relation": "method",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "testdata/harmony-fixture/Game/Hud.cs",
+      "source_location": "L7",
+      "weight": 1.0
+    },
+    {
+      "source": "testdata_harmony_fixture_harmony_harmonystub_harmonylib_accesstools",
+      "target": "testdata_harmony_fixture_harmony_harmonystub_harmonylib_accesstools_method",
+      "relation": "method",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "testdata/harmony-fixture/Harmony/HarmonyStub.cs",
+      "source_location": "L18",
+      "weight": 1.0
+    },
+    {
+      "source": "testdata_harmony_fixture_harmony_harmonystub_harmonylib_accesstools",
+      "target": "testdata_harmony_fixture_harmony_harmonystub_harmonylib_accesstools_field",
+      "relation": "method",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "testdata/harmony-fixture/Harmony/HarmonyStub.cs",
+      "source_location": "L20",
+      "weight": 1.0
+    },
+    {
+      "source": "testdata_harmony_fixture_mod_patches_fixture_healthgetterpatch",
+      "target": "testdata_harmony_fixture_mod_patches_fixture_healthgetterpatch_postfix",
+      "relation": "method",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "testdata/harmony-fixture/Mod/Patches.cs",
+      "source_location": "L15",
+      "weight": 1.0
+    },
+    {
+      "source": "testdata_harmony_fixture_mod_patches_fixture_healthpatch",
+      "target": "testdata_harmony_fixture_mod_patches_fixture_healthpatch_postfix",
+      "relation": "method",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "testdata/harmony-fixture/Mod/Patches.cs",
+      "source_location": "L9",
+      "weight": 1.0
+    },
+    {
+      "source": "testdata_harmony_fixture_mod_patches_fixture_lookups",
+      "target": "testdata_harmony_fixture_mod_patches_fixture_lookups_valid",
+      "relation": "method",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "testdata/harmony-fixture/Mod/Patches.cs",
+      "source_location": "L33",
+      "weight": 1.0
+    },
+    {
+      "source": "testdata_harmony_fixture_mod_patches_fixture_lookups",
+      "target": "testdata_harmony_fixture_mod_patches_fixture_lookups_dangling",
+      "relation": "method",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "testdata/harmony-fixture/Mod/Patches.cs",
+      "source_location": "L35",
+      "weight": 1.0
+    },
+    {
+      "source": "testdata_harmony_fixture_mod_patches_fixture_staminapatch",
+      "target": "testdata_harmony_fixture_mod_patches_fixture_staminapatch_prefix",
+      "relation": "method",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "testdata/harmony-fixture/Mod/Patches.cs",
+      "source_location": "L28",
+      "weight": 1.0
+    },
+    {
+      "source": "testdata_harmony_fixture_mod_patches_fixture_statuspatch",
+      "target": "testdata_harmony_fixture_mod_patches_fixture_statuspatch_postfix",
+      "relation": "method",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "testdata/harmony-fixture/Mod/Patches.cs",
+      "source_location": "L22",
+      "weight": 1.0
+    },
+    {
       "source": "testdata_dotnet_fixture_fixture",
-      "target": "framework_net8_0",
+      "target": "testdata_dotnet_fixture_fixture_csproj_framework_net8_0",
       "relation": "references",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -3761,12 +7617,132 @@
     },
     {
       "source": "testdata_dotnet_fixture_fixture",
-      "target": "sdk_microsoft_net_sdk",
+      "target": "testdata_dotnet_fixture_fixture_csproj_sdk_microsoft_net_sdk",
       "relation": "references",
       "_origin": "ast",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "testdata/dotnet-fixture/Fixture.csproj",
+      "weight": 1.0
+    },
+    {
+      "source": "testdata_harmony_fixture_game_game",
+      "target": "testdata_harmony_fixture_game_game_csproj_framework_netstandard2_0",
+      "relation": "references",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "testdata/harmony-fixture/Game/Game.csproj",
+      "weight": 1.0
+    },
+    {
+      "source": "testdata_harmony_fixture_game_game",
+      "target": "testdata_harmony_fixture_game_game_csproj_sdk_microsoft_net_sdk",
+      "relation": "references",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "testdata/harmony-fixture/Game/Game.csproj",
+      "weight": 1.0
+    },
+    {
+      "source": "testdata_harmony_fixture_harmony_harmony",
+      "target": "testdata_harmony_fixture_harmony_harmony_csproj_framework_netstandard2_0",
+      "relation": "references",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "testdata/harmony-fixture/Harmony/Harmony.csproj",
+      "weight": 1.0
+    },
+    {
+      "source": "testdata_harmony_fixture_harmony_harmony",
+      "target": "testdata_harmony_fixture_harmony_harmony_csproj_sdk_microsoft_net_sdk",
+      "relation": "references",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "testdata/harmony-fixture/Harmony/Harmony.csproj",
+      "weight": 1.0
+    },
+    {
+      "source": "testdata_harmony_fixture_mod_mod",
+      "target": "testdata_harmony_fixture_mod_mod_csproj_framework_net8_0",
+      "relation": "references",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "testdata/harmony-fixture/Mod/Mod.csproj",
+      "weight": 1.0
+    },
+    {
+      "source": "testdata_harmony_fixture_mod_mod",
+      "target": "testdata_harmony_fixture_mod_mod_csproj_sdk_microsoft_net_sdk",
+      "relation": "references",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "testdata/harmony-fixture/Mod/Mod.csproj",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony_checkattributes",
+      "target": "gate_harmony_target_clone",
+      "relation": "calls",
+      "_origin": "ast",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "context": "call",
+      "source_file": "gate/harmony.cs",
+      "source_location": "L228",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony_run",
+      "target": "gate_harmony_qgateharmony_index",
+      "relation": "calls",
+      "_origin": "ast",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "context": "call",
+      "source_file": "gate/harmony.cs",
+      "source_location": "L100",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony_run",
+      "target": "gate_harmony_qgateharmony_mapsource",
+      "relation": "calls",
+      "_origin": "ast",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "context": "call",
+      "source_file": "gate/harmony.cs",
+      "source_location": "L102",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony_run",
+      "target": "gate_harmony_qgateharmony_checkattributes",
+      "relation": "calls",
+      "_origin": "ast",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "context": "call",
+      "source_file": "gate/harmony.cs",
+      "source_location": "L103",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony_run",
+      "target": "gate_harmony_qgateharmony_checkaccesstools",
+      "relation": "calls",
+      "_origin": "ast",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "context": "call",
+      "source_file": "gate/harmony.cs",
+      "source_location": "L104",
       "weight": 1.0
     },
     {
@@ -3790,7 +7766,7 @@
       "confidence_score": 0.85,
       "context": "call",
       "source_file": "gate/check.ps1",
-      "source_location": "L1440",
+      "source_location": "L1448",
       "weight": 1.0
     },
     {
@@ -3802,7 +7778,7 @@
       "confidence_score": 0.85,
       "context": "call",
       "source_file": "gate/check.ps1",
-      "source_location": "L1333",
+      "source_location": "L1341",
       "weight": 1.0
     },
     {
@@ -3814,7 +7790,7 @@
       "confidence_score": 0.85,
       "context": "call",
       "source_file": "gate/check.ps1",
-      "source_location": "L1657",
+      "source_location": "L1665",
       "weight": 1.0
     },
     {
@@ -3826,7 +7802,7 @@
       "confidence_score": 0.85,
       "context": "call",
       "source_file": "gate/check.ps1",
-      "source_location": "L1660",
+      "source_location": "L1668",
       "weight": 1.0
     },
     {
@@ -3838,7 +7814,7 @@
       "confidence_score": 0.85,
       "context": "call",
       "source_file": "gate/check.ps1",
-      "source_location": "L1683",
+      "source_location": "L1691",
       "weight": 1.0
     },
     {
@@ -3850,7 +7826,7 @@
       "confidence_score": 0.85,
       "context": "call",
       "source_file": "gate/check.ps1",
-      "source_location": "L1094",
+      "source_location": "L1102",
       "weight": 1.0
     },
     {
@@ -3862,7 +7838,19 @@
       "confidence_score": 0.85,
       "context": "call",
       "source_file": "gate/check.ps1",
-      "source_location": "L1176",
+      "source_location": "L1184",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_harmony_qgateharmony_getarraytype",
+      "target": "string",
+      "relation": "calls",
+      "_origin": "ast",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "context": "call",
+      "source_file": "gate/harmony.cs",
+      "source_location": "L33",
       "weight": 1.0
     },
     {
@@ -3886,7 +7874,7 @@
       "confidence_score": 0.85,
       "context": "call",
       "source_file": "selftest.ps1",
-      "source_location": "L1441",
+      "source_location": "L1463",
       "weight": 1.0
     },
     {
@@ -4852,5 +8840,5 @@
       "source_file": "HANDOFF.md"
     }
   ],
-  "built_at_commit": "50f2c88ff9e873daf9b80727bc0a06d23263f916"
+  "built_at_commit": "08b5f568a197177a02ad919e528b3bad45687ac5"
 }
