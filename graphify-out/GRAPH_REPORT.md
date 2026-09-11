@@ -1,28 +1,28 @@
-# Graph Report - quality-gate  (2026-09-10)
+# Graph Report - quality-gate  (2026-09-11)
 
 ## Corpus Check
-- 30 files · ~70,688 words
+- 30 files · ~70,874 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 184 nodes · 219 edges · 31 communities (11 shown, 12 thin omitted)
+- 182 nodes · 216 edges · 32 communities (11 shown, 12 thin omitted)
 - Extraction: 86% EXTRACTED · 14% INFERRED · 0% AMBIGUOUS · INFERRED: 30 edges (avg confidence: 0.85)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `3a5bf9a6`
+- Built from commit: `4c33d3f4`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
 ## Community Hubs (Navigation)
 - GitHub Actions quality-gate workflow
 - detect.ps1
-- Coverage measures happy paths; a green suite proves nothing
+- A right outcome does not prove the right cause (§0.1)
 - .golangci.yml template
 - Greeter.cs
 - selftest.ps1
-- Claude Code Stop hook (exit code 2)
-- ignoreFiles
+- qgate wire (repo wiring, config only)
+- extends
 - package.json
 - check.ps1
 - quality_gate job anchor shared by both hooks
@@ -36,7 +36,7 @@
 - python-fixture
 - CLAUDE.md
 - Fixture.csproj
-- install.ps1
+- rust-fixture
 - string
 
 ## God Nodes (most connected - your core abstractions)
@@ -60,8 +60,8 @@
   HANDOFF.md → PLAYBOOK.md
 - `Set-OutdatedCache()` --calls--> `Get-PathKey()`  [INFERRED]
   selftest.ps1 → gate/detect.ps1
-- `Install-WebConfigs()` --calls--> `Test-AnyFile()`  [INFERRED]
-  install.ps1 → gate/detect.ps1
+- `Cancellability findings (context propagation)` --conceptually_related_to--> `.golangci.yml template`  [INFERRED]
+  PLAYBOOK.md → templates/.golangci.yml
 
 ## Import Cycles
 - None detected.
@@ -71,31 +71,31 @@
 - **Measured lefthook-on-Windows traps behind one run: line** — templates_lefthook_exit_code_trap, templates_lefthook_cmd_shim, templates_lefthook_command_v_trap, templates_lefthook_quote_stripping_trap, templates_lefthook_quality_gate_job [EXTRACTED 1.00]
 - **Commit-path coverage and the staged-index guard** — handoff_hook_coverage_matrix, handoff_cherry_pick_revert_uncovered, handoff_parallel_commit_race, handoff_git_index_file_marker, readme_staged_index_guard, templates_lefthook_quality_gate_job [INFERRED 0.95]
 
-## Communities (31 total, 12 thin omitted)
+## Communities (32 total, 12 thin omitted)
 
 ### Community 0 - "GitHub Actions quality-gate workflow"
-Cohesion: 0.16
-Nodes (15): GOTOOLCHAIN=auto unpacking races produce 'missing std package', One entry point, stop on first failed phase, Wave mechanism: cleanup queue lives in the linter config, -Baseline adoption on a legacy codebase, ESLint --suppress-all baseline, quality-gate (qgate), Rust stack phases, Marker-file stack detection (+7 more)
+Cohesion: 0.18
+Nodes (14): GOTOOLCHAIN=auto unpacking races produce 'missing std package', One entry point, stop on first failed phase, Wave mechanism: cleanup queue lives in the linter config, -Baseline adoption on a legacy codebase, ESLint --suppress-all baseline, Rust stack phases, Marker-file stack detection, Stale tool binary vs go.mod toolchain check (+6 more)
 
 ### Community 1 - "detect.ps1"
-Cohesion: 0.18
-Nodes (17): Find-Marker(), Get-ChecksHash(), Get-CustomChecks(), Get-DefaultTrustStore(), Get-GitIgnoredSet(), Get-GoBuiltWith(), Get-GodotBin(), Get-Stacks() (+9 more)
+Cohesion: 0.16
+Nodes (18): Find-Marker(), Get-ChecksHash(), Get-CustomChecks(), Get-DefaultTrustStore(), Get-GitIgnoredSet(), Get-GoBuiltWith(), Get-GodotBin(), Get-Stacks() (+10 more)
 
-### Community 2 - "Coverage measures happy paths; a green suite proves nothing"
-Cohesion: 0.17
-Nodes (13): git check-ignore exit codes; --stdin batch unusable on Windows, Selftest counts 121 online / 115 offline, Coverage measures happy paths; a green suite proves nothing, Mutation check of existing tests, PowerShell reads an empty value as absence, Red-then-green verification, A right outcome does not prove the right cause (§0.1), Negative check asserts outcome + applied cause + absent cause (+5 more)
+### Community 2 - "A right outcome does not prove the right cause (§0.1)"
+Cohesion: 0.20
+Nodes (11): git check-ignore exit codes; --stdin batch unusable on Windows, Selftest counts 121 online / 115 offline, PowerShell reads an empty value as absence, Red-then-green verification, A right outcome does not prove the right cause (§0.1), Negative check asserts outcome + applied cause + absent cause, Fail closed invariant (no check phase ran), Godot stack phases (+3 more)
 
 ### Community 3 - ".golangci.yml template"
-Cohesion: 0.10
-Nodes (23): "Gate is wrong" issue template, cherry-pick and revert cannot be covered cheaply, Deliberately chosen boundaries (not TODOs), Measured git hook coverage matrix (git 2.53), Incoming agent reports: symptom right, cause wrong half the time, git add --renormalize + checkout is a no-op for CRLF, Cancellability findings (context propagation), Final-write timeout created too early (+15 more)
+Cohesion: 0.11
+Nodes (18): "Gate is wrong" issue template, Incoming agent reports: symptom right, cause wrong half the time, git add --renormalize + checkout is a no-op for CRLF, Cancellability findings (context propagation), Coverage measures happy paths; a green suite proves nothing, Final-write timeout created too early, Mutation check of existing tests, Second-engine review (+10 more)
 
-### Community 6 - "Claude Code Stop hook (exit code 2)"
-Cohesion: 0.22
-Nodes (9): GIT_INDEX_FILE marks that we are inside a commit, Parallel commits in one worktree swallow each other's staged files, A signature-changing commit must carry its callers, Commit discipline (per module, explicit paths, consequence in message), Verify the hook actually executes (relative path silently skipped it), Green-commit marker in TEMP for the Stop hook, Staged-tree guard via git write-tree, Claude Code Stop hook (exit code 2) (+1 more)
+### Community 6 - "qgate wire (repo wiring, config only)"
+Cohesion: 0.15
+Nodes (15): cherry-pick and revert cannot be covered cheaply, Deliberately chosen boundaries (not TODOs), GIT_INDEX_FILE marks that we are inside a commit, Measured git hook coverage matrix (git 2.53), Parallel commits in one worktree swallow each other's staged files, A signature-changing commit must carry its callers, Commit discipline (per module, explicit paths, consequence in message), Verify the hook actually executes (relative path silently skipped it) (+7 more)
 
-### Community 7 - "ignoreFiles"
-Cohesion: 0.25
-Nodes (7): .cache/**, coverage/**, dist/**, stylelint-config-recommended-vue/scss, stylelint-config-standard-scss, extends, ignoreFiles
+### Community 7 - "extends"
+Cohesion: 0.40
+Nodes (4): stylelint-config-recommended-vue/scss, stylelint-config-standard-scss, extends, ignoreFiles
 
 ### Community 8 - "package.json"
 Cohesion: 0.29
@@ -106,34 +106,36 @@ Cohesion: 0.29
 Nodes (18): Fail(), Get-ChangedPaths(), Get-CppCompileDb(), Get-Descendants(), Get-DotnetChangedCs(), Get-DotnetEval(), Get-DotnetSharedFormat(), Get-DotnetTfms() (+10 more)
 
 ### Community 10 - "quality_gate job anchor shared by both hooks"
-Cohesion: 0.20
-Nodes (10): Three rules for a machine-readable deferral file, Suppression needs a named reason; stale suppressions flagged, qgate.deferrals.json (dated deferrals), -Quiet (silent only on green), exhaustive with default-signifies-exhaustive, nolintlint: no bare or dead suppressions, qgate.cmd is load-bearing under the Git shell, command -v probe is false under sh.exe (+2 more)
+Cohesion: 0.17
+Nodes (12): Three rules for a machine-readable deferral file, Suppression needs a named reason; stale suppressions flagged, qgate.deferrals.json (dated deferrals), qgate outdated, -Quiet (silent only on green), Vulnerability phase (govulncheck / npm audit), exhaustive with default-signifies-exhaustive, nolintlint: no bare or dead suppressions (+4 more)
 
 ### Community 11 - "Add"
 Cohesion: 0.40
-Nodes (4): T, Add(), main(), TestAdd()
+Nodes (4): testing.T, Add(), main(), TestAdd()
 
 ### Community 14 - "Proto stack phases (buf)"
 Cohesion: 0.67
 Nodes (3): Cross-stack fan-out on .proto change, Proto stack phases (buf), proto fixture buf.yaml (STANDARD lint, FILE breaking)
 
 ## Knowledge Gaps
-- **25 isolated node(s):** `gatefixture`, `python-fixture`, `graphify`, `net8.0`, `Microsoft.NET.Sdk` (+20 more)
-  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 76 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
+- **24 isolated node(s):** `stylelint-config-standard-scss`, `stylelint-config-recommended-vue/scss`, `ignoreFiles`, `net8.0`, `Microsoft.NET.Sdk` (+19 more)
+  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 75 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
 - **12 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `qgate wire (repo wiring, config only)` connect `.golangci.yml template` to `GitHub Actions quality-gate workflow`, `Claude Code Stop hook (exit code 2)`?**
-  _High betweenness centrality (0.093) - this node is a cross-community bridge._
-- **Why does `quality-gate (qgate)` connect `GitHub Actions quality-gate workflow` to `Coverage measures happy paths; a green suite proves nothing`, `.golangci.yml template`?**
-  _High betweenness centrality (0.046) - this node is a cross-community bridge._
+- **Why does `qgate wire (repo wiring, config only)` connect `qgate wire (repo wiring, config only)` to `GitHub Actions quality-gate workflow`, `.golangci.yml template`?**
+  _High betweenness centrality (0.095) - this node is a cross-community bridge._
+- **Why does `.golangci.yml template` connect `.golangci.yml template` to `quality_gate job anchor shared by both hooks`, `qgate wire (repo wiring, config only)`?**
+  _High betweenness centrality (0.069) - this node is a cross-community bridge._
+- **Why does `quality-gate (qgate)` connect `.golangci.yml template` to `GitHub Actions quality-gate workflow`?**
+  _High betweenness centrality (0.047) - this node is a cross-community bridge._
 - **Are the 2 inferred relationships involving `.golangci.yml template` (e.g. with `Cancellability findings (context propagation)` and `Unchecked errors: propagate, log-and-degrade, or join`) actually correct?**
   _`.golangci.yml template` has 2 INFERRED edges - model-reasoned connections that need verification._
 - **Are the 2 inferred relationships involving `Invoke-GodotStack()` (e.g. with `Get-GodotBin()` and `Test-GitIgnoredDir()`) actually correct?**
   _`Invoke-GodotStack()` has 2 INFERRED edges - model-reasoned connections that need verification._
-- **What connects `gatefixture`, `python-fixture`, `graphify` to the rest of the system?**
-  _25 weakly-connected nodes found - possible documentation gaps or missing edges._
+- **What connects `stylelint-config-standard-scss`, `stylelint-config-recommended-vue/scss`, `ignoreFiles` to the rest of the system?**
+  _24 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `.golangci.yml template` be split into smaller, more focused modules?**
-  _Cohesion score 0.09881422924901186 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.1111111111111111 - nodes in this community are weakly interconnected._

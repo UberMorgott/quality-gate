@@ -1,12 +1,12 @@
 {
   "0": "GitHub Actions quality-gate workflow",
   "1": "detect.ps1",
-  "2": "Coverage measures happy paths; a green suite proves nothing",
+  "2": "A right outcome does not prove the right cause (§0.1)",
   "3": ".golangci.yml template",
   "4": "Greeter.cs",
   "5": "selftest.ps1",
-  "6": "Claude Code Stop hook (exit code 2)",
-  "7": "ignoreFiles",
+  "6": "qgate wire (repo wiring, config only)",
+  "7": "extends",
   "8": "package.json",
   "9": "check.ps1",
   "10": "quality_gate job anchor shared by both hooks",
@@ -28,6 +28,7 @@
   "26": "CLAUDE.md",
   "27": "Fixture.csproj",
   "28": "install.ps1",
+  "29": "rust-fixture",
   "30": "trust.ps1",
   "31": "string"
 }

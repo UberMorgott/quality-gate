@@ -126,16 +126,16 @@
     "semantic_hash": "95af656e0dd8b458d943a5b06dd99b55"
   },
   "README.md": {
-    "mtime": 1789073410.7672358,
-    "seen": 1789073724.226186,
-    "ast_hash": "810bd27b29f6d33c3fe8ad204e302ef8",
+    "mtime": 1789126635.5144691,
+    "seen": 1789126637.097461,
+    "ast_hash": "a76258d2b579c02a45f4c0e0e3c674ee",
     "semantic_hash": ""
   },
   "templates/.golangci.yml": {
-    "mtime": 1788425698.1952028,
-    "seen": 1788781201.438951,
-    "ast_hash": "fef2fe8d46bea34b7221a6e4756be690",
-    "semantic_hash": "fef2fe8d46bea34b7221a6e4756be690"
+    "mtime": 1789126635.5154724,
+    "seen": 1789126637.097462,
+    "ast_hash": "05ee1cb5a45dd68161f202186cce8885",
+    "semantic_hash": ""
   },
   "templates/ci.yml": {
     "mtime": 1788685756.1631682,
