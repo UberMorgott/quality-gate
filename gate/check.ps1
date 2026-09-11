@@ -11,7 +11,7 @@
 # With no stack switch the changed side is auto-detected from git status.
 [CmdletBinding(PositionalBinding = $false)]
 param(
-    [string[]]$Only,      # base | go | web | rust | proto | godot | dotnet | cpp | custom -- restrict to these stacks (one value: -Only go,web)
+    [string[]]$Only,      # base | go | web | rust | proto | godot | dotnet | cpp | custom | deploy -- restrict to these stacks (one value: -Only go,web)
     [switch]$All,         # every detected stack, ignore git status
     [switch]$Fast,
     [switch]$Full,
@@ -263,7 +263,9 @@ $script:StackSoft = $false
 $script:SoftFailed = $false
 $script:Lines = @()
 # Set when the custom stack deliberately ran nothing: the checks are not trusted here,
-# or every one of them is full-level and this is the fast lane. Read once, by the
+# or every one of them is full-level and this is the fast lane. The deploy stack sets it
+# too: full-level only, and a machine without the deployed copy has nothing to compare
+# (CI never has the game installed). Read once, by the
 # zero-phase invariant at the bottom of this file.
 $script:CustomDeferred = $false
 # The same thing for the base stack: one of its phases declined because the tool it
@@ -1730,6 +1732,70 @@ function Invoke-CustomStack($s) {
     }
 }
 
+# --- deploy: is the copy the host loads the one this tree builds? ----------
+# quality-gate#26: "every rebuild of Auga gives a different hash" was measured false --
+# two builds in one directory, clean or incremental, are byte-identical. What differs
+# is the DIRECTORY: a deterministic build embeds the absolute obj\...\X.pdb path in
+# the debug directory, and the PDB id, MVID and PE timestamp are hashed from it, so
+# the same commit built in a worktree is 427 other bytes. A plain hash compare is
+# therefore correct; the job here is naming which of the two causes a mismatch is.
+function Get-PdbPath([string]$Path) {
+    # The CodeView entry: where the compiler wrote the .pdb. $null for a non-PE file.
+    try {
+        $fs = [IO.File]::OpenRead($Path)
+        try {
+            $pe = [Reflection.PortableExecutable.PEReader]::new($fs)
+            $cv = @($pe.ReadDebugDirectory() | Where-Object Type -eq 'CodeView')
+            if ($cv) { $pe.ReadCodeViewDebugDirectoryData($cv[0]).Path }
+        } finally { $fs.Dispose() }
+    } catch { $null }
+}
+
+function Invoke-DeployStack($s) {
+    $d = Get-DeployEntries $Root
+    if (-not $d) { return }
+    if ($d.Error) { Fail "deploy -- $($d.Error)"; return }
+    # Full only: the fast lane does not rebuild the release artifact, so a compare there
+    # would judge whatever build happened to be lying around.
+    if (-not $Full) {
+        $script:Lines += '[SKIP] deploy -- full level, not run in the fast lane'
+        $script:CustomDeferred = $true
+        return
+    }
+    foreach ($e in $d.Entries) {
+        # %VARS% expand, so a committed qgate.json can say %VALHEIM%\BepInEx\plugins\...
+        $built = [IO.Path]::GetFullPath([Environment]::ExpandEnvironmentVariables($e.Built), $Root)
+        $dep = [IO.Path]::GetFullPath([Environment]::ExpandEnvironmentVariables($e.Deployed), $Root)
+        $leaf = [IO.Path]::GetFileName($dep)
+        if (-not (Test-Path -LiteralPath $dep -PathType Leaf)) {
+            $script:Lines += "[SKIP] deploy $leaf -- not deployed on this machine ($dep)"
+            $script:CustomDeferred = $true
+            continue
+        }
+        if (-not (Test-Path -LiteralPath $built -PathType Leaf)) {
+            $script:Lines += "[SKIP] deploy $leaf -- nothing built at $built (declare the build that makes it in `"checks`")"
+            $script:CustomDeferred = $true
+            continue
+        }
+        Phase "deploy $leaf" {
+            $hb = (Get-FileHash -LiteralPath $built).Hash
+            $hd = (Get-FileHash -LiteralPath $dep).Hash
+            if ($hb -eq $hd) { return }
+            "built $($hb.Substring(0, 12)) != deployed $($hd.Substring(0, 12)) ($dep)"
+            $pb = Get-PdbPath $built
+            $pd = Get-PdbPath $dep
+            if ($pb -and $pd -and $pb -ne $pd) {
+                "the deployed copy was compiled in another directory ($pd, this tree: $pb) -- the compiler embeds that path, so the same source from another checkout or worktree is different bytes. Deploy from this tree, or make the build path-independent: <PathMap>`$(MSBuildThisFileDirectory)=/_/</PathMap>"
+            } elseif ((Get-Item -LiteralPath $built).LastWriteTimeUtc -gt (Get-Item -LiteralPath $dep).LastWriteTimeUtc) {
+                "the build is newer than the deployed copy -- redeploy: copy $built to $dep"
+            } else {
+                "the deployed copy is newer than this build -- it came from other source or another configuration; rebuild, then redeploy"
+            }
+            $global:LASTEXITCODE = 1
+        }
+    }
+}
+
 # --- run -------------------------------------------------------------------
 $cwd = (Get-Location).Path
 $report = @()
@@ -1759,6 +1825,7 @@ foreach ($s in $stacks) {
             'dotnet' { Invoke-DotnetStack $s }
             'cpp' { Invoke-CppStack $s }
             'custom' { Invoke-CustomStack $s }
+            'deploy' { Invoke-DeployStack $s }
         }
     } catch {
         # Fail closed: a crash in the gate is a failure, never a silent pass.

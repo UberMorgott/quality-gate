@@ -1954,6 +1954,56 @@ try {
     } finally { $env:QGATE_HOME = $priorQHome }
 } finally { $env:LOCALAPPDATA = $priorLocal; $env:QGATE_HOME = $priorQGate }
 
+# 35b. Deployed artifacts (quality-gate#26): qgate.json "deploy" compares the copy the
+# host loads with the one this tree built, and a mismatch names WHICH cause it is --
+# stale deploy, or the same source compiled in another directory (a deterministic build
+# embeds the obj path, measured: 427 bytes of Auga.dll between two checkouts of one commit).
+$dep = Join-Path $tmp 'deploy'
+New-Item -ItemType Directory -Path (Join-Path $dep 'out'), (Join-Path $dep 'game') | Out-Null
+[IO.File]::WriteAllText((Join-Path $dep 'qgate.json'), '{"deploy":[{"built":"out/Mod.dll","deployed":"game/Mod.dll"}]}')
+function Invoke-DeployGate([switch]$Fast) {
+    $a = @('-Root', $dep, '-Only', 'deploy'); if (-not $Fast) { $a += '-Full' }
+    $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') @a 2>&1 | Out-String)
+    [pscustomobject]@{ Code = $LASTEXITCODE; Out = $out }
+}
+# A real PE with a CodeView entry, so the directory diagnosis has a path to read.
+$peSrc = Get-ChildItem $PSHOME -Filter *.dll | Where-Object Length -lt 200000 |
+    Where-Object { [Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes($_.FullName)).Contains('.pdb') } | Select-Object -First 1
+$peBytes = [IO.File]::ReadAllBytes($peSrc.FullName)
+[IO.File]::WriteAllBytes((Join-Path $dep 'out\Mod.dll'), $peBytes)
+[IO.File]::WriteAllBytes((Join-Path $dep 'game\Mod.dll'), $peBytes)
+$r = Invoke-DeployGate
+Check 'deploy: an identical deployed copy passes' (($r.Code -eq 0) -and ($r.Out -match '\[PASS\] deploy Mod\.dll')) $r.Out
+$r = Invoke-DeployGate -Fast
+Check 'deploy: the fast lane skips it without failing' `
+    (($r.Code -eq 0) -and ($r.Out -match '\[SKIP\] deploy -- full level') -and ($r.Out -notmatch 'no check phase ran')) $r.Out
+# Same bytes except one character of the embedded .pdb path: another checkout, same source.
+$moved = [byte[]]$peBytes.Clone()
+$at = [Text.Encoding]::ASCII.GetString($moved).IndexOf('.pdb') - 1
+$moved[$at] = if ($moved[$at] -eq [byte][char]'X') { [byte][char]'Y' } else { [byte][char]'X' }
+[IO.File]::WriteAllBytes((Join-Path $dep 'game\Mod.dll'), $moved)
+$r = Invoke-DeployGate
+Check 'deploy: a copy compiled in another directory fails and says so' `
+    (($r.Code -ne 0) -and ($r.Out -match '\[FAIL\] deploy Mod\.dll') -and ($r.Out -match 'compiled in another directory') -and
+        ($r.Out -notmatch 'newer than')) $r.Out
+# An older deploy of different content: the plain stale case.
+[IO.File]::WriteAllText((Join-Path $dep 'out\Mod.dll'), 'v2')
+[IO.File]::WriteAllText((Join-Path $dep 'game\Mod.dll'), 'v1')
+(Get-Item (Join-Path $dep 'game\Mod.dll')).LastWriteTime = (Get-Date).AddHours(-1)
+$r = Invoke-DeployGate
+Check 'deploy: a stale deployed copy fails with redeploy' `
+    (($r.Code -ne 0) -and ($r.Out -match 'the build is newer than the deployed copy -- redeploy') -and
+        ($r.Out -notmatch 'another directory')) $r.Out
+# No deployed copy is a machine without the host (CI), not a finding.
+Remove-Item (Join-Path $dep 'game\Mod.dll')
+$r = Invoke-DeployGate
+Check 'deploy: a machine without the deployed copy skips, not fails' `
+    (($r.Code -eq 0) -and ($r.Out -match '\[SKIP\] deploy Mod\.dll -- not deployed on this machine')) $r.Out
+[IO.File]::WriteAllText((Join-Path $dep 'qgate.json'), '{"deploy":[{"built":"out/Mod.dll"}]}')
+$r = Invoke-DeployGate
+Check 'deploy: a malformed entry fails with the reason' `
+    (($r.Code -ne 0) -and ($r.Out -match '\[FAIL\] deploy') -and ($r.Out -match 'needs non-empty "built" and "deployed"')) $r.Out
+
 # 36. The C/C++ CMake stack. Its two halves ask different tools -- clang-format for the
 # format phase, cmake for configure and build -- and neither is on every machine, so
 # every check here either asserts what the gate does WITHOUT the tool, or is guarded

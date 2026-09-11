@@ -39,6 +39,7 @@ $script:KnownMarkers = [ordered]@{
     dotnet = '*.csproj'
     cpp    = 'CMakeLists.txt'
     custom = 'qgate.json with a non-empty "checks" array'
+    deploy = 'qgate.json with a non-empty "deploy" array'
 }
 
 # Directories that never hold a project we own.
@@ -281,6 +282,29 @@ function Get-CustomChecks([string]$Root) {
     [pscustomobject]@{ Checks = $checks; Error = '' }
 }
 
+# qgate.json "deploy": [{"built": "<path>", "deployed": "<path>"}] -- the copy a game or
+# host actually loads, compared with the one this tree builds (quality-gate#26). Paths,
+# not commands, so no trust is needed. Same contract as Get-CustomChecks: $null when
+# nothing is declared, else .Entries (Built/Deployed) and .Error.
+function Get-DeployEntries([string]$Root) {
+    $file = Join-Path $Root 'qgate.json'
+    if (-not (Test-Path $file)) { return $null }
+    $json = try { Get-Content $file -Raw | ConvertFrom-Json } catch { $null }
+    if ($null -eq $json -or $json.PSObject.Properties.Name -notcontains 'deploy') { return $null }
+    $raw = $json.deploy
+    if ($raw -isnot [Array]) { return [pscustomobject]@{ Entries = @(); Error = 'qgate.json "deploy" must be an array' } }
+    if ($raw.Count -eq 0) { return $null }
+    $entries = @()
+    for ($i = 0; $i -lt $raw.Count; $i++) {
+        $e = $raw[$i]
+        if ($e.built -isnot [string] -or -not $e.built.Trim() -or $e.deployed -isnot [string] -or -not $e.deployed.Trim()) {
+            return [pscustomobject]@{ Entries = @(); Error = "qgate.json deploy #$($i + 1) needs non-empty `"built`" and `"deployed`" strings" }
+        }
+        $entries += [pscustomobject]@{ Built = $e.built; Deployed = $e.deployed }
+    }
+    [pscustomobject]@{ Entries = $entries; Error = '' }
+}
+
 # Where this machine remembers which repositories may run their own commands. Per
 # user, never inside the repository: a trust marker a clone can carry is not trust.
 function Get-DefaultTrustStore {
@@ -488,6 +512,10 @@ function Get-Stacks([string]$Root) {
     # the stack, because the alternative is a broken config that reads as absence.
     if (Get-CustomChecks $Root) {
         $stacks += [pscustomobject]@{ Stack = 'custom'; Dir = $Root; Rel = ''; Marker = 'qgate.json'; Implemented = $true; Warn = '' }
+    }
+    # After custom, so a build declared in `checks` has written the artifact first.
+    if (Get-DeployEntries $Root) {
+        $stacks += [pscustomobject]@{ Stack = 'deploy'; Dir = $Root; Rel = ''; Marker = 'qgate.json'; Implemented = $true; Warn = '' }
     }
 
     # Declared, detected, NOT checked. Reported so nobody mistakes silence for a
