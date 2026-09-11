@@ -1,15 +1,15 @@
 {
-  "0": "GitHub Actions quality-gate workflow",
+  "0": "Patches.cs",
   "1": "detect.ps1",
-  "2": "\"Gate is wrong\" issue template",
-  "3": "qgate wire (repo wiring, config only)",
-  "4": "MethodType",
+  "2": "Coverage measures happy paths; a green suite proves nothing",
+  "3": ".golangci.yml template",
+  "4": "Lookups",
   "5": "selftest.ps1",
   "6": "QGateHarmony",
   "7": "extends",
   "8": "package.json",
   "9": "check.ps1",
-  "10": ".golangci.yml template",
+  "10": "quality_gate job anchor shared by both hooks",
   "11": "Add",
   "12": "main.rs",
   "13": "outdated.ps1",
@@ -34,5 +34,11 @@
   "32": "Harmony.csproj",
   "33": "Mod.csproj",
   "34": "harmony.ps1",
-  "35": "app.ps1"
+  "35": "app.ps1",
+  "36": ".Scan",
+  "37": ".Lookup",
+  "38": "MetadataReader",
+  "39": ".CheckAttributes",
+  "40": ".Run",
+  "41": "Claude Code Stop hook (exit code 2)"
 }

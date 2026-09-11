@@ -42,9 +42,9 @@
     "semantic_hash": ""
   },
   "selftest.ps1": {
-    "mtime": 1789140344.7323842,
-    "seen": 1789140345.2092404,
-    "ast_hash": "0c7532d43efbc3a64008c8ce8fa496c9",
+    "mtime": 1789141087.0276022,
+    "seen": 1789141507.8846655,
+    "ast_hash": "9702b3c992827c09ef9b18cd611c15b9",
     "semantic_hash": ""
   },
   "templates/.stylelintrc.json": {
@@ -252,15 +252,15 @@
     "semantic_hash": ""
   },
   "testdata/harmony-fixture/Mod/Patches.cs": {
-    "mtime": 1789140344.7323842,
-    "seen": 1789140345.2092512,
-    "ast_hash": "fa23661ca8869d344ba54c3f583d3e4f",
+    "mtime": 1789141084.5230415,
+    "seen": 1789141507.8846765,
+    "ast_hash": "638c9aa157d48b90e2b4547bebc63da9",
     "semantic_hash": ""
   },
   "gate/smoke.ps1": {
-    "mtime": 1789139534.171096,
-    "seen": 1789140345.209237,
-    "ast_hash": "c40f9367ed473a424ad14debb21ef4a7",
+    "mtime": 1789141912.3713765,
+    "seen": 1789141934.504089,
+    "ast_hash": "7c5e0f7448d10469554753e9c21cb8cf",
     "semantic_hash": ""
   },
   "testdata/smoke-fixture/app.ps1": {
