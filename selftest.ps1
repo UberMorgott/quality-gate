@@ -890,6 +890,8 @@ internal class Sealable
     Check 'argumentTypes right in number but wrong in type fail' `
         (($out -match 'Hud\.Damage\(Unit, System\.String\) not found; have \(Unit, System\.Single\)') -and
             ($out -match 'Hud\.Damage\(System\.String, System\.Single\) method not found \(AccessTools\.Method\)')) $out
+    Check 'argumentTypes wrong in number fail (a target that gained a parameter)' `
+        ($out -match 'Hud\.Damage\(Unit\) not found; have \(Unit, System\.Single\)') $out
     Check 'Type.GetMethod, "Type:Method" and TypeByName lookups are checked' `
         (($out -match 'Hud\.UpdateArmor method not found \(Type\.GetMethod\)') -and
             ($out -match 'Hud\.UpdateStamina method not found \(AccessTools\.Method\)') -and

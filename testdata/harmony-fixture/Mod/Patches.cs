@@ -43,6 +43,13 @@ public static class WrongTypesPatch
     public static void Prefix() { }
 }
 
+// Wrong number of arguments: the target gained a parameter (Valheim 1.0.7 Inventory.AddItem).
+[HarmonyPatch(typeof(Hud), "Damage", new[] { typeof(Unit) })]
+public static class ArityPatch
+{
+    public static void Prefix() { }
+}
+
 // Computed at runtime: counted as not checkable, never guessed at.
 [HarmonyPatch]
 public static class ComputedPatch
