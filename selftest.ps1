@@ -385,6 +385,21 @@ if ($dnSdks) {
     Check 'a missing relative reference is not blamed on the code' `
         (($r.Out -notmatch 'error CS') -and ($r.Out -notmatch 'error MSB')) $r.Out
 
+    # A HintPath into another project's bin/ INSIDE the repository is a build-order gap,
+    # not a missing game. Reported from the field: `..\Auga\bin\API\AugaAPI.dll`, the
+    # output of a sibling project, was reported as "game/SDK not installed".
+    [IO.File]::WriteAllText($dnProj, $dnProjClean.Replace('</Project>', @"
+  <ItemGroup>
+    <Reference Include="Sibling"><HintPath>Other\bin\API\Sibling.dll</HintPath></Reference>
+  </ItemGroup>
+</Project>
+"@))
+    $r = Invoke-Gate $dn
+    Check 'a missing in-repo build output names the build order, not the game' `
+        (($r.Code -eq 0) -and ($r.Out -match 'Sibling\.dll\) -- built by another project in this repo') -and
+            ($r.Out -notmatch 'game/SDK not installed')) $r.Out
+    [IO.File]::WriteAllText($dnProj, $dnProjClean)
+
     [IO.File]::WriteAllText($dnProj, $dnProjClean.Replace('net8.0', 'net99.0'))
     $r = Invoke-Gate $dn
     Check 'a target framework no installed SDK can build is a skip that names both' `
@@ -566,6 +581,28 @@ if ($dnSdks) {
     # drop the formatting check for the projects that CAN be loaded.
     Check 'leaving the unbuildable project out is not an error and not a dropped check' `
         (($out -notmatch 'error ') -and ($out -match '\[PASS\] format \(shared pass\)')) $out
+
+    # A Unity project's csproj are editor output, not dotnet projects. Reported from the
+    # field: six of them became six stacks of [UNKNOWN] and 260-reference skips, and they
+    # broke the shared format solution. One SKIP for the Unity project, left out of the
+    # shared pass, which still covers the two real projects beside it.
+    $dnUnity = Join-Path $tmp 'dotnet-unity'
+    Copy-Item $dnMultiSdk $dnUnity -Recurse
+    Remove-Item (Join-Path $dnUnity 'C') -Recurse -Force
+    $dnU = Join-Path $dnUnity 'U'
+    New-Item -ItemType Directory -Path (Join-Path $dnU 'ProjectSettings'), (Join-Path $dnU 'Assets') -Force | Out-Null
+    [IO.File]::WriteAllText((Join-Path $dnU 'ProjectSettings\ProjectVersion.txt'), "m_EditorVersion: 2022.3.62f1`n")
+    foreach ($n in 'Assembly-CSharp', 'Assembly-CSharp-Editor') {
+        [IO.File]::WriteAllText((Join-Path $dnU "$n.csproj"), $dnProjClean.Replace('</Project>', '<Nope'))
+    }
+    $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $dnUnity -All 2>&1 | Out-String)
+    $dnUnityCode = $LASTEXITCODE
+    Check 'a Unity project is one skip, and the shared pass still covers the real projects' `
+        (($dnUnityCode -eq 0) -and (@($out -split "`r?`n" | Where-Object { $_ -match '\[SKIP\] dotnet U/ .*Unity-generated' }).Count -eq 1) -and
+            ($out -match 'one pass over 2 projects')) "code=$dnUnityCode $out"
+    # The absence half: an unparseable Unity csproj would fail `refs` if it were a stack.
+    Check 'Unity-generated csproj are not stacks' `
+        (($out -notmatch 'Assembly-CSharp') -and ($out -notmatch 'could not load its solution')) $out
 
     # The whole-project check is the one CI and the generated pre-commit hook run, and on
     # a real mod it is 1397 WHITESPACE lines -- 323k chars, which the report's global

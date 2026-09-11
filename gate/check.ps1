@@ -576,7 +576,14 @@ function Get-DotnetSharedFormat([int]$MaxSdk, $Changed) {
         # The solution did not load. Nothing in that is a verdict on anyone's
         # whitespace, so the run goes back to the call it used to make and says so --
         # a check quietly downgraded is how a gate stops being one.
-        $script:Lines += '[WARN] the shared dotnet format pass could not load its solution -- falling back to one call per project'
+        # With the first error line: a fallback with no reason sends the reader to rerun
+        # the tool by hand. On the same line -- a passing stack's summary keeps only the
+        # [TAG] lines, so a second line would vanish exactly when the run is green.
+        $why = @($out -split "`r?`n" | Where-Object { $_ -match '\berror\b' } | Select-Object -First 1)
+        if (-not $why) { $why = @($out -split "`r?`n" | Where-Object { $_.Trim() } | Select-Object -First 1) }
+        $t = if ($why) { $why[0].Trim() -replace '\s+', ' ' } else { '' }
+        $why = if ($t) { " ($($t.Substring(0, [Math]::Min(200, $t.Length))))" } else { '' }
+        $script:Lines += "[WARN] the shared dotnet format pass could not load its solution -- falling back to one call per project$why"
         return $false
     }
     $byProj = @{}
@@ -765,7 +772,17 @@ function Invoke-DotnetStack($s) {
         # Format needed none of them (measured); a compiler does. Reported once, with
         # the count and a name, so the reader can tell "game not installed" from "the
         # csproj is wrong" without reading forty MSB3245 lines.
-        $script:Lines += "[SKIP] ${proj}: $($missing.Count) reference(s) missing ($([IO.Path]::GetFileName($missing[0].HintPath))) -- game/SDK not installed on this machine"
+        # A HintPath into bin/ or obj/ INSIDE this repository is another project's build
+        # output, not a game install. Reported from the field: `..\Auga\bin\API\AugaAPI.dll`
+        # was blamed on a missing game/SDK, the wrong cause and the wrong fix.
+        $rootDir = [IO.Path]::GetFullPath($Root).TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar
+        $built = @($missing | Where-Object {
+                $f = [IO.Path]::GetFullPath($_.HintPath, $s.Dir)
+                $f.StartsWith($rootDir, [StringComparison]::OrdinalIgnoreCase) -and
+                (@($f.Substring($rootDir.Length) -split '[\\/]') | Where-Object { $_ -in 'bin', 'obj' })
+            })
+        $cause = if ($built.Count -eq $missing.Count) { 'built by another project in this repo (build it first)' } else { 'game/SDK not installed on this machine' }
+        $script:Lines += "[SKIP] ${proj}: $($missing.Count) reference(s) missing ($([IO.Path]::GetFileName($missing[0].HintPath))) -- $cause"
         return
     }
     # No -warnaserror: real repos carry warnings and a fast lane stricter than CI is a
