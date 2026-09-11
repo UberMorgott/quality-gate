@@ -1,7 +1,7 @@
 # Graph Report - quality-gate  (2026-09-11)
 
 ## Corpus Check
-- 30 files · ~70,874 words
+- 30 files · ~72,248 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
@@ -10,7 +10,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `4c33d3f4`
+- Built from commit: `50f2c88f`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -60,8 +60,8 @@
   HANDOFF.md → PLAYBOOK.md
 - `Set-OutdatedCache()` --calls--> `Get-PathKey()`  [INFERRED]
   selftest.ps1 → gate/detect.ps1
-- `Cancellability findings (context propagation)` --conceptually_related_to--> `.golangci.yml template`  [INFERRED]
-  PLAYBOOK.md → templates/.golangci.yml
+- `.golangci.yml template` --references--> `Vulnerability phase (govulncheck / npm audit)`  [EXTRACTED]
+  templates/.golangci.yml → README.md
 
 ## Import Cycles
 - None detected.
