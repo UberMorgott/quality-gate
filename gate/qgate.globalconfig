@@ -1,0 +1,22 @@
+is_global = true
+
+# Rules whose DEFAULT severity is error, capped to warning. An error-severity analyzer
+# diagnostic fails the build, the gate then read that as a failed injection and rebuilt
+# without any analyzers at all: reported from the field, one stray `;;` (MA0037) in an
+# upstream mod dropped all 31 findings, a real ignored Stream.Read among them. The gate
+# reports analyzer diagnostics as findings, never as a reason to lose the whole pass.
+#
+# Per rule, not `dotnet_analyzer_diagnostic.severity = warning`: that bulk key raises
+# every suggestion-level rule to a warning too, and the volume is the thing the NoWarn
+# list in qgate.analyzers.props was built to bring down.
+#
+# Precedence (learn.microsoft.com, code-analysis/configuration-files): a repository's own
+# .editorconfig entry for the same rule still wins over this file, so a repository that
+# asked for error keeps error. global_level is left at its default: no SDK or package
+# global config sets these keys, so there is nothing to outrank.
+#
+# Meziantou.Analyzer 3.0.224 configuration/default.editorconfig lists exactly three
+# error-severity rules. MA0049 (type name matches its namespace) is not here: it is
+# silenced in qgate.analyzers.props beside MA0048, same class of rule.
+dotnet_diagnostic.MA0037.severity = warning
+dotnet_diagnostic.MA0039.severity = warning

@@ -95,6 +95,9 @@
     <NoWarn>$(NoWarn);MA0002;MA0046;MA0069;MA0006;MA0051;MA0048;MA0047;MA0008;MA0016;MA0015</NoWarn>
     <NoWarn>$(NoWarn);MA0023;MA0005;MA0011;MA0074;MA0009</NoWarn>
     <NoWarn>$(NoWarn);CA1310;CA1852;CA5351</NoWarn>
+    <!-- MA0049 type name matches its namespace: `namespace Auga { class Auga }` is the
+         public API other mods reference, same class as MA0048 above. Error by default. -->
+    <NoWarn>$(NoWarn);MA0049</NoWarn>
   </PropertyGroup>
 
   <!--
@@ -123,5 +126,8 @@
          -p:QGateUnity=true only when something there is called UnityEngine*. -->
     <PackageReference Include="Microsoft.Unity.Analyzers" Version="1.27.0" Condition="'$(QGateUnity)' == 'true'"
                       PrivateAssets="all" IncludeAssets="runtime;build;native;contentfiles;analyzers;buildtransitive" />
+    <!-- Caps the analyzer rules that default to ERROR; see the file for why and for what
+         still outranks it. -->
+    <GlobalAnalyzerConfigFiles Include="$(MSBuildThisFileDirectory)qgate.globalconfig" />
   </ItemGroup>
 </Project>

@@ -1273,6 +1273,7 @@ bin/qgate.ps1            единственная точка входа
 bin/qgate.cmd            shim для вызова без pwsh-префикса
 gate/check.ps1           выбор стеков, фазы, отчёт
 gate/qgate.analyzers.props анализаторы Roslyn, которые dotnet-фаза build вносит в чужую сборку
+gate/qgate.globalconfig  правила анализаторов с severity error по умолчанию, понижены до warning
 gate/qgate.gitleaks.toml набор правил base-фазы secrets: дефолт gitleaks минус три правила
 gate/qgate.typos.toml    конфиг base-фазы typos: хеши коммитов — не проза (кладётся ПОВЕРХ чужого
                          _typos.toml, а не вместо него)

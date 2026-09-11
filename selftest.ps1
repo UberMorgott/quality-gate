@@ -709,7 +709,7 @@ public sealed class Probe
 
     public int Find(string a, string b)
     {
-        var tag = a;
+        var tag = a; ;
         return tag.IndexOf(b);
     }
 
@@ -727,10 +727,17 @@ internal class Sealable
     $anaFastOut = $r.Out
     $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $dnAna -All -Full 2>&1 | Out-String)
     $dnAnaCode = $LASTEXITCODE
-    if ($out -match 'injection failed') {
+    # Only a RESTORE failure is a reason to skip: an analyzer error that read as a failed
+    # injection is the defect the `;;` in Find() above exists to catch.
+    if ($out -match 'injection failed[^\r\n]*\bNU\d') {
         Write-Output '[skip] analyzer packages could not be restored -- the injection checks cannot run'
     }
     else {
+        # MA0037 (empty statement) is ERROR by default in Meziantou. Reported from the
+        # field: one stray `;;` failed the analyzer build, the gate called it a failed
+        # injection and dropped every analyzer finding. It is a finding like any other.
+        Check 'an error-severity analyzer default does not drop the analyzer pass' `
+            (($out -notmatch 'injection failed') -and ($out -match 'analyzer diagnostic\(s\)[^\r\n]*MA0037')) $out
         Check 'analyzer diagnostics are reported at the full level' `
             (($out -match 'analyzer diagnostic\(s\)') -and ($out -match 'MA0084') -and ($out -match 'CA1001')) $out
         # The second noise pass, asserted as absence: the probe's Find() is still a

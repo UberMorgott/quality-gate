@@ -791,8 +791,14 @@ function Invoke-DotnetStack($s) {
         # because the gate wanted analyzers, so the build is repeated without them and the
         # verdict is the one the repository itself would get. `error CS` is what tells the
         # two apart -- the compiler ran and rejected the code, and that IS the verdict.
-        if ($LASTEXITCODE -ne 0 -and $anaArgs -and $o -notmatch '(?m):\s+error\s+CS') {
-            $reason = [regex]::Match($o, '(?m)error\s+(?:NU|MSB)\d+[^\r\n]{0,60}').Value
+        # An analyzer error is the same: the analyzers ran, nothing failed to inject.
+        # qgate.globalconfig caps the rules that default to error, so one left here is a
+        # severity the repository itself asked for. Reported from the field: MA0037 read
+        # as an injection failure and every analyzer finding went with it.
+        if ($LASTEXITCODE -ne 0 -and $anaArgs -and $o -notmatch '(?m):\s+error\s+(?:CS|CA|MA|IDE|UNT)\d+') {
+            # Any coded error, not just NU/MSB: a reason nobody can act on is the generic
+            # fallback the field report complained about.
+            $reason = [regex]::Match($o, '(?m)error\s+[A-Z]+\d+[^\r\n]{0,60}').Value
             if (-not $reason) { $reason = 'the build failed with the analyzers injected' }
             $o = (& dotnet build @buildArgs 2>&1 | Out-String).Trim()
             $anaArgs = @()
