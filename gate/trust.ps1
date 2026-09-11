@@ -56,7 +56,7 @@ if ($custom.Error) { Write-Output "[FAIL] $($custom.Error)"; exit 1 }
 Write-Output "These commands will run as you, from $Root, on every gate run:"
 foreach ($c in $custom.Checks) {
     Write-Output "  $($c.Name)  [$($c.Level) level, timeout $($c.TimeoutSec)s]"
-    Write-Output "    $($c.Run)"
+    Write-Output "    $(if ($c.Smoke) { 'smoke: ' + (ConvertTo-Json $c.Smoke -Compress -Depth 10) } else { $c.Run })"
 }
 $map[$key] = Get-ChecksHash $custom.Checks
 Save-TrustStore $map $store

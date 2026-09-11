@@ -262,9 +262,29 @@ function Get-CustomChecks([string]$Root) {
             return (& $bad "qgate.json check #${n} has no usable name ('$name') -- must match ^[a-z0-9][a-z0-9._-]*$")
         }
         if ($checks.Name -contains $name) { return (& $bad "qgate.json declares two checks named '$name'") }
-        $run = $c.run
-        if ($run -isnot [string] -or -not $run.Trim()) {
-            return (& $bad "qgate.json check '$name' needs a non-empty `"run`" string")
+        # A smoke check launches an app instead of a command line (gate/smoke.ps1). The
+        # shape is checked here so a malformed one is a [FAIL] custom, never a silent skip.
+        $smoke = $c.smoke
+        if ($null -ne $smoke) {
+            if ($smoke -isnot [Management.Automation.PSCustomObject]) { return (& $bad "qgate.json check '$name' has a `"smoke`" that is not an object") }
+            if ($null -ne $c.run) { return (& $bad "qgate.json check '$name' declares both `"run`" and `"smoke`" -- pick one") }
+            if ($smoke.exe -isnot [string] -or -not $smoke.exe.Trim()) {
+                return (& $bad "qgate.json check '$name' smoke needs a non-empty `"exe`" string")
+            }
+            if ($smoke.stages -isnot [Array] -or $smoke.stages.Count -eq 0 -or
+                @($smoke.stages | Where-Object { $_.name -isnot [string] -or $_.ready -isnot [string] -or -not $_.ready })) {
+                return (& $bad "qgate.json check '$name' smoke needs a `"stages`" array of {name, ready}")
+            }
+            # Smoke opens a real app for tens of seconds: never on every agent turn.
+            if ($null -ne $c.level -and [string]$c.level -cne 'full') {
+                return (& $bad "qgate.json check '$name' is a smoke check -- its level can only be full")
+            }
+            $run = ''
+        } else {
+            $run = $c.run
+            if ($run -isnot [string] -or -not $run.Trim()) {
+                return (& $bad "qgate.json check '$name' needs a non-empty `"run`" string")
+            }
         }
         $level = if ($null -eq $c.level) { 'full' } else { [string]$c.level }
         if ($level -cnotin 'fast', 'full') {
@@ -277,7 +297,7 @@ function Get-CustomChecks([string]$Root) {
             }
             $sec = [int]$c.timeoutSec
         }
-        $checks += [pscustomobject]@{ Name = $name; Run = $run; Level = $level; TimeoutSec = $sec }
+        $checks += [pscustomobject]@{ Name = $name; Run = $run; Level = $level; TimeoutSec = $sec; Smoke = $smoke }
     }
     [pscustomobject]@{ Checks = $checks; Error = '' }
 }
@@ -348,7 +368,10 @@ function Get-ChecksHash($Checks) {
     $canon = '[' + (@($names | ForEach-Object {
                 $c = $byName[$_]
                 '{"name":' + (ConvertTo-Json $c.Name -Compress) + ',"run":' + (ConvertTo-Json $c.Run -Compress) +
-                ',"level":' + (ConvertTo-Json $c.Level -Compress) + ',"timeoutSec":' + $c.TimeoutSec + '}'
+                ',"level":' + (ConvertTo-Json $c.Level -Compress) + ',"timeoutSec":' + $c.TimeoutSec +
+                # Only when present, so every hash trusted before smoke existed still holds.
+                # ponytail: key order inside smoke is part of the hash; reordering it re-asks trust.
+                $(if ($c.Smoke) { ',"smoke":' + (ConvertTo-Json $c.Smoke -Compress -Depth 10) }) + '}'
             }) -join ',') + ']'
     [BitConverter]::ToString(
         [Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($canon))).Replace('-', '').ToLowerInvariant()

@@ -29,6 +29,7 @@ param(
 
 $ErrorActionPreference = 'Continue'
 . (Join-Path $PSScriptRoot 'detect.ps1')
+. (Join-Path $PSScriptRoot 'smoke.ps1')
 
 # --- the command line ------------------------------------------------------
 # `if ($Only)` was a truthiness test, and PowerShell reads an empty value as absence
@@ -1686,6 +1687,7 @@ function Invoke-CustomStack($s) {
             $script:CustomDeferred = $true
             continue
         }
+        if ($c.Smoke) { Invoke-SmokeCheck $c; continue }
         # Redirected to files, not read from pipes: a process that fills a pipe nobody
         # is draining blocks forever, and the whole reason there is a timeout here is
         # that this command may not come back. Keyed by check AND process, like the Go

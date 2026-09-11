@@ -495,6 +495,77 @@ qgate trust -Remove     # забыть обратно
 **не** выдаёт: подключить репозиторий — не то же самое, что прочитать его команды; `wire` только
 печатает, сколько проверок объявлено и доверены ли они здесь.
 
+### Smoke-проверки (`smoke`)
+
+Проверка может вместо `run` объявить `smoke` — гейт сам запускает приложение/игру/сервис,
+проводит его по стадиям и читает лог (`gate/smoke.ps1`, только Windows). Проект даёт приложение
+и, если нужно, драйвер, который толкает его дальше меню (BepInEx-плагин, тестовый флаг); гейт даёт
+обвязку. Доверие — то же: `qgate trust` печатает весь объект `smoke`, любая его правка снимает
+доверие. Уровень — только `full`.
+
+| ключ | что делает |
+|---|---|
+| `exe` | обязателен; путь от корня репо, абсолютный или имя из PATH |
+| `args` | массив аргументов (кавычки гейт расставляет сам) |
+| `env` | объект переменных окружения для процесса |
+| `cwd` | рабочая папка, по умолчанию корень репо |
+| `log` | файл, который читается; по умолчанию stdout процесса. Если файл уже есть, он переносится в `<log>.prev` — старый лог не должен «найти» ready-строку до старта |
+| `stages` | обязателен: `[{name, ready, holdSec, baseline, tolerance}]`. По очереди: ждать regex `ready` в логе (после совпадения прошлой стадии), держать `holdSec` секунд, снять скриншот окна. Выход приложения после ready **последней** стадии — норма (драйвер сам закрыл игру) |
+| `errorPattern` | regex строки-ошибки; по умолчанию `\w+Exception:\|^\[(Error\|Fatal)\s*:\|^\s*(ERROR\|FATAL)\b\|Unhandled exception` |
+| `ignorePattern` | regex известного шума: такая ошибка игнорируется, **пока** не повторилась больше `repeatLimit` раз |
+| `repeatLimit` | по умолчанию 10: одна и та же ошибка (сообщение + первый кадр стека, цифры свёрнуты) чаще — `[repeats > N]`, FAIL в любом случае |
+| `closeSec` | по умолчанию 15: после `CloseMainWindow` ждать столько, потом убить дерево |
+
+`timeoutSec` проверки — на весь прогон. Все regex регистрозависимые (`(?i)` — если нужно иначе).
+
+FAIL: стадия не наступила (`timeout after Ns` или `the app exited (code N) before ...`), строка
+ошибки в логе (`xN <строка> | <кадр>`), повтор сверх `repeatLimit`, расхождение со скриншотом-эталоном,
+оставшийся процесс (`[LEAK]`, как у обычных checks). Закрытие: сначала `CloseMainWindow` (игра
+сохраняется и отпускает файлы), потом kill дерева.
+
+**Скриншоты.** На каждой стадии окно снимается через `PrintWindow` (флаг `PW_RENDERFULLCONTENT`,
+окно может быть перекрыто или за экраном) в `%TEMP%\qgate-smoke\<ключ>\<stage>.png`; путь — в
+строке `[PASS] <name> -- N screenshot(s) in <dir>`. Там же лог, stdout/stderr и data-папка
+последнего прогона (папка чистится в начале следующего). `baseline` (путь от корня репо) делает из
+скриншота проверку: доля пикселей, у которых R/G/B отличается больше чем на 16, против `tolerance`
+(по умолчанию `0.01`). Нет файла эталона — FAIL с готовой командой `Copy-Item '<png>' '<baseline>'`.
+Эталон привязан к разрешению и DPI машины: другой размер окна — FAIL `size differs`.
+
+**Изоляция данных.** Каждый прогон получает свежую пустую папку: `{dataDir}` в `args`, `env`,
+`cwd`, `log`, `baseline` и переменная `QGATE_DATA_DIR`. Для приложения, которое пишет данные
+пользователя (сейвы, конфиг, кеш), передать её — **обязательно**: гейт перенаправить сам не может.
+Замерено на Windows 11 26100: при `APPDATA`, `LOCALAPPDATA`, `USERPROFILE`, указывающих в
+другое место, `SHGetKnownFolderPath(FOLDERID_LocalAppDataLow)` — откуда Unity берёт
+`persistentDataPath` — всё равно вернул настоящий `C:\Users\<user>\AppData\LocalLow`
+(Local перенаправился, Roaming сломался с `0x80070002`). Поэтому гейт env не подменяет: это
+дало бы ложное чувство изоляции.
+
+Пример — Unity/BepInEx-игра (Valheim): `tools\AutotestDriver` — BepInEx-плагин, активный только с
+`-autotest <savedir>`: переводит сейвы в `<savedir>` (`Utils.SetSaveDataPath`), создаёт мир,
+заходит в него и сам закрывает игру, напечатав `done`. Раскладывает драйвер в `BepInEx\plugins`
+обычная `run`-проверка перед smoke (проверки идут в порядке файла):
+
+```json
+{"checks": [
+  {"name": "deploy-driver", "run": "pwsh -File tools/deploy-driver.ps1"},
+  {"name": "smoke", "timeoutSec": 600, "smoke": {
+    "exe": "D:/Steam/steamapps/common/Valheim/valheim.exe",
+    "cwd": "D:/Steam/steamapps/common/Valheim",
+    "args": ["-autotest", "{dataDir}", "-logFile", "{dataDir}/Player.log"],
+    "log": "D:/Steam/steamapps/common/Valheim/BepInEx/LogOutput.log",
+    "repeatLimit": 5,
+    "stages": [
+      {"name": "menu",  "ready": "Starting music menu", "holdSec": 10, "baseline": "tools/smoke/menu.png", "tolerance": 0.02},
+      {"name": "world", "ready": "Spawned after", "holdSec": 30},
+      {"name": "done",  "ready": "\\[Info\\s*:\\s*AutotestDriver\\] done"}
+    ]}}
+]}
+```
+
+`-logFile {dataDir}/Player.log` уводит и Unity-лог из `LocalLow`. Сейвы при этом в `{dataDir}` —
+даже если кто-то кликнет в окно и загрузит мир, настоящие `worlds_local`/`characters_local` не
+тронуты.
+
 ## Задеплоенный артефакт (`deploy`)
 
 Совпадает ли копия, которую грузит игра/хост, с тем, что собирает это дерево:
@@ -1319,9 +1390,10 @@ gate/detect.ps1          определение стеков по файлам-�
 gate/outdated.ps1        отчёт об устаревших прямых зависимостях и тулчейнах
 gate/stop-hook.ps1       обёртка для Stop-хука агента
 gate/trust.ps1           qgate trust: разрешить checks этого репозитория на этой машине
+gate/smoke.ps1           smoke-проверки из qgate.json: запуск приложения, стадии, лог, скриншоты
 install.ps1              qgate wire: конфигурация целевого репозитория
 _typos.toml              словарь этого репозитория для base-фазы typos (образец для чужих)
-selftest.ps1             red-then-green проверка самого гейта (241 checks на машине с полным
+selftest.ps1             red-then-green проверка самого гейта (280 checks на машине с полным
                          тулчейном; без сети или без SDK часть уходит в [skip] с причиной)
 templates/.golangci.yml  конфиг линтера с обоснованием каждого выбора
 templates/pre-commit     тело git-хука, когда lefthook недоступен

@@ -1902,12 +1902,87 @@ try {
             @{ Json = '{"checks":[{"name":"a","run":"exit 0"},{"name":"a","run":"exit 0"}]}'; Match = "two checks named 'a'" },
             @{ Json = '{"checks":[{"name":"a"}]}'; Match = 'needs a non-empty' },
             @{ Json = '{"checks":[{"name":"a","run":"exit 0","level":"sometimes"}]}'; Match = 'must be fast or full' },
-            @{ Json = '{"checks":"not an array"}'; Match = 'must be an array' })) {
+            @{ Json = '{"checks":"not an array"}'; Match = 'must be an array' },
+            @{ Json = '{"checks":[{"name":"s","smoke":{"exe":"x"}}]}'; Match = 'smoke needs a "stages" array' },
+            @{ Json = '{"checks":[{"name":"s","run":"exit 0","smoke":{"exe":"x","stages":[{"name":"m","ready":"r"}]}}]}'; Match = 'both "run" and "smoke"' },
+            @{ Json = '{"checks":[{"name":"s","level":"fast","smoke":{"exe":"x","stages":[{"name":"m","ready":"r"}]}}]}'; Match = 'its level can only be full' })) {
         [IO.File]::WriteAllText($custJson, $case.Json)
         Invoke-Trust $cust | Out-Null
         $r = Invoke-Gate $cust
         Check "malformed checks fail with the reason: $($case.Match)" `
             (($r.Code -ne 0) -and ($r.Out -match '\[FAIL\] custom') -and ($r.Out -match [regex]::Escape($case.Match))) $r.Out
+    }
+
+    # Smoke checks (gate/smoke.ps1): the gate launches the app a check declares, waits for
+    # each stage's ready line, captures the window, closes it and reads the log. The app
+    # is testdata/smoke-fixture/app.ps1, a small WinForms window placed off-screen -- no
+    # real game is ever launched here: it would cover the desktop and can touch real saves.
+    if ($IsWindows) {
+        $fx = Join-Path $PSScriptRoot 'testdata\smoke-fixture\app.ps1'
+        function Invoke-Smoke([string]$Mode, [hashtable]$Extra = @{}, [int]$Timeout = 60, [string]$Color = 'SeaGreen', $Stages) {
+            if (-not $Stages) { $Stages = @(@{ name = 'menu'; ready = 'Starting menu'; holdSec = 1 }, @{ name = 'world'; ready = 'Spawned in world'; holdSec = 1 }) }
+            $smoke = @{ exe = 'pwsh'; args = @('-NoProfile', '-File', $fx, $Mode, '{dataDir}', $Color); log = '{dataDir}/app.log'; stages = $Stages }
+            foreach ($k in $Extra.Keys) { $smoke[$k] = $Extra[$k] }
+            [IO.File]::WriteAllText($custJson, (@{ checks = @(@{ name = 'smoke'; timeoutSec = $Timeout; smoke = $smoke }) } | ConvertTo-Json -Depth 10))
+            Invoke-Trust $cust | Out-Null
+            $o = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $cust -All -Only 'custom' -Full 2>&1 | Out-String)
+            [pscustomobject]@{ Code = $LASTEXITCODE; Out = $o }
+        }
+
+        $r = Invoke-Smoke 'pass'
+        $runDir = if ($r.Out -match '\[PASS\] smoke -- 2 screenshot\(s\) in (\S+) \(') { $Matches[1] } else { '' }
+        Check 'a smoke check that reaches every stage passes and names its screenshots' `
+            (($r.Code -eq 0) -and $runDir -and ($r.Out -notmatch 'LEAK')) $r.Out
+        Check 'smoke captures the main window at each stage as a PNG' `
+            ($runDir -and @('menu', 'world' | Where-Object {
+                        $f = Join-Path $runDir "$_.png"
+                        (Test-Path $f) -and ([IO.File]::ReadAllBytes($f)[1..3] -join ',') -eq '80,78,71' }).Count -eq 2) $r.Out
+        # #27: the app's writes land in the per-run dir the gate handed out, through both
+        # channels (the {dataDir} argument and QGATE_DATA_DIR), and nowhere near the repo.
+        $save = if ($runDir) { Join-Path $runDir 'data\save.dat' } else { '' }
+        Check 'smoke hands the app an isolated per-run data dir ({dataDir} and QGATE_DATA_DIR)' `
+            ($save -and (Test-Path $save) -and ((Get-Content $save -Raw).Trim() -eq "env=$(Join-Path $runDir 'data')") -and
+                -not (Test-Path (Join-Path $cust '{dataDir}'))) "$save $($r.Out)"
+        $r = Invoke-Gate $cust
+        Check 'a smoke check is not run in the fast lane' `
+            (($r.Code -eq 0) -and ($r.Out -match '\[SKIP\] smoke -- level full') -and ($r.Out -notmatch '\[PASS\] smoke')) $r.Out
+
+        $r = Invoke-Smoke 'error'
+        Check 'an exception in the smoke log fails with the line and its first frame' `
+            (($r.Code -ne 0) -and ($r.Out -match '\[FAIL\] smoke') -and
+                ($r.Out -match 'x1 NullReferenceException: boom \| at Fixture\.Hud\.Awake') -and ($r.Out -notmatch 'timeout|repeats')) $r.Out
+
+        # #25: ignored once is noise, the same exception every frame is a stalled Update.
+        $r = Invoke-Smoke 'repeat' @{ ignorePattern = 'tick'; repeatLimit = 3 }
+        Check 'a repeating exception fails with its count even when ignorePattern covers it' `
+            (($r.Code -ne 0) -and ($r.Out -match 'x\d+ \[repeats > 3\] NullReferenceException: tick \d+ \| at Fixture\.Chat\.HasFocus') -and
+                ($r.Out -notmatch 'boom')) $r.Out
+
+        $r = Invoke-Smoke 'hang' -Timeout 3
+        Check 'a stage whose ready line never comes is a timeout, and the app is closed' `
+            (($r.Code -ne 0) -and ($r.Out -match '\[FAIL\] smoke -- timeout after 3s') -and
+                ($r.Out -match "stage 'menu': ready pattern /Starting menu/ never matched") -and ($r.Out -notmatch 'LEAK')) $r.Out
+
+        $r = Invoke-Smoke 'crash'
+        Check 'an app that exits before its first stage fails with its exit code, not as a timeout' `
+            (($r.Code -ne 0) -and ($r.Out -match 'exited \(code 3\) before /Starting menu/') -and ($r.Out -notmatch 'timeout after')) $r.Out
+
+        # #23: a baseline turns the screenshot into a check. Missing is a FAIL that says how
+        # to accept the screen; after accepting, the same screen passes and a changed one fails.
+        $bStages = @(@{ name = 'menu'; ready = 'Starting menu'; holdSec = 1; baseline = 'base/menu.png' })
+        $r = Invoke-Smoke 'pass' -Stages $bStages
+        $accept = if ($r.Out -match "to accept this screen: Copy-Item '([^']+)' '([^']+)'") { @($Matches[1], $Matches[2]) } else { @() }
+        Check 'a declared baseline that does not exist fails and says how to accept the screen' `
+            (($r.Code -ne 0) -and $accept.Count -eq 2) $r.Out
+        if ($accept.Count -eq 2) {
+            New-Item -ItemType Directory -Path (Split-Path $accept[1]) -Force | Out-Null
+            Copy-Item $accept[0] $accept[1]
+        }
+        $r = Invoke-Smoke 'pass' -Stages $bStages
+        Check 'a screenshot matching its baseline passes' ($r.Code -eq 0) $r.Out
+        $r = Invoke-Smoke 'pass' -Stages $bStages -Color 'Blue'
+        Check 'a screenshot that differs from its baseline fails with the ratio and tolerance' `
+            (($r.Code -ne 0) -and ($r.Out -match "stage 'menu': screenshot differs from baseline by [\d.]+% \(tolerance 1%\)")) $r.Out
     }
 
     # ...and the two shapes that are simply absence, or every repository that pins a
