@@ -704,6 +704,30 @@ function Get-DotnetEval([string]$ProjPath) {
     $script:DnEval[$ProjPath]
 }
 
+# qgate.json "dotnet" section, or an empty object.
+function Get-QGateDotnetConfig([string]$Repo) {
+    $f = Join-Path $Repo 'qgate.json'
+    $c = if (Test-Path -LiteralPath $f) { try { (Get-Content -LiteralPath $f -Raw | ConvertFrom-Json).dotnet } catch { $null } }
+    if ($c) { $c } else { [pscustomobject]@{} }
+}
+
+# Highest release version of a package already extracted in the global NuGet folder
+# (NUGET_PACKAGES / NuGet.Config globalPackagesFolder respected), or $null. `.nupkg.metadata`
+# is what NuGet itself writes last, so a half-extracted folder does not count.
+# ponytail: highest version wins; an analyzer built for a newer Roslyn than the SDK surfaces
+# as CS9057 (reported after the build); a per-package version pin is the upgrade path.
+function Get-NuGetCachedVersion([string]$Id) {
+    if ($null -eq $script:NuGetGlobal) {
+        $script:NuGetGlobal = ''
+        if ("$(& dotnet nuget locals global-packages --list 2>$null)" -match 'global-packages:\s*(.+?)\s*$') { $script:NuGetGlobal = $Matches[1] }
+    }
+    if (-not $script:NuGetGlobal) { return $null }
+    $dir = Join-Path $script:NuGetGlobal $Id.ToLowerInvariant()
+    @(Get-ChildItem -LiteralPath $dir -Directory -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -match '^\d+(\.\d+){1,3}$' -and (Test-Path -LiteralPath (Join-Path $_.FullName '.nupkg.metadata')) } |
+        Sort-Object { [version]$_.Name } -Descending | Select-Object -First 1).Name
+}
+
 function Get-DotnetTfms($info) {
     @(if ($info.Properties.TargetFramework) { $info.Properties.TargetFramework }
         else { ($info.Properties.TargetFrameworks -split ';') | ForEach-Object { $_.Trim() } | Where-Object { $_ } })
@@ -1033,6 +1057,22 @@ function Invoke-DotnetStack($s) {
         if (@($refs.Identity) + @($pkgs.Identity) | Where-Object { $_ -like 'UnityEngine*' }) {
             $anaArgs += '-p:QGateUnity=true'
         }
+        # Opt-in analyzers the gate NEVER downloads: injected only when the package already
+        # sits in this machine's global NuGet folder, so restore resolves it from disk
+        # (measured: builds with RestoreSources pointed at an empty directory). A repository
+        # that references the package itself already gets its diagnostics, counted below.
+        $optIn = @()
+        $banned = @((Join-Path $s.Dir 'BannedSymbols.txt'), (Join-Path $Root 'BannedSymbols.txt')) | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
+        if ($banned) { $optIn += , @('Microsoft.CodeAnalysis.BannedApiAnalyzers', 'QGateBannedApiVersion', 'BannedSymbols.txt') }
+        foreach ($oi in $optIn) {
+            if (@($pkgs.Identity) -contains $oi[0]) { continue }
+            $v = Get-NuGetCachedVersion $oi[0]
+            if ($v) {
+                $anaArgs += "-p:$($oi[1])=$v"
+                if ($oi[0] -like '*BannedApi*') { $anaArgs += "-p:QGateBannedSymbols=$banned" }
+            }
+            else { $script:Lines += "[SKIP] $($oi[0]) ($($oi[2])) -- not in the local NuGet cache; the gate does not download it (restore it once in any project)" }
+        }
     }
     Phase 'build' {
         $o = (& dotnet build @buildArgs @anaArgs 2>&1 | Out-String).Trim()
@@ -1046,7 +1086,7 @@ function Invoke-DotnetStack($s) {
         # qgate.globalconfig caps the rules that default to error, so one left here is a
         # severity the repository itself asked for. Reported from the field: MA0037 read
         # as an injection failure and every analyzer finding went with it.
-        if ($LASTEXITCODE -ne 0 -and $anaArgs -and $o -notmatch '(?m):\s+error\s+(?:CS|CA|MA|IDE|UNT)\d+') {
+        if ($LASTEXITCODE -ne 0 -and $anaArgs -and $o -notmatch '(?m):\s+error\s+(?:CS|CA|MA|IDE|UNT|RS|S)\d+') {
             # Any coded error, not just NU/MSB: a reason nobody can act on is the generic
             # fallback the field report complained about.
             $reason = [regex]::Match($o, '(?m)error\s+[A-Z]+\d+[^\r\n]{0,60}').Value
@@ -1062,9 +1102,14 @@ function Invoke-DotnetStack($s) {
         # asked to see the volume first, and a rule that goes red before anyone has read it
         # is a rule people route around. Top offenders by rule id, capped like `format` above.
         $codes = @([regex]::Matches($o, '(?m):\s+warning\s+([A-Z]+\d+)') | ForEach-Object { $_.Groups[1].Value })
-        $ana = @($codes | Where-Object { $_ -match '^(CA|MA|IDE|UNT)\d+$' })
+        # RS0030/RS0031 = BannedApiAnalyzers, S1234 = SonarAnalyzer: injected opt-in above or
+        # referenced by the repository itself.
+        $ana = @($codes | Where-Object { $_ -match '^(CA|MA|IDE|UNT|RS|S)\d+$' })
         $w = $codes.Count - $ana.Count
         if ($w) { $script:Lines += "[WARN] ${proj}: $w compiler warning(s)" }
+        # An analyzer compiled against a newer Roslyn than this SDK does not load at all, and
+        # its silence would read as a clean pass.
+        if ($codes -contains 'CS9057') { $script:Lines += "[WARN] ${proj}: an analyzer needs a newer compiler than this SDK (CS9057) -- its rules did not run" }
         if ($ana) {
             $top = (@($ana | Group-Object | Sort-Object Count, Name -Descending |
                     Select-Object -First 5 | ForEach-Object { "$($_.Name) x$($_.Count)" }) -join ', ')

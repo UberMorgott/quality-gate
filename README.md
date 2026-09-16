@@ -1090,6 +1090,23 @@ does not; declare it as a qgate.json check`. Видно и под `-Quiet`, ве
 
    Отказ: пустой файл `.qgate-no-analyzers` рядом с csproj — `ItemGroup` в props на нём
    выключается, свойства в командной строке без пакетов бесполезны, сборка идёт как раньше.
+   **Опциональные анализаторы — только из локального кэша NuGet.** Гейт их **не скачивает**:
+   пакет подключается тем же props, только если эта версия уже распакована в глобальной папке
+   NuGet машины (`dotnet nuget locals global-packages --list`, есть `.nupkg.metadata`; берётся
+   старшая релизная версия). Restore тогда берёт его с диска — проверено сборкой с
+   `RestoreSources`, указывающим на пустой каталог. Нет в кэше —
+   `[SKIP] <пакет> (<причина>) -- not in the local NuGet cache; the gate does not download it`;
+   положить в кэш — один `dotnet add package`/restore в любом проекте. Репозиторий, который сам
+   ссылается на пакет, ничего не получает сверху — его диагностики и так в сборке. Находки идут
+   в ту же строку `analyzer diagnostic(s)` (префиксы `RS`, `S`), не `[FAIL]`. Анализатор,
+   собранный под более новый Roslyn, чем у SDK, не грузится вовсе (`CS9057`) — тогда
+   `[WARN] <csproj>: an analyzer needs a newer compiler than this SDK (CS9057) -- its rules did not run`
+   (замерено: `BannedApiAnalyzers` 5.6.0 на SDK 8.0.420 — `CS9057`, 3.3.4 — работает).
+   - `Microsoft.CodeAnalysis.BannedApiAnalyzers` — включается файлом `BannedSymbols.txt` рядом
+     с csproj или в корне репозитория (он же подключается как `AdditionalFiles`). Сам файл и
+     есть opt-in: каждое `RS0030` — API, которое владелец внёс в список
+     (`T:System.DateTime;Use game ticks`).
+
    **`harmony`** (только `-Full`, только если среди `Reference`/`PackageReference` есть
    `0Harmony`/`Lib.Harmony`/`HarmonyX`) — цели Harmony-патчей, которые пропали после обновления
    игры: `[HarmonyPatch(typeof(Hud), "UpdateStatusEffects")]` — строка, компилятор её не видит.

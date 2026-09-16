@@ -130,4 +130,17 @@
          still outranks it. -->
     <GlobalAnalyzerConfigFiles Include="$(MSBuildThisFileDirectory)qgate.globalconfig" />
   </ItemGroup>
+
+  <!--
+    Opt-in packages the gate never downloads. check.ps1 sets the version property only when
+    that exact package already sits in the machine's global NuGet folder, so restore resolves
+    it from disk; otherwise the property stays empty and the item does not exist.
+    BannedApiAnalyzers: a BannedSymbols.txt next to the csproj or at the repository root;
+    the file IS the opt-in, and every RS0030 hit is an API its owner listed.
+  -->
+  <ItemGroup Condition="'$(QGateBannedApiVersion)' != '' and !Exists('$(MSBuildProjectDirectory)\.qgate-no-analyzers')">
+    <PackageReference Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" Version="$(QGateBannedApiVersion)"
+                      PrivateAssets="all" IncludeAssets="runtime;build;native;contentfiles;analyzers;buildtransitive" />
+    <AdditionalFiles Include="$(QGateBannedSymbols)" />
+  </ItemGroup>
 </Project>

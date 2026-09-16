@@ -1058,6 +1058,37 @@ internal class Sealable
     $r = Invoke-Gate $dnStyle
     Check 'the fast lane does not pay for dotnet format style' ($r.Out -notmatch 'code-style') $r.Out
 
+    # BannedApiAnalyzers (#63): a BannedSymbols.txt is the opt-in, and the package is injected
+    # only from the machine's NuGet cache -- the gate never downloads it.
+    $dnBan = Join-Path $tmp 'dotnet-banned'
+    Copy-Item (Join-Path $PSScriptRoot 'testdata\dotnet-fixture') $dnBan -Recurse
+    [IO.File]::WriteAllText((Join-Path $dnBan 'BannedSymbols.txt'), "T:System.DateTime;Use game ticks`r`n")
+    $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $dnBan -All -Full 2>&1 | Out-String)
+    if ($out -match '\[SKIP\] Microsoft\.CodeAnalysis\.BannedApiAnalyzers') {
+        Write-Output '[skip] BannedApiAnalyzers not in the local NuGet cache -- the injection checks cannot run'
+    }
+    else {
+        Check 'a BannedSymbols.txt with no banned call stays silent' `
+            (($LASTEXITCODE -eq 0) -and ($out -notmatch 'RS0030')) $out
+        [IO.File]::WriteAllText((Join-Path $dnBan 'Greeter.cs'), $dnCsClean.Replace('return $"Hello, {name}!";', 'return $"Hello, {name}! {System.DateTime.Now.Ticks}";'))
+        $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $dnBan -All -Full 2>&1 | Out-String)
+        $dnBanCode = $LASTEXITCODE
+        Check 'a banned API call is an analyzer warning, not a failure' `
+            (($dnBanCode -eq 0) -and ($out -match 'analyzer diagnostic\(s\)[^\r\n]*RS0030') -and ($out -notmatch 'compiler warning')) "code=$dnBanCode $out"
+    }
+    # Not cached: said out loud, nothing fetched. An empty NUGET_PACKAGES is "a machine that
+    # never restored it"; .qgate-no-analyzers keeps Meziantou from needing the network too.
+    $nugetPrev = $env:NUGET_PACKAGES   # this machine may point it at another drive
+    $dnBanEmpty = New-Item -ItemType Directory -Force (Join-Path $tmp 'nuget-empty')
+    New-Item -ItemType File (Join-Path $dnBan '.qgate-no-analyzers') -Force | Out-Null
+    $env:NUGET_PACKAGES = $dnBanEmpty.FullName
+    $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $dnBan -All -Full 2>&1 | Out-String)
+    $dnBanCode = $LASTEXITCODE
+    $env:NUGET_PACKAGES = $nugetPrev
+    Check 'an uncached BannedApiAnalyzers is a skip, not a download' `
+        (($dnBanCode -eq 0) -and ($out -match '\[SKIP\] Microsoft\.CodeAnalysis\.BannedApiAnalyzers \(BannedSymbols\.txt\) -- not in the local NuGet cache') -and
+            (-not (Get-ChildItem $dnBanEmpty.FullName))) "code=$dnBanCode $out"
+
     # Harmony patch targets (gate/harmony.ps1). A mod whose HintPaths point at a "game" in
     # ..\lib: first with the game absent -- the existing SKIP, and no harmony phase -- then
     # with it built, where two valid patches must stay silent and four dangling ones must not.
