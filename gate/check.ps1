@@ -1586,9 +1586,11 @@ function Invoke-BaseStack($s) {
         $script:BaseDeferred = $true
         return
     }
-    # --licenses=false: the flag is a GenericFlag whose IsBoolFlag() is true, so false
-    # clears the allowlist. A licence is a policy question, not a defect, and this
-    # phase exists to report defects.
+    # No --licenses: in v2 it takes an allowlist value, and ANY value -- `false` included,
+    # read as a licence named "false" -- switches licence scanning ON: an unrequested
+    # licence table online, exit 127 "cannot retrieve licenses locally" offline. Scanning
+    # is off unless the flag is given. A licence is a policy question, not a defect, and
+    # this phase exists to report defects.
     #
     # Exit 128 is documented as "no packages found", which is not a finding and not an
     # error: a repository with no manifest or lockfile anywhere has nothing to ask the
@@ -1597,7 +1599,7 @@ function Invoke-BaseStack($s) {
     # `[SKIP] vuln -- no package references` for the same reason. 0 is clean, 1 is
     # findings, 127 and everything else is the tool failing.
     $sw = [Diagnostics.Stopwatch]::StartNew()
-    $osvOut = (& osv-scanner scan source -r $Root --licenses=false 2>&1 | Out-String).TrimEnd()
+    $osvOut = (& osv-scanner scan source -r $Root 2>&1 | Out-String).TrimEnd()
     $osvCode = $LASTEXITCODE
     $sw.Stop()
     if ($osvCode -eq 128) {
