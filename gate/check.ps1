@@ -1063,10 +1063,19 @@ function Invoke-ProtoStack($s) {
         # buf clones the ref to read it, and that clone runs git's LFS smudge
         # filter over every tracked binary with no remote to fetch from. The
         # .proto files are never LFS objects, so skip the smudge for this call.
+        # GIT_INDEX_FILE is cleared for the same call: inside a commit hook the clone
+        # inherits the CALLER's index and rewrites it (measured with buf 1.50.1: the
+        # staged tree changed, exit 0), and the staged-concurrency guard then blames a
+        # commit that does not exist. Only here -- the guard itself still needs it.
         Phase 'buf breaking' {
             $prior = $env:GIT_LFS_SKIP_SMUDGE
+            $priorIndex = $env:GIT_INDEX_FILE
             $env:GIT_LFS_SKIP_SMUDGE = '1'
-            try { buf breaking --against $against } finally { $env:GIT_LFS_SKIP_SMUDGE = $prior }
+            $env:GIT_INDEX_FILE = $null
+            try { buf breaking --against $against } finally {
+                $env:GIT_LFS_SKIP_SMUDGE = $prior
+                $env:GIT_INDEX_FILE = $priorIndex
+            }
         }
     } elseif ($base) {
         $script:Lines += '[WARN] no .proto in the baseline revision -- buf breaking skipped'

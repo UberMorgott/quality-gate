@@ -1393,6 +1393,31 @@ Set-Location $Sub
         ($bufOut -notmatch 'could not clone') ($bufOut -replace "`r?`n", ' | ')
 }
 
+# A commit hook exports GIT_INDEX_FILE, and buf's baseline clone inherited it and
+# rewrote the CALLER's index (buf 1.50.1, exit 0) -- the staged-concurrency guard then
+# failed a commit nobody raced. An alternate index with something staged in it, so an
+# unchanged tree means untouched, not merely "the same as HEAD". The guard's own true
+# positive is the concurrent-commit block below.
+if (Get-Command buf -ErrorAction SilentlyContinue) {
+    $altIndex = Join-Path $tmp 'alt-index'
+    $priorIndex = $env:GIT_INDEX_FILE
+    $env:GIT_INDEX_FILE = $altIndex
+    try {
+        git -C $mrg read-tree HEAD 2>$null
+        Set-Content (Join-Path $mrg 'staged-only.txt') 'staged'
+        git -C $mrg add staged-only.txt 2>$null
+        $treeBefore = (git -C $mrg write-tree)
+        Push-Location (Join-Path $mrg 'schema')
+        try { $idxOut = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Only proto -Full 2>&1 | Out-String); $idxCode = $LASTEXITCODE }
+        finally { Pop-Location }
+        $treeAfter = (git -C $mrg write-tree)
+    } finally { $env:GIT_INDEX_FILE = $priorIndex }
+    Remove-Item (Join-Path $mrg 'staged-only.txt') -Force -ErrorAction SilentlyContinue
+    Check "buf breaking leaves the committing hook's index alone" `
+        (($idxCode -eq 0) -and ($idxOut -match '\[PASS\] buf breaking') -and ($treeBefore -eq $treeAfter)) `
+        "code=$idxCode before=$treeBefore after=$treeAfter $idxOut"
+}
+
 # Concurrent commits in one worktree. Git serialises the final write, but it does not
 # protect the INDEX while a hook runs, and this hook runs for 40 seconds to five
 # minutes -- the gate is what widens the window from milliseconds to minutes. Measured
