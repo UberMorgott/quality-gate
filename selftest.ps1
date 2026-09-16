@@ -1089,6 +1089,30 @@ internal class Sealable
         (($dnBanCode -eq 0) -and ($out -match '\[SKIP\] Microsoft\.CodeAnalysis\.BannedApiAnalyzers \(BannedSymbols\.txt\) -- not in the local NuGet cache') -and
             (-not (Get-ChildItem $dnBanEmpty.FullName))) "code=$dnBanCode $out"
 
+    # SonarAnalyzer.CSharp (#62): qgate.json dotnet.sonar, same cache-only injection.
+    $dnSonar = Join-Path $tmp 'dotnet-sonar'
+    Copy-Item (Join-Path $PSScriptRoot 'testdata\dotnet-fixture') $dnSonar -Recurse
+    [IO.File]::WriteAllText((Join-Path $dnSonar 'Greeter.cs'), $dnCsClean.Replace('return $"Hello, {name}!";', 'string password = "hunter2secret"; return $"Hello, {name}!{password.Length}";'))
+    $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $dnSonar -All -Full 2>&1 | Out-String)
+    Check 'Sonar rules do not run without the qgate.json opt-in' ($out -notmatch 'S2068|SonarAnalyzer') $out
+    '{"dotnet": {"sonar": true}}' | Set-Content (Join-Path $dnSonar 'qgate.json')
+    $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $dnSonar -All -Full 2>&1 | Out-String)
+    $dnSonarCode = $LASTEXITCODE
+    if ($out -match '\[SKIP\] SonarAnalyzer\.CSharp') {
+        Write-Output '[skip] SonarAnalyzer.CSharp not in the local NuGet cache -- the injection checks cannot run'
+    }
+    else {
+        Check 'dotnet.sonar reports a hardcoded credential as an analyzer warning' `
+            (($dnSonarCode -eq 0) -and ($out -match 'analyzer diagnostic\(s\)[^\r\n]*S2068')) "code=$dnSonarCode $out"
+    }
+    New-Item -ItemType File (Join-Path $dnSonar '.qgate-no-analyzers') -Force | Out-Null
+    $env:NUGET_PACKAGES = $dnBanEmpty.FullName
+    $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $dnSonar -All -Full 2>&1 | Out-String)
+    $dnSonarCode = $LASTEXITCODE
+    $env:NUGET_PACKAGES = $nugetPrev
+    Check 'an uncached SonarAnalyzer.CSharp is a skip, not a download' `
+        (($dnSonarCode -eq 0) -and ($out -match '\[SKIP\] SonarAnalyzer\.CSharp \(qgate\.json dotnet\.sonar\) -- not in the local NuGet cache')) "code=$dnSonarCode $out"
+
     # Harmony patch targets (gate/harmony.ps1). A mod whose HintPaths point at a "game" in
     # ..\lib: first with the game absent -- the existing SKIP, and no harmony phase -- then
     # with it built, where two valid patches must stay silent and four dangling ones must not.

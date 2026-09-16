@@ -1106,6 +1106,9 @@ does not; declare it as a qgate.json check`. Видно и под `-Quiet`, ве
      с csproj или в корне репозитория (он же подключается как `AdditionalFiles`). Сам файл и
      есть opt-in: каждое `RS0030` — API, которое владелец внёс в список
      (`T:System.DateTime;Use game ticks`).
+   - `SonarAnalyzer.CSharp` — `qgate.json` `{"dotnet": {"sonar": true}}`. Taint/OWASP-правила,
+     захардкоженные секреты (`S2068`), когнитивная сложность. Не калиброван на живых модах,
+     поэтому opt-in, а не по умолчанию; шумные правила глушатся в `.editorconfig` репозитория.
 
    **`harmony`** (только `-Full`, только если среди `Reference`/`PackageReference` есть
    `0Harmony`/`Lib.Harmony`/`HarmonyX`) — цели Harmony-патчей, которые пропали после обновления

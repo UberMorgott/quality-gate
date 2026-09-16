@@ -1062,6 +1062,7 @@ function Invoke-DotnetStack($s) {
         # (measured: builds with RestoreSources pointed at an empty directory). A repository
         # that references the package itself already gets its diagnostics, counted below.
         $optIn = @()
+        if ((Get-QGateDotnetConfig $Root).sonar -eq $true) { $optIn += , @('SonarAnalyzer.CSharp', 'QGateSonarVersion', 'qgate.json dotnet.sonar') }
         $banned = @((Join-Path $s.Dir 'BannedSymbols.txt'), (Join-Path $Root 'BannedSymbols.txt')) | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
         if ($banned) { $optIn += , @('Microsoft.CodeAnalysis.BannedApiAnalyzers', 'QGateBannedApiVersion', 'BannedSymbols.txt') }
         foreach ($oi in $optIn) {
