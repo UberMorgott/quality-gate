@@ -236,6 +236,42 @@ function Get-SlowGoPackages([string]$Out, [int]$TimeoutSec) {
     }
 }
 
+# quality-gate#42: CI ran `go test` for GOARCH=386 and stayed red for ten days while the
+# gate, which only ever builds for this machine, stayed green. Names the workflow steps
+# that run Go (test, vet, golangci-lint) for a target the gate's own phases never touch.
+# A step is a YAML list item plus the lines up to the next one, so an `env:` block and
+# its `run:` are read together -- the reporting repo sets GOARCH exactly that way.
+# ponytail: text match, not a YAML parser -- job-level `env:` and matrix-expanded values
+# are not seen. `$Covered` is the run text of the repo's qgate.json checks: a variant
+# already declared there is not a gap. `-race` without `-short` is deliberately not one:
+# measured, 2 of 5 local repos run exactly that in CI, the only remedy would be a second
+# full race run per commit, and the timeout risk it carries is what `slow tests` names.
+function Get-CiGoGaps([string]$Root, [string]$GoOS, [string]$GoArch, [string]$Covered) {
+    $dir = Join-Path $Root '.github/workflows'
+    if (-not (Test-Path $dir)) { return }
+    foreach ($f in @(Get-ChildItem $dir -File | Where-Object { $_.Extension -in '.yml', '.yaml' })) {
+        $steps = @(); $cur = ''
+        foreach ($line in [IO.File]::ReadAllLines($f.FullName)) {
+            if ($line -match '^\s*-\s+[\w-]+:') { $steps += $cur; $cur = '' }
+            $cur += "$line`n"
+        }
+        $steps += $cur
+        foreach ($st in $steps) {
+            if ($st -notmatch '(?m)^[^#]*\b(go\s+(test|vet)|golangci-lint\s+run)\b') { continue }
+            $gaps = @()
+            foreach ($v in 'GOOS', 'GOARCH') {
+                $want = if ($v -eq 'GOOS') { $GoOS } else { $GoArch }
+                if ($st -match "(?m)^[^#]*\b$v\s*[:=]\s*[`"']?(\w+)" -and $Matches[1] -ne $want -and
+                    $Covered -notmatch "\b$v\W+$($Matches[1])\b") { $gaps += "$v=$($Matches[1])" }
+            }
+            if ($st -match '(?m)^[^#]*\s(-tags[= ]+\S+)' -and -not $Covered.Contains($Matches[1])) { $gaps += $Matches[1] }
+            if (-not $gaps) { continue }
+            $name = if ($st -match '(?m)^\s*-?\s*name:\s*(.+?)\s*$') { $Matches[1].Trim('"', "'") } else { 'unnamed step' }
+            "[WARN] CI parity: $($f.Name) step '$name' runs Go with $($gaps -join ', ') -- the gate does not; declare it as a qgate.json check"
+        }
+    }
+}
+
 function Get-GodotBin {
     if ($env:GODOT_BIN -and (Test-Path $env:GODOT_BIN)) { return $env:GODOT_BIN }
     $cmd = Get-Command godot -ErrorAction SilentlyContinue

@@ -437,6 +437,14 @@ function Invoke-GoStack($s) {
         # Report-level, not a stack line: -Quiet drops a green stack's lines, and the
         # commit hook runs -Quiet -- the one place this warning has to be seen.
         if ($script:Lines[-1] -like '`[PASS`]*') { $script:Warnings += @(Get-SlowGoPackages $script:PhaseOut 600) }
+        # Workflows are the repository's, not the module's: asked once per run.
+        if (-not $script:CiGoAsked) {
+            $script:CiGoAsked = $true
+            $goEnv = @(go env GOOS GOARCH)
+            $checks = Get-CustomChecks $Root
+            $covered = if ($checks -and -not $checks.Error) { ($checks.Checks.Run -join "`n") } else { '' }
+            $script:Warnings += @(Get-CiGoGaps $Root $goEnv[0] $goEnv[1] $covered)
+        }
         # The race detector catches a bug class go vet and golangci-lint structurally
         # cannot. It needs a cgo toolchain, so its absence is a warning, not a failure.
         if ($env:CGO_ENABLED -ne '0' -and (Have 'gcc')) {
@@ -1976,6 +1984,7 @@ if ($Full -and -not $script:Failed) {
 # releases and the per-stack notes stay silent on green. A timed-out advisory is shown:
 # it is the reason this commit took 30s longer, and it says nothing was checked. A slow
 # test package is shown: the hook is the only early warning before CI's -race times out.
-if ($Quiet -and -not $script:Failed) { $report = @($report | Where-Object { $_ -match '^\[WARN\] (qgate\.|dependency update advisory timed out|slow tests:)' }) }
+# So is a CI Go variant the gate never runs: green here says nothing about that target.
+if ($Quiet -and -not $script:Failed) { $report = @($report | Where-Object { $_ -match '^\[WARN\] (qgate\.|dependency update advisory timed out|slow tests:|CI parity:)' }) }
 if ($report) { $report | ForEach-Object { Write-Output $_ } }
 exit ($(if ($script:Failed) { 1 } else { 0 }))

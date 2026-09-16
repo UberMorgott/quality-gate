@@ -842,6 +842,15 @@ git-worktree, `base` не получает вовсе и по-прежнему �
 (и на Linux тоже). Падение выглядит так: `[FAIL] go-386` и
 `cannot use 1 << 31 (untyped int constant 2147483648) as int value in assignment (overflows)`.
 
+На `-Full` гейт читает `.github/workflows/*.yml` и называет шаги, которые гоняют `go test`,
+`go vet` или `golangci-lint run` под `GOOS`/`GOARCH`, отличные от `go env GOOS GOARCH` этой
+машины, или с `-tags`: `[WARN] CI parity: go.yml step '<name>' runs Go with GOARCH=386 -- the gate
+does not; declare it as a qgate.json check`. Видно и под `-Quiet`, вердикт не меняет. Вариант,
+который уже есть в `run` какой-нибудь проверки `qgate.json`, пробелом не считается. Читается
+текст шага (`env:` вместе с его `run:`), не YAML: `env:` уровня job и значения из matrix не
+видны. `-race` без `-short` не репортится — свой `-race` гейт гоняет, а риск таймаута называет
+`slow tests`.
+
 **web** (в каталоге `package.json`): `stylelint` -> `eslint` -> `type-check` -> `build`.
 `tsconfig.json` есть, а `vue-tsc`/`tsc` не установлен — фаза падает (непроверяемое не зелёное).
 Бинарники берутся из `node_modules\.bin` напрямую, мимо npm-обёртки. `qgate wire` кладёт

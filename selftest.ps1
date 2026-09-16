@@ -229,6 +229,42 @@ FAIL	example.com/m/broken	31.000s
 "@ 600)
 Check 'a go test package over 1/30 of the timeout is warned about, only that one' `
     (($slow.Count -eq 1) -and ($slow[0] -match '^\[WARN\] slow tests: example\.com/m/sim took 27\.252s')) ($slow -join "`n")
+# quality-gate#42: CI steps that run Go for a target the gate never builds are named.
+# The workflow is the reporting repo's shape: GOARCH set in a step `env:` block, a
+# cross-GOOS lint, and -race runs, which the gate covers itself.
+$ci = Join-Path $tmp 'ci parity'
+New-Item -ItemType Directory -Path (Join-Path $ci '.github\workflows') -Force | Out-Null
+Set-Content (Join-Path $ci '.github\workflows\go.yml') @'
+jobs:
+  go:
+    steps:
+      - name: Lint (windows build tags)
+        env:
+          GOOS: windows
+        run: golangci-lint run ./...
+      - name: Test with race detector
+        run: go test ./... -race -short
+      - name: Test
+        run: go test -race ./...
+      - name: Determinism canary on GOARCH=386
+        env:
+          GOARCH: "386"
+          CGO_ENABLED: "0"
+        run: go test -count=1 ./internal/fixed ./internal/sim
+      - name: Build only
+        env:
+          GOARCH: arm64
+        run: go build ./...
+'@
+$gaps = @(Get-CiGoGaps $ci 'windows' 'amd64' '')
+Check 'a CI Go step for another GOARCH is named, same-host and build-only steps are not' `
+    (($gaps.Count -eq 1) -and ($gaps[0] -match "step 'Determinism canary on GOARCH=386' runs Go with GOARCH=386")) ($gaps -join "`n")
+$gaps = @(Get-CiGoGaps $ci 'linux' 'amd64' '')
+Check 'the cross-GOOS lint is a gap on a host of the other OS' `
+    (($gaps.Count -eq 2) -and ($gaps[0] -match "'Lint \(windows build tags\)' runs Go with GOOS=windows")) ($gaps -join "`n")
+$gaps = @(Get-CiGoGaps $ci 'windows' 'amd64' "`$env:GOARCH='386'; `$env:CGO_ENABLED='0'; go vet ./internal/...")
+Check 'a variant declared as a qgate.json check is not a gap' ($gaps.Count -eq 0) ($gaps -join "`n")
+Check 'a repo without workflows has no CI parity gaps' (@(Get-CiGoGaps $go 'windows' 'amd64' '').Count -eq 0) ''
 
 # 6. RED: an unchecked error -- only golangci-lint catches this one, so it
 #    proves the linter phase is live rather than merely present.
