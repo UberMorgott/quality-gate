@@ -454,6 +454,10 @@ function Invoke-GoStack($s) {
         } else {
             $script:Lines += '[WARN] no cgo toolchain (gcc) -- go test -race skipped'
         }
+        # Advisory Go checks: never a verdict, and noise over code that does not build.
+        if (-not $script:Failed) {
+            $script:Warnings += @(Get-GoleakGaps $s.Dir)
+        }
     } else {
         # Both -count=1 and -shuffle=on defeat the Go test cache, so the fast lane
         # re-ran every package on every agent turn. -short lets a repo park its slow

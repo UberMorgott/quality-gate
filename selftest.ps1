@@ -175,6 +175,17 @@ if (Get-Command golangci-lint -ErrorAction SilentlyContinue) {
     Check 'the template config itself has no floor gap' (-not (Get-GolangciFloorGaps $go '' (Join-Path $PSScriptRoot 'templates\.golangci.yml')))
 } else { Write-Output '[skip] golangci-lint not on PATH -- template schema checks cannot run' }
 
+# #47: a tested package that starts a goroutine and never checks for leaks is named;
+# the clean fixture (no goroutine) is not, and a goleak check in its tests clears it.
+$leak = Join-Path $tmp 'goleak'
+Copy-Item (Join-Path $PSScriptRoot 'testdata\go-fixture') $leak -Recurse
+Check 'no goleak warning on a package that starts no goroutine' (-not (Get-GoleakGaps $leak))
+Set-GoFile (Join-Path $leak 'worker.go') "package main`n`n// Spawn starts a worker.`nfunc Spawn() {`n`tgo func() {}()`n}"
+$lw = "$(Get-GoleakGaps $leak)"
+Check 'a tested package starting goroutines without goleak is warned' ($lw -match '^\[WARN\] goleak: 1 package\(s\) .*: \./ ') $lw
+Set-GoFile (Join-Path $leak 'leak_test.go') "package main`n`n// TestMain would call goleak.VerifyTestMain(m); a mention is what the scan reads."
+Check 'a goleak check in the package tests clears the warning' (-not (Get-GoleakGaps $leak))
+
 # 3b. Probe: is a -Full run green on a fixture already proven clean? govulncheck
 # needs a live vulnerability database, so with no network the full level fails --
 # correctly, because unverifiable is not clean. That makes every later check that

@@ -1322,6 +1322,12 @@ qgate -All -Baseline HEAD~
 находку чинить или исключать по пути в `exclusions.rules`, не через `//nolint`.
 `govet nilness` уже включён в шаблоне. `govet shadow` **не включать**: 178 находок, почти все —
 легитимный скоупинг `err`.
+**goleak.** На `-Full` (после зелёных тестов) — `[WARN] goleak: N package(s) start goroutines but
+no test checks for leaks: <dirs>` для пакета, у которого есть тесты, в не-тестовых файлах есть
+строка `go func(`/`go f(`, а ни один тестовый файл не упоминает `goleak.`
+(`goleak.VerifyTestMain(m)` из `go.uber.org/goleak`). Пакеты — из `go list`, остальное — regex по
+строкам: строка в raw-string считается, горутины из зависимостей не видны. Не падает.
+
 **Пол шаблона.** На `-Full`, если у модуля свой `.golangci.yml`, гейт сверяет его с шаблоном
 (`golangci-lint linters -c` на оба файла + analyzers из `govet.enable` шаблона) и печатает
 `[WARN] golangci floor: <cfg> lacks template linters: ...; govet analyzers: ...`. Не падает.

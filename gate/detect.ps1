@@ -313,6 +313,36 @@ function Get-GolangciFloorGaps([string]$Dir, [string]$Rel, [string]$Template) {
     "[WARN] golangci floor: $where lacks template $($parts -join '; ') -- enable them, or name each in a comment with the reason (templates/.golangci.yml)"
 }
 
+# quality-gate#47: a package that starts goroutines, has tests, and none of them check
+# for leaks (go.uber.org/goleak: VerifyTestMain / VerifyNone). Package membership comes
+# from `go list` (build tags, nested modules, vendor handled by the toolchain); the rest
+# is a text scan of the listed files. A package without tests is not named: there is
+# nowhere to put the check yet.
+# ponytail: regex on source lines, not the AST -- a `go f(` line inside a raw string
+# counts, goroutines started by a dependency do not, and any `goleak.` mention in a test
+# file counts as covered. go/ast via a helper binary if the noise says so.
+function Get-GoleakGaps([string]$Dir) {
+    $prev = $global:LASTEXITCODE
+    Push-Location $Dir
+    try { $pkgs = @(& go list -f '{{.Dir}}|{{.GoFiles}}|{{.TestGoFiles}}|{{.XTestGoFiles}}' ./... 2>$null) }
+    finally { Pop-Location; $global:LASTEXITCODE = $prev }
+    $files = { param($d, $list) @($list.Trim('[', ']') -split ' ' | Where-Object { $_ } | ForEach-Object { Join-Path $d $_ }) }
+    $gaps = @(foreach ($p in $pkgs) {
+            $f = $p -split '\|'
+            if ($f.Count -ne 4) { continue }
+            $tests = @(& $files $f[0] $f[2]) + @(& $files $f[0] $f[3])
+            if (-not $tests) { continue }
+            $starts = @(& $files $f[0] $f[1] | Where-Object { [IO.File]::ReadAllText($_) -match '(?m)^\s*go\s+(func\s*\(|[\w.]+\s*\()' })
+            if (-not $starts) { continue }
+            if (@($tests | Where-Object { [IO.File]::ReadAllText($_) -match '\bgoleak\.' })) { continue }
+            $r = [IO.Path]::GetRelativePath($Dir, $f[0]).Replace('\', '/')
+            if ($r -eq '.') { './' } else { $r }
+        })
+    if ($gaps) {
+        "[WARN] goleak: $($gaps.Count) package(s) start goroutines but no test checks for leaks: $($gaps -join ', ') -- add goleak.VerifyTestMain(m) (go.uber.org/goleak)"
+    }
+}
+
 function Get-GodotBin {
     if ($env:GODOT_BIN -and (Test-Path $env:GODOT_BIN)) { return $env:GODOT_BIN }
     $cmd = Get-Command godot -ErrorAction SilentlyContinue
