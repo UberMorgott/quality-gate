@@ -218,6 +218,18 @@ $r = Invoke-Gate $oom
 Check 'an ordinary failure carries no memory note' `
     (($r.Code -ne 0) -and ($r.Out -match '\[FAIL\] go test') -and ($r.Out -notmatch '\[NOTE\]')) $r.Out
 
+# quality-gate#41: a package slow enough to time out under CI's -race is named. Parsed
+# from `go test`'s own `ok` lines -- a fixture really sleeping 20s is not worth it here.
+# Both sides: 27.252s (the reporting repo's package) warns, 19.9s and a cached line do not.
+$slow = @(Get-SlowGoPackages @"
+ok  	example.com/m/sim	27.252s
+ok  	example.com/m/fast	19.900s
+ok  	example.com/m/cached	(cached)
+FAIL	example.com/m/broken	31.000s
+"@ 600)
+Check 'a go test package over 1/30 of the timeout is warned about, only that one' `
+    (($slow.Count -eq 1) -and ($slow[0] -match '^\[WARN\] slow tests: example\.com/m/sim took 27\.252s')) ($slow -join "`n")
+
 # 6. RED: an unchecked error -- only golangci-lint catches this one, so it
 #    proves the linter phase is live rather than merely present.
 if (Get-Command golangci-lint -ErrorAction SilentlyContinue) {

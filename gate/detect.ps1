@@ -218,6 +218,24 @@ function Test-GoToolStale([string]$Exe, [string]$ModuleGo, [string]$Install) {
     "$Exe was built with go$built, this module targets go$ModuleGo -- rebuild it: $Install"
 }
 
+# quality-gate#41: a package that passes here can still hit `-timeout` in CI under -race.
+# Measured on the reporting repo: its sim package took 27s in the full `go test`, and the
+# same package under CI's `go test -race` died at the 10m timeout. The race detector costs
+# 2-20x (go.dev/doc/articles/race_detector) and a CI runner is slower than a dev box, so
+# anything over a thirtieth of the timeout is within reach of it. -timeout is per test
+# binary, which is per package -- so the `ok <pkg> <secs>s` line is the right measure,
+# and reading it leaves the phase's output exactly as it was.
+# ponytail: names the package, not the slow test; `go test -json` would, at the cost of
+# rebuilding the readable failure output.
+function Get-SlowGoPackages([string]$Out, [int]$TimeoutSec) {
+    foreach ($m in [regex]::Matches($Out, '(?m)^ok\s+(\S+)\s+(\d+(?:\.\d+)?)s\b')) {
+        $sec = [double]::Parse($m.Groups[2].Value, [Globalization.CultureInfo]::InvariantCulture)
+        if ($sec -ge $TimeoutSec / 30) {
+            "[WARN] slow tests: $($m.Groups[1].Value) took $($m.Groups[2].Value)s, over 1/30 of its $($TimeoutSec)s -timeout -- -race runs 2-20x slower, so CI can time out here"
+        }
+    }
+}
+
 function Get-GodotBin {
     if ($env:GODOT_BIN -and (Test-Path $env:GODOT_BIN)) { return $env:GODOT_BIN }
     $cmd = Get-Command godot -ErrorAction SilentlyContinue

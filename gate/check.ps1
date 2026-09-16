@@ -328,6 +328,7 @@ function Phase {
     $sw = [Diagnostics.Stopwatch]::StartNew()
     $global:LASTEXITCODE = 0
     $out = (& $Body 2>&1 | Out-String).TrimEnd()
+    $script:PhaseOut = $out
     $sw.Stop()
     # InvariantCulture, not '{0:N1}': under a comma-decimal locale (ru-RU here) every
     # phase printed `0,0s`, so the timings the report exists to show were unreadable to
@@ -433,6 +434,9 @@ function Invoke-GoStack($s) {
     if ($Full) {
         # A trustworthy verdict: no cache, and shuffled so order dependence surfaces.
         Phase 'go test' { go test -count=1 -failfast -shuffle=on -timeout=10m ./... }
+        # Report-level, not a stack line: -Quiet drops a green stack's lines, and the
+        # commit hook runs -Quiet -- the one place this warning has to be seen.
+        if ($script:Lines[-1] -like '`[PASS`]*') { $script:Warnings += @(Get-SlowGoPackages $script:PhaseOut 600) }
         # The race detector catches a bug class go vet and golangci-lint structurally
         # cannot. It needs a cgo toolchain, so its absence is a warning, not a failure.
         if ($env:CGO_ENABLED -ne '0' -and (Have 'gcc')) {
@@ -1888,6 +1892,8 @@ foreach ($s in $stacks) {
         $report += "$(if ($ran) { '[PASS]' } else { '[SKIP]' }) $label ($($s.Marker))$(if (-not $ran) { ' -- no check phase applies here' }) $timings"
     }
 }
+# Advisory, never a verdict: printed after the stack lines, shown under -Quiet (below).
+if ($script:Warnings) { $report += $script:Warnings }
 # Every stack has run; from here on a soft failure is a failure like any other.
 if ($script:SoftFailed) { $script:Failed = $true }
 
@@ -1968,7 +1974,8 @@ if ($Full -and -not $script:Failed) {
 # swallowing it here hid it exactly where it guards a commit. Same rule the
 # qgate.json unknown-key warning already follows; the advisory [INFO] about newer
 # releases and the per-stack notes stay silent on green. A timed-out advisory is shown:
-# it is the reason this commit took 30s longer, and it says nothing was checked.
-if ($Quiet -and -not $script:Failed) { $report = @($report | Where-Object { $_ -match '^\[WARN\] (qgate\.|dependency update advisory timed out)' }) }
+# it is the reason this commit took 30s longer, and it says nothing was checked. A slow
+# test package is shown: the hook is the only early warning before CI's -race times out.
+if ($Quiet -and -not $script:Failed) { $report = @($report | Where-Object { $_ -match '^\[WARN\] (qgate\.|dependency update advisory timed out|slow tests:)' }) }
 if ($report) { $report | ForEach-Object { Write-Output $_ } }
 exit ($(if ($script:Failed) { 1 } else { 0 }))
