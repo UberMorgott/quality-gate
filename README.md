@@ -1110,6 +1110,21 @@ does not; declare it as a qgate.json check`. Видно и под `-Quiet`, ве
      захардкоженные секреты (`S2068`), когнитивная сложность. Не калиброван на живых модах,
      поэтому opt-in, а не по умолчанию; шумные правила глушатся в `.editorconfig` репозитория.
 
+   **`inspectcode`** (только `-Full`, `qgate.json` `{"dotnet": {"inspectcode": true}}`) —
+   JetBrains InspectCode (`dotnet tool install -g JetBrains.ReSharper.GlobalTools`, бесплатно,
+   без ключа): мёртвый код, лишние касты, nullability движком ReSharper, а не Roslyn. После
+   `build`: `jb inspectcode <csproj> --no-build --severity=WARNING --toolset-path=<SDK>\MSBuild.dll`
+   — csproj принимается напрямую, временный `.sln` не нужен. `--toolset-path` обязателен:
+   без него InspectCode 2026.2.2 взял MSBuild из VS BuildTools, упал на `MSB4236` (SDK resolver)
+   и вышел с 3 и `No files to inspect`. Вывод — SARIF во `TEMP`; кэши
+   (`quality-gate-inspectcode-<ключ корня>`) переживают прогон, отчёт удаляется. Правила с
+   Roslyn-идентификаторами (`CA1234`, `MA0048`) отбрасываются — их уже посчитала строка
+   `build`; `InconsistentNaming` на именах с `_` — тоже (Harmony читает `__instance` по имени).
+   Итог: `[WARN] <csproj>: N InspectCode finding(s) (10.5s) -- UnusedMember.Local x1, ...` и до
+   10 строк `[WARN] inspectcode: Greeter.cs:9 RuleId -- текст`; чисто — `[PASS] inspectcode`.
+   Нет `jb` — `[SKIP] inspectcode -- jb not on PATH`; нет отчёта — `[UNKNOWN]`. Замерено на
+   фикстуре: ~10 с.
+
    **`bepinex`** (только `-Full`, только если среди `Reference`/`PackageReference` есть
    `BepInEx*`) — метаданные плагина, которые BepInEx проверяет лишь при загрузке игры:
    `[BepInPlugin(guid, name, version)]` и `[BepInDependency(guid[, minVersion])]`. `gate/bepinex.ps1`

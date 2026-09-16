@@ -1113,6 +1113,42 @@ internal class Sealable
     Check 'an uncached SonarAnalyzer.CSharp is a skip, not a download' `
         (($dnSonarCode -eq 0) -and ($out -match '\[SKIP\] SonarAnalyzer\.CSharp \(qgate\.json dotnet\.sonar\) -- not in the local NuGet cache')) "code=$dnSonarCode $out"
 
+    # JetBrains InspectCode (#64): qgate.json dotnet.inspectcode, advisory, jb absent = skip.
+    $dnIc = Join-Path $tmp 'dotnet-inspectcode'
+    Copy-Item (Join-Path $PSScriptRoot 'testdata\dotnet-fixture') $dnIc -Recurse
+    '{"dotnet": {"inspectcode": true}}' | Set-Content (Join-Path $dnIc 'qgate.json')
+    $icPath = $env:PATH
+    $env:PATH = (@($env:PATH -split [IO.Path]::PathSeparator | Where-Object { $_ -and -not (Test-Path (Join-Path $_ 'jb.exe')) -and -not (Test-Path (Join-Path $_ 'jb')) }) -join [IO.Path]::PathSeparator)
+    $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $dnIc -All -Full 2>&1 | Out-String)
+    $dnIcCode = $LASTEXITCODE
+    $env:PATH = $icPath
+    Check 'dotnet.inspectcode without jb on PATH is a skip' `
+        (($dnIcCode -eq 0) -and ($out -match '\[SKIP\] inspectcode -- jb not on PATH')) "code=$dnIcCode $out"
+    if (Get-Command jb -ErrorAction SilentlyContinue) {
+        $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $dnIc -All -Full 2>&1 | Out-String)
+        Check 'InspectCode passes a clean project' (($LASTEXITCODE -eq 0) -and ($out -match '\[PASS\] inspectcode Fixture\.csproj')) $out
+        [IO.File]::WriteAllText((Join-Path $dnIc 'Greeter.cs'), $dnCsClean.Replace('    public static string Greet(string name)', @'
+    private static int Unused(int a)
+    {
+        return a;
+    }
+
+    public static bool Prefix(object __instance)
+    {
+        return __instance is null;
+    }
+
+    public static string Greet(string name)
+'@))
+        $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $dnIc -All -Full 2>&1 | Out-String)
+        $dnIcCode = $LASTEXITCODE
+        Check 'InspectCode findings are warnings with their location' `
+            (($dnIcCode -eq 0) -and ($out -match 'InspectCode finding\(s\)') -and
+                ($out -match '\[WARN\] inspectcode: Greeter\.cs:\d+ UnusedMember\.Local')) "code=$dnIcCode $out"
+        Check 'InspectCode does not ask to rename a Harmony __instance parameter' ($out -notmatch "InconsistentNaming[^\r\n]*__instance") $out
+    }
+    else { Write-Output '[skip] jb (JetBrains.ReSharper.GlobalTools) not on PATH -- InspectCode checks cannot run' }
+
     # BepInEx metadata (#67): only where BepInEx is referenced, advisory, source-level. The
     # reference points at a game this machine does not have -- the check still runs.
     $dnBep = Join-Path $tmp 'dotnet-bepinex'

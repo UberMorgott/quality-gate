@@ -1143,6 +1143,56 @@ function Invoke-DotnetStack($s) {
         }
     }
 
+    # JetBrains InspectCode, opt-in (qgate.json {"dotnet": {"inspectcode": true}}): ReSharper's
+    # own dead-code / redundancy / nullability engine, a different class than the Roslyn
+    # analyzers above. Advisory. Takes a csproj directly (no temp .sln needed, measured), and
+    # --no-build reuses the build above. --toolset-path pins the SDK's MSBuild: left to
+    # itself it picked VS BuildTools' MSBuild, failed MSB4236 on the SDK resolver and
+    # exited 3 with "No files to inspect". Roslyn-shaped rule ids are dropped (the build
+    # line already counted them), and so is InconsistentNaming on `_`-prefixed names:
+    # Harmony reads __instance / ___field by name.
+    if ((Get-QGateDotnetConfig $Root).inspectcode -eq $true -and -not $script:Failed) {
+        if (-not (Have 'jb')) { $script:Lines += '[SKIP] inspectcode -- jb not on PATH (dotnet tool install -g JetBrains.ReSharper.GlobalTools)' }
+        else {
+            $sdkVer = "$(& dotnet --version 2>$null)".Trim()
+            $sdkLine = @($sdks | Where-Object { $_ -like "$sdkVer *" }) | Select-Object -First 1
+            $msb = if ($sdkLine -match '\[(.+)\]\s*$') { Join-Path (Join-Path $Matches[1] $sdkVer) 'MSBuild.dll' }
+            # Caches kept per repository between runs (the warm run is the cheap one); the report is not.
+            $icDir = Join-Path ([IO.Path]::GetTempPath()) "quality-gate-inspectcode-$(Get-PathKey $Root)"
+            New-Item -ItemType Directory -Path $icDir -Force | Out-Null
+            $sarif = Join-Path $icDir "$PID.sarif"
+            $icArgs = @($projAbs, '--no-build', "--output=$sarif", '--severity=WARNING', "--caches-home=$icDir", '--verbosity=ERROR')
+            if ($msb -and (Test-Path -LiteralPath $msb)) { $icArgs += "--toolset-path=$msb" }
+            $icSw = [Diagnostics.Stopwatch]::StartNew()
+            $icOut = (& jb inspectcode @icArgs 2>&1 | Out-String).Trim()
+            $icCode = $LASTEXITCODE
+            $icSw.Stop()
+            $icj = if ($icCode -eq 0 -and (Test-Path -LiteralPath $sarif)) { try { Get-Content -LiteralPath $sarif -Raw | ConvertFrom-Json } catch { $null } }
+            Remove-Item -LiteralPath $sarif -Force -ErrorAction SilentlyContinue
+            if (-not $icj) {
+                $why = @($icOut -split "`r?`n" | Where-Object { $_.Trim() } | Select-Object -Last 1)
+                $script:Lines += "[UNKNOWN] ${proj}: InspectCode produced no report (exit $icCode$(if ($why) { ": $($why[0])" }))"
+            }
+            else {
+                $hits = @($icj.runs | ForEach-Object { $_.results } | Where-Object {
+                        $_.ruleId -notmatch '^[A-Z]{1,4}\d+$' -and
+                        -not ($_.ruleId -eq 'InconsistentNaming' -and $_.message.text -match "^Name '_")
+                    })
+                $secs = $icSw.Elapsed.TotalSeconds.ToString('0.0', [Globalization.CultureInfo]::InvariantCulture)
+                if (-not $hits) { $script:Lines += "[PASS] inspectcode ${proj} (${secs}s)" }
+                else {
+                    $top = (@($hits | Group-Object ruleId | Sort-Object Count, Name -Descending |
+                            Select-Object -First 5 | ForEach-Object { "$($_.Name) x$($_.Count)" }) -join ', ')
+                    $script:Lines += "[WARN] ${proj}: $($hits.Count) InspectCode finding(s) (${secs}s) -- $top"
+                    $script:Lines += @($hits | Select-Object -First 10 | ForEach-Object {
+                            $loc = $_.locations[0].physicalLocation
+                            "[WARN] inspectcode: $($loc.artifactLocation.uri):$($loc.region.startLine) $($_.ruleId) -- $($_.message.text)"
+                        })
+                }
+            }
+        }
+    }
+
     # Test projects in these repos are custom Exe runners, so the phase exists only
     # where a real test SDK does. Both facts come from the evaluation above, never from
     # the csproj text: IsTestProject is what the SDK itself sets once the project is
