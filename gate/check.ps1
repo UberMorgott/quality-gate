@@ -1013,6 +1013,13 @@ function Invoke-DotnetStack($s) {
         }
     }
 
+    # BepInEx plugin metadata (GUID, version, dependency GUIDs): strings BepInEx only checks
+    # when the game loads the plugin. Source-only, so it runs even without the game
+    # installed. Advisory; see gate/bepinex.ps1 for the regex ceiling.
+    if ($Full -and (@($refs.Identity) + @($pkgs.Identity) | Where-Object { $_ -match '^BepInEx(\.|$)' })) {
+        $script:Lines += @(& (Join-Path $PSScriptRoot 'bepinex.ps1') -ProjectDir $s.Dir)
+    }
+
     if ($missing) {
         # Format needed none of them (measured); a compiler does. Reported once, with
         # the count and a name, so the reader can tell "game not installed" from "the

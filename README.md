@@ -1110,6 +1110,20 @@ does not; declare it as a qgate.json check`. Видно и под `-Quiet`, ве
      захардкоженные секреты (`S2068`), когнитивная сложность. Не калиброван на живых модах,
      поэтому opt-in, а не по умолчанию; шумные правила глушатся в `.editorconfig` репозитория.
 
+   **`bepinex`** (только `-Full`, только если среди `Reference`/`PackageReference` есть
+   `BepInEx*`) — метаданные плагина, которые BepInEx проверяет лишь при загрузке игры:
+   `[BepInPlugin(guid, name, version)]` и `[BepInDependency(guid[, minVersion])]`. `gate/bepinex.ps1`
+   читает **исходники** `.cs` проекта (без `bin`/`obj`) регуляркой, поэтому работает и без
+   установленной игры. Аргумент — строковый литерал или `const string` из того же проекта
+   (`PluginGuid`, `MyMod.Version`). `[WARN] bepinex: ...`, не `[FAIL]`:
+   GUID пустой или не reverse-DNS (`^[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)+$`); версия, которую не
+   разбирает `System.Version` (так её читает BepInEx 5; валидный SemVer вроде `1.0.0-beta`
+   помечается отдельно — годится только для BepInEx 6). Потолок: `MyPluginInfo.PLUGIN_GUID` из
+   `BepInEx.PluginInfoProps` (генерируется в `obj/`), константы из других сборок, интерполяция и
+   атрибут, разорванный комментарием с `)]`, не проверяются; одноимённые константы в разных
+   файлах — берётся последняя. Сверки GUID зависимостей со списком известных плагинов нет.
+   Откалибровано только чтением: MorgottTweaks, SmoothRegen, Auga-Fork — ноль находок.
+
    **`harmony`** (только `-Full`, только если среди `Reference`/`PackageReference` есть
    `0Harmony`/`Lib.Harmony`/`HarmonyX`) — цели Harmony-патчей, которые пропали после обновления
    игры: `[HarmonyPatch(typeof(Hud), "UpdateStatusEffects")]` — строка, компилятор её не видит.

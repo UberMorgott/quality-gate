@@ -1113,6 +1113,48 @@ internal class Sealable
     Check 'an uncached SonarAnalyzer.CSharp is a skip, not a download' `
         (($dnSonarCode -eq 0) -and ($out -match '\[SKIP\] SonarAnalyzer\.CSharp \(qgate\.json dotnet\.sonar\) -- not in the local NuGet cache')) "code=$dnSonarCode $out"
 
+    # BepInEx metadata (#67): only where BepInEx is referenced, advisory, source-level. The
+    # reference points at a game this machine does not have -- the check still runs.
+    $dnBep = Join-Path $tmp 'dotnet-bepinex'
+    Copy-Item (Join-Path $PSScriptRoot 'testdata\dotnet-fixture') $dnBep -Recurse
+    [IO.File]::WriteAllText((Join-Path $dnBep 'Plugins.cs'), @'
+namespace Fixture;
+
+[BepInEx.BepInPlugin(Good.Guid, "Good", Good.Version)]
+[BepInEx.BepInDependency("com.bepis.configmanager")]
+public sealed class Good
+{
+    public const string Guid = "morgott.valheim.good";
+
+    public const string Version = "1.3.0";
+}
+
+[BepInEx.BepInPlugin("Bad Guid", "Bad", "1.0.0-beta")]
+[BepInEx.BepInDependency("")]
+public sealed class Bad
+{
+}
+'@)
+    $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $dnBep -All -Full 2>&1 | Out-String)
+    Check 'BepInEx metadata is not checked in a project that does not reference BepInEx' ($out -notmatch 'bepinex:') $out
+    [IO.File]::WriteAllText((Join-Path $dnBep 'Fixture.csproj'), $dnProjClean.Replace('</Project>', @'
+  <ItemGroup>
+    <Reference Include="BepInEx">
+      <HintPath>..\game\BepInEx.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+
+</Project>
+'@))
+    $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $dnBep -All -Full 2>&1 | Out-String)
+    $dnBepCode = $LASTEXITCODE
+    Check 'malformed BepInEx GUIDs and versions are warnings' `
+        (($dnBepCode -eq 0) -and ($out -match "\[WARN\] bepinex: BepInPlugin GUID 'Bad Guid' is not reverse-DNS \(e\.g\. com\.author\.mod\) \(Plugins\.cs:12\)") -and
+            ($out -match "\[WARN\] bepinex: BepInPlugin version '1\.0\.0-beta' -- valid SemVer, but BepInEx 5") -and
+            ($out -match '\[WARN\] bepinex: BepInDependency GUID is empty \(Plugins\.cs:13\)')) "code=$dnBepCode $out"
+    Check 'valid BepInEx metadata (literal or const) stays silent' `
+        (@([regex]::Matches($out, '\[WARN\] bepinex:')).Count -eq 3) $out
+
     # Harmony patch targets (gate/harmony.ps1). A mod whose HintPaths point at a "game" in
     # ..\lib: first with the game absent -- the existing SKIP, and no harmony phase -- then
     # with it built, where two valid patches must stay silent and four dangling ones must not.
