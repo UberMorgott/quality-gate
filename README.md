@@ -977,6 +977,14 @@ does not; declare it as a qgate.json check`. Видно и под `-Quiet`, ве
    `block_scoped` (C# 7.3 у Unity-модов). `IDE0051`/`IDE0044`/`IDE0060` на Unity-сообщениях
    (`Awake`, `Update`) закрывают суппрессоры `Microsoft.Unity.Analyzers`, которые гейт
    подключает на `-Full`; для сборок без них в шаблоне закомментированный блок.
+
+   **`dotnet format style`** (только `-Full`, advisory) — после `whitespace`, с теми же
+   аргументами и тем же `--include`. Запускается, только если `.editorconfig` найден в каталоге
+   проекта или выше: без него правил стиля нет, а загрузка workspace стоит ~2.7 с (замерено на
+   фикстуре). Ловит IDE-правила, поднятые в `.editorconfig` до `warning`/`error`:
+   `[WARN] <csproj>: N code-style violation(s) -- IDE0022 x1 (fix: dotnet format style <csproj>)`.
+   Не `[FAIL]`: репозиторий, поднявший правило до `warning` с уже имеющимися нарушениями,
+   покраснел бы на следующем прогоне. Ненулевой код без строк `IDE` — `[UNKNOWN]`.
 3. `build` — `dotnet build -nologo -v q -clp:NoSummary`, на `-Full` ещё и `--no-incremental`.
    Без `-warnaserror` намеренно: в живых
    репозиториях предупреждения есть, а быстрый уровень строже CI — это гейт, который учатся

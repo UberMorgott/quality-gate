@@ -1045,6 +1045,19 @@ internal class Sealable
     Check 'the template .editorconfig rules fire at info severity, but not on __instance' `
         (($ecInfo -match 'IDE0022') -and ($ecInfo -notmatch 'IDE1006')) $ecInfo
 
+    # `dotnet format style` (#66): a rule the repository raised to `warning` is reported at the
+    # full level, advisory -- the template run above is the clean side (no code-style line).
+    Check 'the template .editorconfig reports no code-style violation' ($out -notmatch 'code-style violation') $out
+    $dnStyle = Join-Path $tmp 'dotnet-style'
+    Copy-Item (Join-Path $PSScriptRoot 'testdata\dotnet-fixture') $dnStyle -Recurse
+    [IO.File]::WriteAllText((Join-Path $dnStyle '.editorconfig'), "root = true`r`n[*.cs]`r`ncsharp_style_expression_bodied_methods = true:warning`r`n")
+    $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $dnStyle -All -Full 2>&1 | Out-String)
+    $dnStyleCode = $LASTEXITCODE
+    Check 'a code-style violation is a full-level warning with its fix command' `
+        (($dnStyleCode -eq 0) -and ($out -match '\[WARN\] Fixture\.csproj: 1 code-style violation\(s\) -- IDE0022 x1 \(fix: dotnet format style Fixture\.csproj\)')) "code=$dnStyleCode $out"
+    $r = Invoke-Gate $dnStyle
+    Check 'the fast lane does not pay for dotnet format style' ($r.Out -notmatch 'code-style') $r.Out
+
     # Harmony patch targets (gate/harmony.ps1). A mod whose HintPaths point at a "game" in
     # ..\lib: first with the game absent -- the existing SKIP, and no harmony phase -- then
     # with it built, where two valid patches must stay silent and four dangling ones must not.

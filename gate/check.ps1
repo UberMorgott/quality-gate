@@ -969,6 +969,24 @@ function Invoke-DotnetStack($s) {
                 if ($fmtCode -ne 0) { "fix: dotnet format whitespace $proj"; $global:LASTEXITCODE = 1 }
             } @fmtPhaseArgs -Soft
         }
+        # Code style (IDE rules at warning/error in .editorconfig), -Full only and advisory:
+        # a repository that raised a rule to `warning` but still carries violations would go
+        # red on adoption. No .editorconfig anywhere above the project = no style rules, so
+        # the ~2.7s workspace load (measured on the fixture) is not paid for nothing.
+        # Same --include narrowing as whitespace. templates/.editorconfig starts at `suggestion`.
+        $ec = $s.Dir
+        while ($ec -and -not (Test-Path -LiteralPath (Join-Path $ec '.editorconfig'))) { $ec = Split-Path $ec -Parent }
+        if ($Full -and $ec) {
+            $styleOut = @(& dotnet format style @fmtArgs 2>&1 | ForEach-Object { "$_" })
+            $styleCode = $LASTEXITCODE
+            $ide = @($styleOut | Where-Object { $_ -match ':\s+(?:warning|error)\s+IDE\d+' })
+            if ($ide) {
+                $top = (@($ide | ForEach-Object { [regex]::Match($_, 'IDE\d+').Value } | Group-Object |
+                        Sort-Object Count, Name -Descending | Select-Object -First 5 | ForEach-Object { "$($_.Name) x$($_.Count)" }) -join ', ')
+                $script:Lines += "[WARN] ${proj}: $($ide.Count) code-style violation(s) -- $top (fix: dotnet format style $proj)"
+            }
+            elseif ($styleCode -ne 0) { $script:Lines += "[UNKNOWN] ${proj}: could not check code style -- dotnet format style exited $styleCode" }
+        }
     }
 
     if ($missing) {
