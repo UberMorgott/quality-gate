@@ -2612,6 +2612,36 @@ try {
     }
 } finally { $env:PATH = $priorPath }
 
+# #50: gremlins runs only under -Mutate. A stand-in that leaves a marker proves the default
+# run never invokes it; a missing tool is a [SKIP]; survivors are a [WARN], exit 0.
+$mut = Join-Path $tmp 'mutate'
+Copy-Item (Join-Path $PSScriptRoot 'testdata\go-fixture') $mut -Recurse
+$mutShim = Join-Path $tmp 'gremlins-shim'
+New-Item -ItemType Directory -Path $mutShim -Force | Out-Null
+$mutMark = Join-Path $tmp 'gremlins-invoked'
+$lived = 'LIVED CONDITIONALS_BOUNDARY at main.go:6:35'
+if ($IsWindows) { [IO.File]::WriteAllText((Join-Path $mutShim 'gremlins.cmd'), "@echo x> `"$mutMark`"`r`n@echo        $lived`r`n@echo Killed: 1, Lived: 1, Not covered: 0`r`n@exit /b 0`r`n") }
+else {
+    $p = Join-Path $mutShim 'gremlins'
+    [IO.File]::WriteAllText($p, "#!/bin/sh`necho x > '$mutMark'`necho '       $lived'`necho 'Killed: 1, Lived: 1, Not covered: 0'`n")
+    chmod +x $p
+}
+$noGremlins = @($priorPath -split $sep | Where-Object { $_ -and -not (Get-ChildItem -LiteralPath $_ -Filter 'gremlins*' -ErrorAction SilentlyContinue) }) -join $sep
+try {
+    $env:PATH = "$mutShim$sep$noGremlins"
+    $out = (& pwsh -NoProfile -File $gate -Root $mut -All -Only go 2>&1 | Out-String)
+    Check 'without -Mutate gremlins is never invoked' (($LASTEXITCODE -eq 0) -and -not (Test-Path $mutMark) -and ($out -notmatch 'gremlins')) $out
+    $out = (& pwsh -NoProfile -File $gate -Root $mut -All -Only go -Mutate 2>&1 | Out-String)
+    $code = $LASTEXITCODE
+    Check 'surviving mutants are a [WARN] under -Mutate, exit 0' `
+        (($code -eq 0) -and ($out -match '\[WARN\] gremlins: 1 surviving mutant') -and ($out -match [regex]::Escape($lived)) -and ($out -notmatch '\[FAIL\]')) "code=$code $out"
+    $env:PATH = $noGremlins
+    $out = (& pwsh -NoProfile -File $gate -Root $mut -All -Only go -Mutate 2>&1 | Out-String)
+    $code = $LASTEXITCODE
+    Check 'a missing gremlins is a [SKIP] with an install hint, exit 0' `
+        (($code -eq 0) -and ($out -match '\[SKIP\] gremlins -- not on PATH \(go install github.com/go-gremlins')) "code=$code $out"
+} finally { $env:PATH = $priorPath }
+
 # The vulnerability database lives on the network, so vuln is full-level only -- the
 # same rule govulncheck and `npm audit` follow. Asserted on the LINE, not on a verdict:
 # whether it passes, skips for a missing binary or skips for an osv-scanner v1 that has

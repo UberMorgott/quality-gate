@@ -414,6 +414,34 @@ function Get-GoDeadcode([string]$Dir) {
     if ($hits.Count -gt 20) { "       ... $($hits.Count - 20) more: run deadcode -test ./..." }
 }
 
+# quality-gate#50: on-demand mutation testing (qgate -Mutate), never part of a hook run.
+# `gremlins unleash` mutates covered code and reruns the tests; a mutant the tests still
+# pass on (LIVED) is an assertion gap. -Baseline scopes it to files changed since that rev
+# (--diff); gremlins treats an empty diff as no filter, so the whole module then runs.
+# Advisory: survivors are a [WARN], never a failure. Returns lines; a [PASS] when none lived.
+# ponytail: no overall time cap -- gremlins' own per-mutant timeout bounds each test run;
+# a wall-clock budget belongs here if a whole-module run proves too slow in practice.
+function Get-GoMutants([string]$Dir, [string]$Baseline) {
+    $diff = if ($Baseline) { @('--diff', $Baseline) } else { @() }
+    $prev = $global:LASTEXITCODE
+    Push-Location $Dir
+    try { $out = @(& gremlins unleash @diff --output-statuses l . 2>&1 | ForEach-Object { "$_" }); $code = $LASTEXITCODE }
+    finally { Pop-Location; $global:LASTEXITCODE = $prev }
+    $sum = $out | Where-Object { $_ -match 'Killed: (\d+), Lived: (\d+), Not covered: (\d+)' } | Select-Object -Last 1
+    if ($code -ne 0 -or -not $sum) {
+        # Windows gremlins also prints "impossible to remove temporary folder" -- not the cause.
+        $why = @($out | Where-Object { $_.Trim() -and $_ -notmatch 'remove temporary folder|^\s+\S*gremlins-\d+' }) | Select-Object -Last 1
+        return "[WARN] gremlins could not run on this module -- $why"
+    }
+    $null = $sum -match 'Killed: (\d+), Lived: (\d+), Not covered: (\d+)'
+    $killed, $lived, $uncovered = [int]$Matches[1], [int]$Matches[2], [int]$Matches[3]
+    if ($lived -eq 0) { return "[PASS] gremlins: $killed mutant(s) killed, 0 lived ($uncovered not covered by tests)" }
+    "[WARN] gremlins: $lived surviving mutant(s) of $($killed + $lived) tested ($uncovered not covered) -- advisory, not a failure"
+    $hits = @($out | Where-Object { $_ -match '^\s*LIVED ' } | ForEach-Object { $_.Trim() })
+    $hits | Select-Object -First 20 | ForEach-Object { "       $_" }
+    if ($hits.Count -gt 20) { "       ... $($hits.Count - 20) more: run gremlins unleash -S l" }
+}
+
 # quality-gate#46: qgate.json {"go": {"deterministic": ["server/internal/sim", ...]}} --
 # package directories, relative to the repository root, that must replay bit-for-bit.
 # Same contract as Get-DeployEntries: $null when nothing is declared, else .Dirs

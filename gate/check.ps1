@@ -18,6 +18,7 @@ param(
     [switch]$Quiet,
     [switch]$Why,         # provenance: which marker file created (or did not create) each phase
     [string]$Baseline,    # git rev: report only issues newer than it (adoption on a dirty codebase)
+    [switch]$Mutate,      # on demand only: Go mutation testing (gremlins), advisory; scoped by -Baseline
     [string]$Root,        # repo root; defaults to the git root of the cwd
     # Nothing binds here on a correct call. Positional binding used to swallow the
     # second word of `-Only go python` into -Baseline, and the run then died with
@@ -481,6 +482,18 @@ function Invoke-GoStack($s) {
         # re-ran every package on every agent turn. -short lets a repo park its slow
         # suites behind testing.Short() instead of paying for them each turn.
         Phase 'go test' { go test -short -failfast -timeout=10m ./... }
+    }
+    # Mutation testing is minutes, not seconds: only when asked for, never from a hook.
+    if ($Mutate -and -not $script:Failed) {
+        if (-not (Have 'gremlins')) {
+            $script:Lines += '[SKIP] gremlins -- not on PATH (go install github.com/go-gremlins/gremlins/cmd/gremlins@latest)'
+        } elseif ($stale = Test-GoToolStale 'gremlins' $modGo 'go install github.com/go-gremlins/gremlins/cmd/gremlins@latest') {
+            $script:Lines += "[SKIP] $stale"
+        } else {
+            $mut = @(Get-GoMutants $s.Dir $Baseline)
+            $script:Lines += @($mut | Where-Object { $_ -like '`[PASS`]*' })
+            $script:Warnings += @($mut | Where-Object { $_ -notlike '`[PASS`]*' })
+        }
     }
     # Known vulnerabilities ARE defects, so unlike "outdated" they fail the run --
     # but only on the full level: the database lives on the network and no agent
