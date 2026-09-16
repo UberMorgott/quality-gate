@@ -246,6 +246,17 @@ if (Get-Command golangci-lint -ErrorAction SilentlyContinue) {
 }
 Check 'a pure deterministic package is clean (range over a slice is fine)' (-not (Get-GoPurity $pur @($det.Dirs[1]))) "$(Get-GoPurity $pur @($det.Dirs[1]))"
 
+# #48: a listed deterministic package with no property or fuzz test is warned; a rapid
+# property test or a Fuzz target clears it; a plain unit test does not.
+Set-GoFile (Join-Path $pur 'fixed\fixed_test.go') "package fixed`n`nimport `"testing`"`n`nfunc TestAdd(t *testing.T) { _ = Add(1, 2) }"
+$gw = "$(Get-GoPropertyGaps $pur $det.Dirs)"
+Check 'deterministic packages without a property or fuzz test are warned' ($gw -match '^\[WARN\] property tests: 2 deterministic package\(s\) .*: sim, fixed ') $gw
+Set-GoFile (Join-Path $pur 'fixed\prop_test.go') "package fixed`n`n// rapid.Check(t, func(t *rapid.T) { ... }) is what the scan reads."
+Set-GoFile (Join-Path $pur 'sim\sim_test.go') "package sim`n`nimport `"testing`"`n`nfunc FuzzStep(f *testing.F) { f.Fuzz(func(t *testing.T, n int) {}) }"
+Check 'a rapid property test or a Fuzz target clears the warning' (-not (Get-GoPropertyGaps $pur $det.Dirs)) "$(Get-GoPropertyGaps $pur $det.Dirs)"
+$tplFmt = @(& gofmt -l (Join-Path $PSScriptRoot 'templates\go-determinism_test.go') 2>&1)
+Check 'the property-test template parses and is gofmt-clean' ($LASTEXITCODE -eq 0 -and -not $tplFmt) ($tplFmt -join "`n")
+
 # 3b. Probe: is a -Full run green on a fixture already proven clean? govulncheck
 # needs a live vulnerability database, so with no network the full level fails --
 # correctly, because unverifiable is not clean. That makes every later check that

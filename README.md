@@ -1355,6 +1355,16 @@ deterministic packages` и строки `file:line:col: ...`. Не-тестов�
 Кривой ключ (не массив, не строка, нет директории) — `[WARN] qgate.json ...`, виден и в `-Quiet`.
 Нет ключа — нет проверки.
 
+**Property-тесты детерминированных пакетов (opt-in, тот же ключ).** Пакет из `go.deterministic`, в
+`_test.go` которого нет ни `rapid.Check`/`MakeCheck`/`MakeFuzz` (`pgregory.net/rapid`), ни
+`quick.Check`, ни `func FuzzX(f *testing.F)` — `[WARN] property tests: N deterministic package(s)
+have no property or fuzz test: <dirs>`. Текстовый скан. Шаблон —
+[`templates/go-determinism_test.go`](templates/go-determinism_test.go): два свойства, которые обязана
+держать воспроизводимая симуляция — тот же seed и входы дают тот же trace, и
+`Restore(Snapshot(s))` продолжает ровно как `s`. Скопировать в пакет, подставить свой API,
+`go get pgregory.net/rapid`. Упавший случай rapid минимизирует и сохраняет; повтор —
+`go test -run TestX -rapid.failfile=<file>`.
+
 **Пол шаблона.** На `-Full`, если у модуля свой `.golangci.yml`, гейт сверяет его с шаблоном
 (`golangci-lint linters -c` на оба файла + analyzers из `govet.enable` шаблона) и печатает
 `[WARN] golangci floor: <cfg> lacks template linters: ...; govet analyzers: ...`. Не падает.

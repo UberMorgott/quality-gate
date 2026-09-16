@@ -462,7 +462,7 @@ function Invoke-GoStack($s) {
             if ($det.Error) { $script:Warnings += "[WARN] $($det.Error)" }
             elseif ($det) {
                 $mine = @($det.Dirs | Where-Object { $_ -eq $s.Dir.TrimEnd('\', '/') -or $_.StartsWith($s.Dir.TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar) })
-                if ($mine) { $script:Warnings += @(Get-GoPurity $s.Dir $mine) }
+                if ($mine) { $script:Warnings += @(Get-GoPurity $s.Dir $mine) + @(Get-GoPropertyGaps $s.Dir $mine) }
             }
             $fsw = [Diagnostics.Stopwatch]::StartNew()
             $fuzz = Invoke-GoFuzz $s.Dir

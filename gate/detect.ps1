@@ -492,6 +492,19 @@ linters:
     $hits | ForEach-Object { "       $($_.Replace('\', '/'))" }
 }
 
+# quality-gate#48: a deterministic package whose tests hold no property test
+# (pgregory.net/rapid, testing/quick) and no Fuzz target. Text scan of its _test.go files.
+function Get-GoPropertyGaps([string]$Dir, [string[]]$Pkgs) {
+    $gaps = @(foreach ($p in $Pkgs) {
+            $covered = @(Get-ChildItem $p -Filter '*_test.go' -File -ErrorAction SilentlyContinue | Where-Object {
+                    [IO.File]::ReadAllText($_.FullName) -match '\brapid\.(Check|MakeCheck|MakeFuzz)\b|\bquick\.(Check|CheckEqual)\b|func\s+Fuzz\w*\s*\(\s*\w+\s+\*testing\.F\b' })
+            if (-not $covered) { [IO.Path]::GetRelativePath($Dir, $p).Replace('\', '/') }
+        })
+    if ($gaps) {
+        "[WARN] property tests: $($gaps.Count) deterministic package(s) have no property or fuzz test: $($gaps -join ', ') -- see templates/go-determinism_test.go (pgregory.net/rapid)"
+    }
+}
+
 function Get-GodotBin {
     if ($env:GODOT_BIN -and (Test-Path $env:GODOT_BIN)) { return $env:GODOT_BIN }
     $cmd = Get-Command godot -ErrorAction SilentlyContinue
