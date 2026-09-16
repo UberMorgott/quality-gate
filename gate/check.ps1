@@ -424,6 +424,8 @@ function Invoke-GoStack($s) {
             golangci-lint run --output.text.print-issued-lines=false --output.text.colors=false `
                 --max-issues-per-linter=0 --max-same-issues=0 @newFrom ./...
         }
+        # Advisory, full level only: a note about the config, not about this change.
+        if ($Full) { $script:Warnings += @(Get-GolangciFloorGaps $s.Dir $s.Rel (Join-Path $PSScriptRoot '..\templates\.golangci.yml')) }
     } elseif ($Full) {
         # The full level is what guards a commit and CI. A gate that quietly drops
         # its main linter there is not a gate.

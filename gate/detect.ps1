@@ -272,6 +272,47 @@ function Get-CiGoGaps([string]$Root, [string]$GoOS, [string]$GoArch, [string]$Co
     }
 }
 
+# quality-gate#43: a repo's own .golangci.yml silently diverging from the template's
+# curated floor. Reported from the field: govet with no settings was assumed to include
+# `nilness`; it does not, the template enables it explicitly. Linters are read from
+# golangci-lint itself (`linters -c`, ~0.15s, no analysis), so `default: standard/all`
+# resolves the way the run does. A floor name that appears ANYWHERE in the repo config
+# -- a `disable:` entry, a comment giving the reason -- counts as a decision, not a gap,
+# so a deliberate omission is silenced by writing its reason down.
+# ponytail: govet analyzers are a text match on both files, not a YAML parser; govet
+# `enable-all: true` is honoured, other spellings are not.
+function Get-GolangciFloorGaps([string]$Dir, [string]$Rel, [string]$Template) {
+    $cfg = @('.golangci.yml', '.golangci.yaml') | ForEach-Object { Join-Path $Dir $_ } | Where-Object { Test-Path $_ } | Select-Object -First 1
+    if (-not $cfg -or -not (Test-Path $Template)) { return }
+    $prev = $global:LASTEXITCODE
+    $enabled = {
+        param($c)
+        $on = $false
+        foreach ($l in @(& golangci-lint linters -c $c 2>$null)) {
+            if ($l -like 'Enabled by your configuration linters:*') { $on = $true; continue }
+            if (-not $l.Trim()) { if ($on) { break } else { continue } }
+            if ($on -and $l -match '^([\w-]+):') { $Matches[1] }
+        }
+    }
+    $want = @(& $enabled $Template)
+    $have = @(& $enabled $cfg)
+    $global:LASTEXITCODE = $prev
+    # An unloadable config lists nothing; the golangci-lint phase already says why.
+    if (-not $want -or -not $have) { return }
+    $text = Get-Content $cfg -Raw
+    $named = { param($n) $text -match "(?<![\w-])$([regex]::Escape($n))(?![\w-])" }
+    $missing = @($want | Where-Object { $_ -notin $have -and -not (& $named $_) })
+    $vet = @()
+    $tpl = Get-Content $Template -Raw
+    if ($tpl -match '(?ms)^    govet:.*?^      enable:\s*\n(.*?)^    \S' -and $text -notmatch '(?ms)govet:.*?enable-all:\s*true') {
+        $vet = @([regex]::Matches($Matches[1], '(?m)^\s*-\s*(\w+)') | ForEach-Object { $_.Groups[1].Value } | Where-Object { -not (& $named $_) })
+    }
+    if (-not $missing -and -not $vet) { return }
+    $where = "$(if ($Rel) { "$Rel/" })$(Split-Path -Leaf $cfg)"
+    $parts = @(if ($missing) { "linters: $($missing -join ', ')" }) + @(if ($vet) { "govet analyzers: $($vet -join ', ')" })
+    "[WARN] golangci floor: $where lacks template $($parts -join '; ') -- enable them, or name each in a comment with the reason (templates/.golangci.yml)"
+}
+
 function Get-GodotBin {
     if ($env:GODOT_BIN -and (Test-Path $env:GODOT_BIN)) { return $env:GODOT_BIN }
     $cmd = Get-Command godot -ErrorAction SilentlyContinue

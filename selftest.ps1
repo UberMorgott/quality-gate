@@ -163,6 +163,16 @@ if (Get-Command golangci-lint -ErrorAction SilentlyContinue) {
     $vOut = (& golangci-lint config verify -c $nullCfg 2>&1 | Out-String)
     Check 'a bare rules: still fails config verify' (($LASTEXITCODE -ne 0) -and ($vOut -match 'rules')) $vOut
     $global:LASTEXITCODE = 0
+    # #43: a repo config below the template floor is named, a deliberate omission written
+    # down in the config is not, and the template itself has no gap.
+    $floor = Join-Path $tmp 'floor'
+    New-Item -ItemType Directory -Path $floor | Out-Null
+    [IO.File]::WriteAllText((Join-Path $floor '.golangci.yml'), "version: `"2`"`nlinters:`n  enable:`n    - errorlint`n    # gosec: off -- G115 is noise on fixed-point code`n")
+    $fw = @(Get-GolangciFloorGaps $floor 'server' (Join-Path $PSScriptRoot 'templates\.golangci.yml')) -join "`n"
+    Check 'a config below the golangci floor is warned with the missing names' `
+        (($fw -match '^\[WARN\] golangci floor: server/\.golangci\.yml') -and ($fw -match 'linters: .*\bbodyclose\b') -and ($fw -match 'govet analyzers: .*\bnilness\b')) $fw
+    Check 'a floor linter named in the config (with a reason) is not a gap' ($fw -notmatch '\bgosec\b') $fw
+    Check 'the template config itself has no floor gap' (-not (Get-GolangciFloorGaps $go '' (Join-Path $PSScriptRoot 'templates\.golangci.yml')))
 } else { Write-Output '[skip] golangci-lint not on PATH -- template schema checks cannot run' }
 
 # 3b. Probe: is a -Full run green on a fixture already proven clean? govulncheck
