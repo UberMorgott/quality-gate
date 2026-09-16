@@ -1,0 +1,78 @@
+# C# code style for game-mod repositories (Harmony / BepInEx / Unity, net472 or net8).
+# Copy to the repository root and adjust. The gate never injects this file: it is a
+# starting point. `EnforceCodeStyleInBuild` (-Full build) and `dotnet format style` read it.
+#
+# Everything is `suggestion`: IDE rules show in the editor and `dotnet format style`
+# fixes them, but `dotnet format style --verify-no-changes` (default --severity warn) and
+# the build stay quiet. Raise a rule to `warning` once the repository is clean for it --
+# then the gate's `format` phase reports it as `[WARN] ... code-style violation(s)`.
+
+root = true
+
+# No charset / end_of_line / insert_final_newline here on purpose: the gate's
+# `dotnet format whitespace` phase FAILS on them, so adding them to a repository with
+# existing files is a reformat commit, not a copy. Decide them per repository
+# (end_of_line must match .gitattributes, or CI on the other OS goes red on every line).
+
+[*.cs]
+indent_style = space
+indent_size = 4
+
+# --- usings and namespaces ---
+dotnet_sort_system_directives_first = true
+csharp_using_directive_placement = outside_namespace:suggestion
+# net472 mods on C# 7.3 cannot use file-scoped namespaces; switch to file_scoped on C# 10+.
+csharp_style_namespace_declarations = block_scoped:suggestion
+
+# --- var and expression bodies ---
+csharp_style_var_for_built_in_types = false:suggestion
+csharp_style_var_when_type_is_apparent = true:suggestion
+csharp_style_var_elsewhere = false:suggestion
+csharp_style_expression_bodied_methods = when_on_single_line:suggestion
+csharp_style_expression_bodied_properties = true:suggestion
+csharp_style_expression_bodied_accessors = true:suggestion
+
+# --- qualification and braces ---
+dotnet_style_qualification_for_field = false:suggestion
+dotnet_style_qualification_for_property = false:suggestion
+dotnet_style_qualification_for_method = false:suggestion
+dotnet_style_predefined_type_for_locals_parameters_members = true:suggestion
+csharp_prefer_braces = when_multiline:suggestion
+
+# --- modern syntax the old Unity compiler still accepts ---
+dotnet_style_null_propagation = true:suggestion
+dotnet_style_coalesce_expression = true:suggestion
+csharp_style_pattern_matching_over_is_with_cast_check = true:suggestion
+dotnet_style_object_initializer = true:suggestion
+
+# --- naming ---
+# Deliberately NO rule for parameters, locals or fields. Harmony reads patch parameters BY
+# NAME: __instance, __result, __state, ___privateField, __args. Any parameter naming rule
+# fires IDE1006 on them, and renaming one breaks the patch. Unity fields (m_Foo) and game
+# field mirrors are the same story.
+dotnet_naming_symbols.types.applicable_kinds = class, struct, enum, delegate
+dotnet_naming_symbols.interfaces.applicable_kinds = interface
+dotnet_naming_symbols.members.applicable_kinds = method, property, event
+
+dotnet_naming_style.pascal.capitalization = pascal_case
+dotnet_naming_style.i_pascal.capitalization = pascal_case
+dotnet_naming_style.i_pascal.required_prefix = I
+
+dotnet_naming_rule.interfaces_i_pascal.symbols = interfaces
+dotnet_naming_rule.interfaces_i_pascal.style = i_pascal
+dotnet_naming_rule.interfaces_i_pascal.severity = suggestion
+dotnet_naming_rule.types_pascal.symbols = types
+dotnet_naming_rule.types_pascal.style = pascal
+dotnet_naming_rule.types_pascal.severity = suggestion
+dotnet_naming_rule.members_pascal.symbols = members
+dotnet_naming_rule.members_pascal.style = pascal
+dotnet_naming_rule.members_pascal.severity = suggestion
+
+# --- Unity ---
+# Unity calls Awake/Start/Update/OnDestroy by reflection, so IDE0051 (unused private
+# member) and IDE0044/IDE0060 misread them. At -Full on a UnityEngine project the gate
+# injects Microsoft.Unity.Analyzers, whose suppressors handle these. Uncomment only for
+# builds without that package (the editor, a plain `dotnet build`):
+# dotnet_diagnostic.IDE0051.severity = none
+# dotnet_diagnostic.IDE0044.severity = none
+# dotnet_diagnostic.IDE0060.severity = none

@@ -1026,6 +1026,25 @@ internal class Sealable
         Write-Output '[skip] no lock file could be produced -- the injection fallback cannot be exercised'
     }
 
+    # templates/.editorconfig (#65): copying it into a repository must not turn the gate red --
+    # every rule sits at `suggestion`, and no charset/end_of_line/final-newline setting that
+    # the whitespace phase would fail on. A Harmony patch parameter is in the file on purpose.
+    $dnEc = Join-Path $tmp 'dotnet-editorconfig'
+    Copy-Item (Join-Path $PSScriptRoot 'testdata\dotnet-fixture') $dnEc -Recurse
+    Copy-Item (Join-Path $PSScriptRoot 'templates\.editorconfig') $dnEc
+    [IO.File]::WriteAllText((Join-Path $dnEc 'Patch.cs'), $dnCsClean.Replace('class Greeter', 'class HudPatch').Replace(
+            'Greet(string name)', 'Greet(string name, object __instance)'))
+    $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $dnEc -All -Full 2>&1 | Out-String)
+    $dnEcCode = $LASTEXITCODE
+    Check 'the template .editorconfig keeps a clean project green at the full level' `
+        (($dnEcCode -eq 0) -and ($out -match '\[PASS\] format') -and ($out -match '\[PASS\] build') -and ($out -notmatch 'IDE1006')) "code=$dnEcCode $out"
+    # The other side: the template's rules are live, not a file nothing reads.
+    Push-Location $dnEc
+    $ecInfo = (& dotnet format style Fixture.csproj --verify-no-changes --no-restore --severity info 2>&1 | Out-String)
+    Pop-Location
+    Check 'the template .editorconfig rules fire at info severity, but not on __instance' `
+        (($ecInfo -match 'IDE0022') -and ($ecInfo -notmatch 'IDE1006')) $ecInfo
+
     # Harmony patch targets (gate/harmony.ps1). A mod whose HintPaths point at a "game" in
     # ..\lib: first with the game absent -- the existing SKIP, and no harmony phase -- then
     # with it built, where two valid patches must stay silent and four dangling ones must not.

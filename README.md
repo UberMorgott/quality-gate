@@ -962,6 +962,21 @@ does not; declare it as a qgate.json check`. Видно и под `-Quiet`, ве
    чекауте с `core.autocrlf=true` git на следующем `add` печатает
    `LF will be replaced by CRLF` — предупреждение о нормализации, безвредное; чтобы его не
    было, нужен `*.cs text eol=lf` в `.gitattributes` и общее решение репозитория, а не гейта.
+
+   **Шаблон `templates/.editorconfig`** для C#-модов (net472/net8, Harmony, BepInEx, Unity).
+   Гейт его не подкладывает — репозиторий копирует в корень и правит. Все правила на
+   `suggestion`: редактор подсказывает, `dotnet format style` чинит, а сборка и
+   `dotnet format style --verify-no-changes` (по умолчанию `--severity warn`) молчат —
+   проверено на фикстуре: `whitespace` 0, `style` 0, с `--severity info` правила срабатывают.
+   Правило, доведённое до нуля, поднимается до `warning` — дальше его видит фаза `format`.
+   Правил именования для параметров, локальных и полей **нет** намеренно: Harmony читает
+   параметры патча по имени (`__instance`, `__result`, `___field`), и `IDE1006` на них — ложное
+   срабатывание, переименование ломает патч (проверено: `IDE1006` есть на методе `foo`, нет на
+   `__instance`). `charset`/`end_of_line`/`insert_final_newline` не заданы: фаза `whitespace`
+   на них падает, и копирование шаблона стало бы коммитом переформатирования. `namespace` —
+   `block_scoped` (C# 7.3 у Unity-модов). `IDE0051`/`IDE0044`/`IDE0060` на Unity-сообщениях
+   (`Awake`, `Update`) закрывают суппрессоры `Microsoft.Unity.Analyzers`, которые гейт
+   подключает на `-Full`; для сборок без них в шаблоне закомментированный блок.
 3. `build` — `dotnet build -nologo -v q -clp:NoSummary`, на `-Full` ещё и `--no-incremental`.
    Без `-warnaserror` намеренно: в живых
    репозиториях предупреждения есть, а быстрый уровень строже CI — это гейт, который учатся
@@ -1618,6 +1633,7 @@ templates/lefthook.yml   git-хуки через lefthook + замеренные
 templates/ci.yml         GitHub Actions воркфлоу
 templates/.markdownlint.jsonc  конфиг base-линтера markdownlint, если у репозитория нет своего
 templates/.yamllint.yml        конфиг base-линтера yamllint, если у репозитория нет своего
+templates/.editorconfig        стиль C# для модов (Harmony/BepInEx/Unity), копируется руками
 testdata/                минимальные фикстуры для selftest
 testdata/rust-fixture/src/main.rs
 testdata/godot-fixture/  фикстуры godot-стека
