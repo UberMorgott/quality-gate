@@ -1,16 +1,16 @@
 # Graph Report - quality-gate  (2026-09-16)
 
 ## Corpus Check
-- 40 files · ~85,982 words
+- 40 files · ~87,379 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 375 nodes · 592 edges · 37 communities (14 shown, 13 thin omitted)
+- 377 nodes · 594 edges · 37 communities (15 shown, 12 thin omitted)
 - Extraction: 93% EXTRACTED · 7% INFERRED · 0% AMBIGUOUS · INFERRED: 42 edges (avg confidence: 0.85)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `92b3e48a`
+- Built from commit: `0f081fff`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -56,16 +56,16 @@
 10. `Invoke-GodotStack()` - 7 edges
 
 ## Surprising Connections (you probably didn't know these)
+- `Set-OutdatedCache()` --calls--> `Get-PathKey()`  [INFERRED]
+  selftest.ps1 → gate/detect.ps1
+- `Cancellability findings (context propagation)` --conceptually_related_to--> `.golangci.yml template`  [INFERRED]
+  PLAYBOOK.md → templates/.golangci.yml
 - `Incoming agent reports: symptom right, cause wrong half the time` --semantically_similar_to--> `Second-engine review`  [INFERRED] [semantically similar]
   HANDOFF.md → PLAYBOOK.md
 - `detect stacks step (monorepo-aware marker search)` --semantically_similar_to--> `Marker-file stack detection`  [INFERRED] [semantically similar]
   templates/ci.yml → README.md
 - `QG_REF tag pin (v1), never main` --semantically_similar_to--> `qgate.json toolchain pinning`  [INFERRED] [semantically similar]
   templates/ci.yml → README.md
-- `Set-OutdatedCache()` --calls--> `Get-PathKey()`  [INFERRED]
-  selftest.ps1 → gate/detect.ps1
-- `Cancellability findings (context propagation)` --conceptually_related_to--> `.golangci.yml template`  [INFERRED]
-  PLAYBOOK.md → templates/.golangci.yml
 
 ## Import Cycles
 - None detected.
@@ -75,14 +75,14 @@
 - **Measured lefthook-on-Windows traps behind one run: line** — templates_lefthook_exit_code_trap, templates_lefthook_cmd_shim, templates_lefthook_command_v_trap, templates_lefthook_quote_stripping_trap, templates_lefthook_quality_gate_job [EXTRACTED 1.00]
 - **Commit-path coverage and the staged-index guard** — handoff_hook_coverage_matrix, handoff_cherry_pick_revert_uncovered, handoff_parallel_commit_race, handoff_git_index_file_marker, readme_staged_index_guard, templates_lefthook_quality_gate_job [INFERRED 0.95]
 
-## Communities (37 total, 13 thin omitted)
+## Communities (37 total, 12 thin omitted)
 
 ### Community 0 - "Patches.cs"
 Cohesion: 0.07
 Nodes (16): Fixture, MethodBase, Greeter, Hud, Health, IDamageable, Player, Unit (+8 more)
 
 ### Community 1 - "detect.ps1"
-Cohesion: 0.12
+Cohesion: 0.11
 Nodes (19): Find-Marker(), Get-ChecksHash(), Get-CustomChecks(), Get-DefaultTrustStore(), Get-DeployEntries(), Get-GitIgnoredSet(), Get-GoBuiltWith(), Get-GodotBin() (+11 more)
 
 ### Community 2 - "Coverage measures happy paths; a green suite proves nothing"
@@ -90,16 +90,20 @@ Cohesion: 0.17
 Nodes (13): git check-ignore exit codes; --stdin batch unusable on Windows, Selftest counts 121 online / 115 offline, Coverage measures happy paths; a green suite proves nothing, Mutation check of existing tests, PowerShell reads an empty value as absence, Red-then-green verification, A right outcome does not prove the right cause (§0.1), Negative check asserts outcome + applied cause + absent cause (+5 more)
 
 ### Community 3 - "qgate wire (repo wiring, config only)"
-Cohesion: 0.08
-Nodes (31): "Gate is wrong" issue template, cherry-pick and revert cannot be covered cheaply, Deliberately chosen boundaries (not TODOs), GIT_INDEX_FILE marks that we are inside a commit, GOTOOLCHAIN=auto unpacking races produce 'missing std package', Measured git hook coverage matrix (git 2.53), Parallel commits in one worktree swallow each other's staged files, A signature-changing commit must carry its callers (+23 more)
+Cohesion: 0.06
+Nodes (37): "Gate is wrong" issue template, cherry-pick and revert cannot be covered cheaply, Deliberately chosen boundaries (not TODOs), GIT_INDEX_FILE marks that we are inside a commit, GOTOOLCHAIN=auto unpacking races produce 'missing std package', Measured git hook coverage matrix (git 2.53), Incoming agent reports: symptom right, cause wrong half the time, Parallel commits in one worktree swallow each other's staged files (+29 more)
 
 ### Community 4 - "Lookups"
 Cohesion: 0.08
 Nodes (16): Attribute, HarmonyLib, FieldInfo, MethodInfo, AccessTools, HarmonyPatch, MethodType, Constructor (+8 more)
 
+### Community 5 - "selftest.ps1"
+Cohesion: 0.20
+Nodes (3): Invoke-Smoke(), Invoke-Trust(), Set-OutdatedCache()
+
 ### Community 6 - "QGateHarmony"
 Cohesion: 0.07
-Nodes (23): A, Asm, CustomAttribute, CustomAttributeHandleCollection, Dictionary, Asm, Ins, QGateHarmony (+15 more)
+Nodes (21): A, Asm, CustomAttribute, CustomAttributeHandleCollection, Dictionary, Asm, QGateHarmony, Target (+13 more)
 
 ### Community 7 - "extends"
 Cohesion: 0.40
@@ -110,12 +114,12 @@ Cohesion: 0.29
 Nodes (6): name, private, scripts, build-only, type-check, type
 
 ### Community 9 - "check.ps1"
-Cohesion: 0.17
-Nodes (28): Fail(), Get-ChangedPaths(), Get-CppCompileDb(), Get-Descendants(), Get-DotnetChangedCs(), Get-DotnetEval(), Get-DotnetSharedFormat(), Get-DotnetTfms() (+20 more)
+Cohesion: 0.18
+Nodes (27): Fail(), Get-ChangedPaths(), Get-CppCompileDb(), Get-Descendants(), Get-DotnetChangedCs(), Get-DotnetEval(), Get-DotnetSharedFormat(), Get-DotnetTfms() (+19 more)
 
 ### Community 10 - ".golangci.yml template"
-Cohesion: 0.08
-Nodes (26): Incoming agent reports: symptom right, cause wrong half the time, git add --renormalize + checkout is a no-op for CRLF, Cancellability findings (context propagation), Three rules for a machine-readable deferral file, Final-write timeout created too early, Second-engine review, Security findings (path traversal, middleware order, body limits), Suppression needs a named reason; stale suppressions flagged (+18 more)
+Cohesion: 0.10
+Nodes (20): git add --renormalize + checkout is a no-op for CRLF, Three rules for a machine-readable deferral file, Suppression needs a named reason; stale suppressions flagged, Taint rules report one finding at a time and are inter-package, Unchecked errors: propagate, log-and-degrade, or join, qgate.deferrals.json (dated deferrals), Go stack phases, qgate outdated (+12 more)
 
 ### Community 11 - "Add"
 Cohesion: 0.40
@@ -130,13 +134,13 @@ Cohesion: 0.40
 Nodes (3): ArrayShape, string, greeting()
 
 ### Community 36 - ".Scan"
-Cohesion: 0.10
-Nodes (18): BlobReader, EntityHandle, V, Gen, HashSet, Ins, List, MetadataReader (+10 more)
+Cohesion: 0.09
+Nodes (20): BlobReader, EntityHandle, Ins, V, Gen, HashSet, Ins, List (+12 more)
 
 ## Knowledge Gaps
 - **37 isolated node(s):** `Health`, `gatefixture`, `python-fixture`, `Autonomy`, `graphify` (+32 more)
-  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 134 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
-- **13 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 136 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
+- **12 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
@@ -154,4 +158,4 @@ _Questions this graph is uniquely positioned to answer:_
 - **Should `Patches.cs` be split into smaller, more focused modules?**
   _Cohesion score 0.06951871657754011 - nodes in this community are weakly interconnected._
 - **Should `detect.ps1` be split into smaller, more focused modules?**
-  _Cohesion score 0.12333333333333334 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.1111111111111111 - nodes in this community are weakly interconnected._
