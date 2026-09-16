@@ -136,7 +136,10 @@ linters:
       # would undo any fix.
       - 'vendor/'
       # - '^cmd/scratch/'
-    rules:
+    # `[]`, not a bare `rules:`: a key holding only comments is YAML null, and
+    # `golangci-lint config verify` rejects it (want array). Replace the `[]`
+    # when you add the first rule.
+    rules: []
       # ---------------------------------------------------------------------
       # ADOPTING THIS ON AN EXISTING CODEBASE
       #
@@ -192,6 +195,28 @@ linters:
 issues:
   max-issues-per-linter: 0
   max-same-issues: 0
+
+# RECOMMENDED formatters, commented out on purpose: `golangci-lint run` reports
+# every unformatted file as an issue, so enabling them on a gofmt-only codebase
+# turns the gate red over whitespace. Adopt in one commit: uncomment, run
+# `golangci-lint fmt ./...` (both are autofix), commit the rewrite. gofumpt is a
+# strict superset of gofmt; gci groups imports std / third-party / this module.
+# Verified with golangci-lint v2.13.2 (`config verify` + `run`).
+# formatters:
+#   enable:
+#     - gofumpt
+#     - gci
+#   settings:
+#     gci:
+#       sections:
+#         - standard
+#         - default
+#         - localmodule
+#   exclusions:
+#     generated: strict
+#     paths:
+#       - 'node_modules/'
+#       - 'vendor/'
 
 # OPT-IN, not wired into the gate. Add to the full level (pre-commit / CI) once
 # you have run each one by hand and seen its output:

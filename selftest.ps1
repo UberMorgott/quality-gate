@@ -146,6 +146,24 @@ Copy-Item (Join-Path $PSScriptRoot 'templates\.golangci.yml') $go
 $r = Invoke-Gate $go
 Check 'template .golangci.yml passes' ($r.Code -eq 0) $r.Out
 Check 'no warning once config present' ($r.Out -notmatch 'WARN') $r.Out
+# #52: the template must satisfy golangci-lint's own schema (embedded, offline), and so
+# must its commented-out formatters block once a repo uncomments it. The negative half:
+# a bare `rules:` (YAML null) is what the schema rejected before, so it must still fail.
+if (Get-Command golangci-lint -ErrorAction SilentlyContinue) {
+    $tplText = Get-Content (Join-Path $PSScriptRoot 'templates\.golangci.yml') -Raw
+    $vOut = (& golangci-lint config verify -c (Join-Path $go '.golangci.yml') 2>&1 | Out-String)
+    Check 'template .golangci.yml passes config verify' ($LASTEXITCODE -eq 0) $vOut
+    $fi = $tplText.IndexOf('# formatters:'); $fj = $tplText.IndexOf("`n# OPT-IN", $fi)
+    $fmtCfg = Join-Path $tmp 'golangci-formatters.yml'
+    [IO.File]::WriteAllText($fmtCfg, $tplText.Substring(0, $fi) + ($tplText.Substring($fi, $fj - $fi) -replace '(?m)^# ?', '') + $tplText.Substring($fj))
+    $vOut = (& golangci-lint config verify -c $fmtCfg 2>&1 | Out-String)
+    Check 'uncommented gofumpt+gci formatters block passes config verify' (($fi -gt 0) -and ($LASTEXITCODE -eq 0) -and ((Get-Content $fmtCfg -Raw) -match '(?m)^formatters:')) $vOut
+    $nullCfg = Join-Path $tmp 'golangci-null-rules.yml'
+    [IO.File]::WriteAllText($nullCfg, ($tplText -replace '(?m)^    rules: \[\]', '    rules:'))
+    $vOut = (& golangci-lint config verify -c $nullCfg 2>&1 | Out-String)
+    Check 'a bare rules: still fails config verify' (($LASTEXITCODE -ne 0) -and ($vOut -match 'rules')) $vOut
+    $global:LASTEXITCODE = 0
+} else { Write-Output '[skip] golangci-lint not on PATH -- template schema checks cannot run' }
 
 # 3b. Probe: is a -Full run green on a fixture already proven clean? govulncheck
 # needs a live vulnerability database, so with no network the full level fails --

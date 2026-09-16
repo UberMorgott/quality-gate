@@ -1322,6 +1322,10 @@ qgate -All -Baseline HEAD~
 находку чинить или исключать по пути в `exclusions.rules`, не через `//nolint`.
 `govet nilness` уже включён в шаблоне. `govet shadow` **не включать**: 178 находок, почти все —
 легитимный скоупинг `err`.
+Форматтеры `gofumpt` + `gci` (секция `formatters:` golangci v2) — в шаблоне закомментированы:
+`golangci-lint run` репортит каждый неотформатированный файл, и репо со стилем «только gofmt»
+покраснело бы на пробелах. Внедрять одним коммитом: раскомментировать, `golangci-lint fmt ./...`
+(оба autofix), закоммитить переписанное. Проверено `golangci-lint config verify` + `run` на v2.13.2.
 
 **Фронтенд:** [knip](https://knip.dev) (мёртвые файлы, экспорты, зависимости),
 [dependency-cruiser](https://github.com/sverweij/dependency-cruiser) (циклы и границы слоёв),
