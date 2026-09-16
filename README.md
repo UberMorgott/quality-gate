@@ -1334,6 +1334,27 @@ no test checks for leaks: <dirs>` для пакета, у которого ес�
 (`goleak.VerifyTestMain(m)` из `go.uber.org/goleak`). Пакеты — из `go list`, остальное — regex по
 строкам: строка в raw-string считается, горутины из зависимостей не видны. Не падает.
 
+**Профиль чистоты (opt-in).** Только если в корневом `qgate.json` перечислены детерминированные
+пакеты (директории относительно корня репозитория):
+
+```json
+{ "go": { "deterministic": ["server/internal/sim", "server/internal/fixed", "server/internal/rng"] } }
+```
+
+На `-Full` (после зелёных фаз) для каждого пакета из модуля — `[WARN] purity: N finding(s) in
+deterministic packages` и строки `file:line:col: ...`. Не-тестовые файлы (property-тест может брать
+`rand`). Что запрещено:
+- forbidigo (временный конфиг golangci-lint, `analyze-types`): `float32`/`float64`, `time.Now/Since/Until`,
+  `os.Getenv/LookupEnv/Environ`;
+- depguard: импорты `math/rand` (и `/v2`), `crypto/rand`, `os`, `net`, `io` — по префиксу, т.е. и
+  `os/exec`, `net/http`, `io/fs`;
+- `gate/gopurity` (stdlib `go/types`, `go run`, без сети): `range` по map, `go`, `select`.
+
+Потолок: float-литерал без именованного типа (`x := 1.5`) не виден; пакет, который не
+типизируется, может спрятать `range` по map; без golangci-lint работает только `gopurity`.
+Кривой ключ (не массив, не строка, нет директории) — `[WARN] qgate.json ...`, виден и в `-Quiet`.
+Нет ключа — нет проверки.
+
 **Пол шаблона.** На `-Full`, если у модуля свой `.golangci.yml`, гейт сверяет его с шаблоном
 (`golangci-lint linters -c` на оба файла + analyzers из `govet.enable` шаблона) и печатает
 `[WARN] golangci floor: <cfg> lacks template linters: ...; govet analyzers: ...`. Не падает.

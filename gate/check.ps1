@@ -457,6 +457,13 @@ function Invoke-GoStack($s) {
         # Advisory Go checks: never a verdict, and noise over code that does not build.
         if (-not $script:Failed) {
             $script:Warnings += @(Get-GoleakGaps $s.Dir)
+            # Opt-in (qgate.json go.deterministic): purity profile over this module's listed packages.
+            $det = Get-GoDeterministic $Root
+            if ($det.Error) { $script:Warnings += "[WARN] $($det.Error)" }
+            elseif ($det) {
+                $mine = @($det.Dirs | Where-Object { $_ -eq $s.Dir.TrimEnd('\', '/') -or $_.StartsWith($s.Dir.TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar) })
+                if ($mine) { $script:Warnings += @(Get-GoPurity $s.Dir $mine) }
+            }
             $fsw = [Diagnostics.Stopwatch]::StartNew()
             $fuzz = Invoke-GoFuzz $s.Dir
             if ($fuzz.Ran) { $script:Lines += "$(if ($fuzz.Warn -match ' failed -- ') { '[WARN]' } else { '[PASS]' }) go fuzz $($fuzz.Ran) target(s) ($($fsw.Elapsed.TotalSeconds.ToString('0.0', [Globalization.CultureInfo]::InvariantCulture))s)" }

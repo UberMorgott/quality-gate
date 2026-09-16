@@ -221,6 +221,31 @@ if ((Get-Command deadcode -ErrorAction SilentlyContinue) -and -not (Test-GoToolS
     Check 'a module with no main package is not a deadcode warning' (-not (Get-GoDeadcode $dc)) "$(Get-GoDeadcode $dc)"
 } else { Write-Output '[skip] deadcode not on PATH or stale -- deadcode checks cannot run' }
 
+# #46: purity profile, opt-in through qgate.json go.deterministic. No key is no check; a
+# malformed key is named; a listed impure package is warned per construct; a listed pure
+# package is not.
+$pur = Join-Path $tmp 'purity'
+Copy-Item (Join-Path $PSScriptRoot 'testdata\go-fixture') $pur -Recurse
+New-Item -ItemType Directory -Path (Join-Path $pur 'sim'), (Join-Path $pur 'fixed') | Out-Null
+Set-GoFile (Join-Path $pur 'sim\sim.go') "package sim`n`nimport (`n`t`"math/rand`"`n`t`"time`"`n)`n`n// Step is impure.`nfunc Step(m map[string]int) float64 {`n`t_ = time.Now()`n`tfor k := range m {`n`t`t_ = k`n`t}`n`tgo func() {}()`n`treturn float64(rand.Int())`n}"
+Set-GoFile (Join-Path $pur 'fixed\fixed.go') "package fixed`n`n// Add is pure.`nfunc Add(a, b int64) int64 {`n`tfor i := range []int{1} {`n`t`ta += int64(i)`n`t}`n`treturn a + b`n}"
+Check 'no qgate.json go.deterministic key is no purity check' ($null -eq (Get-GoDeterministic $pur))
+[IO.File]::WriteAllText((Join-Path $pur 'qgate.json'), '{"go": {"deterministic": "sim"}}')
+Check 'a non-array go.deterministic is a named config error' ((Get-GoDeterministic $pur).Error -match 'must be an array')
+[IO.File]::WriteAllText((Join-Path $pur 'qgate.json'), '{"go": {"deterministic": ["nosuch"]}}')
+Check 'a go.deterministic directory that does not exist is a named config error' ((Get-GoDeterministic $pur).Error -match "'nosuch' is not a directory")
+[IO.File]::WriteAllText((Join-Path $pur 'qgate.json'), '{"go": {"deterministic": ["sim", "fixed"]}}')
+$det = Get-GoDeterministic $pur
+Check 'go.deterministic lists both package dirs' ((-not $det.Error) -and $det.Dirs.Count -eq 2) "$($det.Error)"
+$pw = (Get-GoPurity $pur @($det.Dirs[0])) -join "`n"
+Check 'an impure deterministic package is warned: map range, go statement' `
+    (($pw -match '^\[WARN\] purity: ') -and ($pw -match 'sim/sim\.go:\d+:\d+: range over map') -and ($pw -match 'go statement')) $pw
+if (Get-Command golangci-lint -ErrorAction SilentlyContinue) {
+    Check 'an impure deterministic package is warned: time.Now, float64, math/rand' `
+        (($pw -match 'time\.Now') -and ($pw -match 'float64') -and ($pw -match "import 'math/rand'")) $pw
+}
+Check 'a pure deterministic package is clean (range over a slice is fine)' (-not (Get-GoPurity $pur @($det.Dirs[1]))) "$(Get-GoPurity $pur @($det.Dirs[1]))"
+
 # 3b. Probe: is a -Full run green on a fixture already proven clean? govulncheck
 # needs a live vulnerability database, so with no network the full level fails --
 # correctly, because unverifiable is not clean. That makes every later check that

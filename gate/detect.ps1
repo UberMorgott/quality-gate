@@ -414,6 +414,84 @@ function Get-GoDeadcode([string]$Dir) {
     if ($hits.Count -gt 20) { "       ... $($hits.Count - 20) more: run deadcode -test ./..." }
 }
 
+# quality-gate#46: qgate.json {"go": {"deterministic": ["server/internal/sim", ...]}} --
+# package directories, relative to the repository root, that must replay bit-for-bit.
+# Same contract as Get-DeployEntries: $null when nothing is declared, else .Dirs
+# (absolute) and .Error. Opt-in only: no key, no check.
+function Get-GoDeterministic([string]$Root) {
+    $file = Join-Path $Root 'qgate.json'
+    if (-not (Test-Path $file)) { return $null }
+    $json = try { Get-Content $file -Raw | ConvertFrom-Json } catch { $null }
+    if ($null -eq $json -or $null -eq $json.go -or $json.go.PSObject.Properties.Name -notcontains 'deterministic') { return $null }
+    $raw = $json.go.deterministic
+    $bad = { param($m) [pscustomobject]@{ Dirs = @(); Error = $m } }
+    if ($raw -isnot [Array]) { return (& $bad 'qgate.json "go.deterministic" must be an array of package directories') }
+    $dirs = @()
+    foreach ($e in $raw) {
+        if ($e -isnot [string] -or -not $e.Trim()) { return (& $bad 'qgate.json "go.deterministic" entries must be non-empty strings') }
+        $d = Join-Path $Root $e
+        if (-not (Test-Path $d -PathType Container)) { return (& $bad "qgate.json go.deterministic '$e' is not a directory") }
+        $dirs += (Resolve-Path $d).Path.TrimEnd('\', '/')
+    }
+    if (-not $dirs) { return $null }
+    [pscustomobject]@{ Dirs = $dirs; Error = '' }
+}
+
+# quality-gate#46: the purity profile over the deterministic packages of the module in
+# $Dir. forbidigo + depguard through golangci-lint with a generated config (tests
+# excluded: a property test may use rand), then gate/gopurity for what those linters
+# cannot express -- range over a map, go and select statements. Advisory until
+# calibrated on a real consumer repo.
+# ponytail: import bans are depguard prefixes (os also bans os/exec, io bans io/fs);
+# float literals with no named float type (x := 1.5) are not flagged; map range is found
+# by go/types, so a package that fails to type-check can hide one.
+function Get-GoPurity([string]$Dir, [string[]]$Pkgs) {
+    $prev = $global:LASTEXITCODE
+    $cfg = Join-Path ([IO.Path]::GetTempPath()) "qgate-purity-$PID.yml"
+    [IO.File]::WriteAllText($cfg, @'
+version: "2"
+run:
+  tests: false
+  relative-path-mode: wd
+linters:
+  default: none
+  enable: [forbidigo, depguard]
+  settings:
+    forbidigo:
+      analyze-types: true
+      forbid:
+        - pattern: ^float(32|64)$
+          msg: floating point differs across platforms -- use fixed-point
+        - pattern: ^time\.(Now|Since|Until)$
+          msg: wall clock -- pass time in as input
+        - pattern: ^os\.(Getenv|LookupEnv|Environ)$
+          msg: environment -- pass configuration in as input
+    depguard:
+      rules:
+        purity:
+          deny:
+            - { pkg: math/rand, desc: "nondeterministic -- use the seeded rng package" }
+            - { pkg: crypto/rand, desc: "nondeterministic -- use the seeded rng package" }
+            - { pkg: os, desc: "side effects do not belong in a deterministic package" }
+            - { pkg: net, desc: "side effects do not belong in a deterministic package" }
+            - { pkg: io, desc: "side effects do not belong in a deterministic package" }
+'@)
+    Push-Location $Dir
+    try {
+        $rel = @($Pkgs | ForEach-Object { './' + [IO.Path]::GetRelativePath($Dir, $_).Replace('\', '/') })
+        $hits = @()
+        if (Get-Command golangci-lint -ErrorAction SilentlyContinue) {
+            $hits += @(& golangci-lint run -c $cfg --output.text.print-issued-lines=false --output.text.colors=false `
+                    --max-issues-per-linter=0 --max-same-issues=0 @rel 2>&1 | ForEach-Object { "$_" } | Where-Object { $_ -match '\((forbidigo|depguard)\)$' })
+        }
+        $hits += @(& go run (Join-Path $PSScriptRoot 'gopurity\main.go') @Pkgs 2>$null | ForEach-Object {
+                if ($_ -match '^(.+?\.go)(:\d+:\d+: .*)$') { [IO.Path]::GetRelativePath($Dir, $Matches[1]) + $Matches[2] } })
+    } finally { Pop-Location; Remove-Item $cfg -Force -ErrorAction SilentlyContinue; $global:LASTEXITCODE = $prev }
+    if (-not $hits) { return }
+    "[WARN] purity: $($hits.Count) finding(s) in deterministic packages (qgate.json go.deterministic) -- advisory, not a failure"
+    $hits | ForEach-Object { "       $($_.Replace('\', '/'))" }
+}
+
 function Get-GodotBin {
     if ($env:GODOT_BIN -and (Test-Path $env:GODOT_BIN)) { return $env:GODOT_BIN }
     $cmd = Get-Command godot -ErrorAction SilentlyContinue
