@@ -2640,6 +2640,29 @@ try {
     $code = $LASTEXITCODE
     Check 'a missing gremlins is a [SKIP] with an install hint, exit 0' `
         (($code -eq 0) -and ($out -match '\[SKIP\] gremlins -- not on PATH \(go install github.com/go-gremlins')) "code=$code $out"
+
+    # #59: -Sarif is opt-in. Without it no file appears and stdout is the plain report;
+    # with it stdout is byte-identical and the file is SARIF 2.1.0: [WARN] -> warning,
+    # [FAIL] -> error, and a compiler's `path:line:col` line carries a physical location.
+    $sarifFile = Join-Path $tmp 'qgate.sarif'
+    $env:PATH = "$mutShim$sep$noGremlins"
+    $plain = (& pwsh -NoProfile -File $gate -Root $mut -All -Only go -Mutate 2>&1 | Out-String)
+    Check 'without -Sarif no SARIF file is written' (-not (Test-Path $sarifFile)) $plain
+    $out = (& pwsh -NoProfile -File $gate -Root $mut -All -Only go -Mutate -Sarif $sarifFile 2>&1 | Out-String)
+    $code = $LASTEXITCODE
+    $doc = try { Get-Content $sarifFile -Raw | ConvertFrom-Json } catch { $null }
+    $mutWarn = @($doc.runs[0].results | Where-Object { $_.level -eq 'warning' -and $_.message.text -match 'surviving mutant' })
+    Check '-Sarif keeps stdout and exit code, writes valid 2.1.0 with [WARN] as warning' `
+        (($code -eq 0) -and ($out -eq $plain) -and $doc -and ($doc.version -eq '2.1.0') -and ($doc.'$schema' -match 'sarif-2\.1\.0') -and
+         ($doc.runs[0].tool.driver.name -eq 'quality-gate') -and $mutWarn.Count -eq 1 -and -not @($doc.runs[0].results | Where-Object level -eq 'error')) "code=$code $out"
+    Set-GoFile (Join-Path $mut 'main.go') "package main`n`nfunc main() { undefinedName() }"
+    $out = (& pwsh -NoProfile -File $gate -Root $mut -All -Only go -Sarif $sarifFile 2>&1 | Out-String)
+    $code = $LASTEXITCODE
+    $doc = try { Get-Content $sarifFile -Raw | ConvertFrom-Json } catch { $null }
+    $errs = @($doc.runs[0].results | Where-Object level -eq 'error')
+    $located = @($errs | Where-Object { $_.locations -and $_.locations[0].physicalLocation.artifactLocation.uri -match 'main\.go$' -and $_.locations[0].physicalLocation.region.startLine -eq 3 })
+    Check '-Sarif maps [FAIL] to error and a path:line:col line to a location' `
+        (($code -eq 1) -and ($out -match '\[FAIL\]') -and $errs.Count -ge 1 -and $located.Count -ge 1) "code=$code $out $(Get-Content $sarifFile -Raw -ErrorAction SilentlyContinue)"
 } finally { $env:PATH = $priorPath }
 
 # The vulnerability database lives on the network, so vuln is full-level only -- the

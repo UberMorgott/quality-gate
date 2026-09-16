@@ -20,6 +20,7 @@ param(
     [string]$Baseline,    # git rev: report only issues newer than it (adoption on a dirty codebase)
     [switch]$Mutate,      # on demand only: Go mutation testing (gremlins), advisory; scoped by -Baseline
     [string]$Root,        # repo root; defaults to the git root of the cwd
+    [string]$Sarif,       # opt-in: also write the report as SARIF 2.1.0 to this file; stdout unchanged
     # Nothing binds here on a correct call. Positional binding used to swallow the
     # second word of `-Only go python` into -Baseline, and the run then died with
     # "baseline revision not found: python" -- a verdict about a feature the user
@@ -31,6 +32,67 @@ param(
 $ErrorActionPreference = 'Continue'
 . (Join-Path $PSScriptRoot 'detect.ps1')
 . (Join-Path $PSScriptRoot 'smoke.ps1')
+
+# --- -Sarif: the same run, its report also written as SARIF 2.1.0 -----------
+# One place for every stack and every exit path: the gate runs itself without -Sarif,
+# prints the child's stdout as-is, and converts those same lines. Nothing per tool.
+# [FAIL] -> error, [WARN]/[UNKNOWN] -> warning, [SKIP]/[NOTE]/[INFO] -> note, [PASS]
+# is not a result. ruleId is the first word after the tag. An untagged line of raw
+# tool output that starts `path:line[:col]` becomes its own result with a location
+# under the last tag; any other untagged line is appended to the previous result.
+# ponytail: location only for `path:line[:col]` with no spaces in the path, relative
+# paths as the tool printed them (a stack in a subdirectory prints them relative to
+# it); -Quiet on a green run prints nothing, so the SARIF is empty too.
+if ($PSBoundParameters.ContainsKey('Sarif')) {
+    if (-not $Sarif) { Write-Output '[FAIL] -Sarif was given an empty value -- name the output file: -Sarif qgate.sarif'; exit 1 }
+    $argv = @()
+    foreach ($k in $PSBoundParameters.Keys) {
+        if ($k -in 'Sarif', 'Extra') { continue }
+        $v = $PSBoundParameters[$k]
+        if ($v -is [switch]) { if ($v) { $argv += "-$k" } }
+        elseif ($k -eq 'Only') { $argv += '-Only', (@($v) -join ',') }
+        else { $argv += "-$k", $v }
+    }
+    if ($Extra) { $argv += $Extra }
+    $childOut = @(& pwsh -NoProfile -File $PSCommandPath @argv)
+    $code = $LASTEXITCODE
+    $childOut | ForEach-Object { Write-Output $_ }
+    $base = try { (Resolve-Path $(if ($Root) { $Root } else { Get-RepoRoot (Get-Location).Path })).Path } catch { $null }
+    $results = [Collections.Generic.List[object]]::new()
+    $rule = 'gate'; $tagLevel = $null
+    $levels = @{ FAIL = 'error'; WARN = 'warning'; UNKNOWN = 'warning'; SKIP = 'note'; NOTE = 'note'; INFO = 'note' }
+    foreach ($line in @($childOut | ForEach-Object { "$_" -split "`r?`n" })) {
+        # A passing stack line carries its phases inline: `[PASS] go (go.mod) [PASS] build [WARN] ...`.
+        foreach ($seg in ($line -split ' (?=\[(?:PASS|FAIL|WARN|SKIP|UNKNOWN|NOTE|INFO)\] )')) {
+            if ($seg -match '^\[(PASS|FAIL|WARN|SKIP|UNKNOWN|NOTE|INFO|WHY)\] (.*)$') {
+                $tagLevel = $levels[$Matches[1]]
+                $rule = if ($Matches[2] -match '^([^\s:(]+)') { $Matches[1] } else { 'gate' }
+                if ($tagLevel) { $results.Add([ordered]@{ ruleId = $rule; level = $tagLevel; message = [ordered]@{ text = $seg } }) }
+            } elseif ($tagLevel -and $seg -match '^\s*(?<p>(?:[A-Za-z]:[\\/])?[^\s:]+\.[A-Za-z0-9]+):(?<l>\d+)(?::(?<c>\d+))?') {
+                $p = $Matches.p
+                $uri = if ([IO.Path]::IsPathRooted($p)) {
+                    $rel = if ($base) { [IO.Path]::GetRelativePath($base, $p) } else { $p }
+                    if ($rel -notmatch '^\.\.' -and -not [IO.Path]::IsPathRooted($rel)) { $rel -replace '\\', '/' } else { ([Uri]$p).AbsoluteUri }
+                } else { $p -replace '\\', '/' -replace '^\./', '' }
+                $region = [ordered]@{ startLine = [int]$Matches.l }
+                if ($Matches.c -and [int]$Matches.c -gt 0) { $region.startColumn = [int]$Matches.c }
+                if ($region.startLine -lt 1) { $region = $null }
+                $loc = [ordered]@{ artifactLocation = [ordered]@{ uri = $uri } }
+                if ($region) { $loc.region = $region }
+                $results.Add([ordered]@{ ruleId = $rule; level = $tagLevel; message = [ordered]@{ text = $seg.Trim() }; locations = @([ordered]@{ physicalLocation = $loc }) })
+            } elseif ($seg.Trim() -and $results.Count) {
+                $results[-1].message.text += "`n" + $seg
+            }
+        }
+    }
+    $doc = [ordered]@{
+        '$schema' = 'https://json.schemastore.org/sarif-2.1.0.json'
+        version   = '2.1.0'
+        runs      = @([ordered]@{ tool = [ordered]@{ driver = [ordered]@{ name = 'quality-gate'; informationUri = 'https://github.com/UberMorgott/quality-gate' } }; results = @($results) })
+    }
+    [IO.File]::WriteAllText([IO.Path]::GetFullPath($Sarif, (Get-Location).Path), ($doc | ConvertTo-Json -Depth 20))
+    exit $code
+}
 
 # --- the command line ------------------------------------------------------
 # `if ($Only)` was a truthiness test, and PowerShell reads an empty value as absence
