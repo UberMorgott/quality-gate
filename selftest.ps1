@@ -1565,6 +1565,38 @@ if ($live -match '\[OUTDATED\] tool rust/cargo') {
     Write-Output '[skip] no live rust/cargo finding to defer -- registry unreachable, or this cargo is current'
 }
 
+# The full run's advisory has a deadline. A copy of gate/ with outdated.ps1 swapped for
+# a stub, because a stalled registry is not something this suite can arrange. The hung
+# stub starts a child of its own: the tree is killed, not just the pwsh parent. Costs
+# the real 30s -- a knob only a test turns is not worth shipping to every hook.
+$advGate = Join-Path $tmp 'advgate'
+Copy-Item (Join-Path $PSScriptRoot 'gate') $advGate -Recurse
+$advRepo = Join-Path $tmp 'adv repo'
+New-Item -ItemType Directory -Path $advRepo | Out-Null
+git -C $advRepo init -q 2>$null
+Set-Content (Join-Path $advRepo 'readme.txt') 'hello'
+$advStub = Join-Path $advGate 'outdated.ps1'
+[IO.File]::WriteAllText($advStub, "param([string]`$Root, [switch]`$Summary)`n'[INFO] stub advisory for ' + `$Root`n")
+$out = (& pwsh -NoProfile -File (Join-Path $advGate 'check.ps1') -Root $advRepo -Full 2>&1 | Out-String)
+Check 'a finished advisory still reaches the report, root with a space intact' `
+    (($LASTEXITCODE -eq 0) -and ($out -match [regex]::Escape("[INFO] stub advisory for $advRepo"))) $out
+$childPid = Join-Path $tmp 'adv-child.pid'
+[IO.File]::WriteAllText($advStub, @"
+param([string]`$Root, [switch]`$Summary)
+`$c = Start-Process pwsh -ArgumentList '-NoProfile', '-Command', 'Start-Sleep 300' -NoNewWindow -PassThru
+Set-Content '$childPid' `$c.Id
+Start-Sleep -Seconds 300
+"@)
+$sw = [Diagnostics.Stopwatch]::StartNew()
+$out = (& pwsh -NoProfile -File (Join-Path $advGate 'check.ps1') -Root $advRepo -Full -Quiet 2>&1 | Out-String)
+$advCode = $LASTEXITCODE
+$sw.Stop()
+$childAlive = [bool](Get-Process -Id ([int](Get-Content $childPid -ErrorAction SilentlyContinue)) -ErrorAction SilentlyContinue)
+Check 'a hung advisory is cut off, named under -Quiet, and does not fail the run' `
+    (($advCode -eq 0) -and ($sw.Elapsed.TotalSeconds -lt 90) -and -not $childAlive -and
+    ($out -match '\[WARN\] dependency update advisory timed out after 30s; update status is unknown')) `
+    "code=$advCode elapsed=$($sw.Elapsed.TotalSeconds) childAlive=$childAlive $out"
+
 # 26. An unreadable qgate.deferrals.json must say so ONCE. `@($null)` iterates one
 # null element, so the correct "not readable" line was followed by a second warning
 # about "entry 1" that no entry ever produced -- a right outcome with an invented

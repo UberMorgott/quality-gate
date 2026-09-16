@@ -1939,9 +1939,26 @@ if ($script:StagedAtStart) {
 
 # Only on the full level, only when everything passed: a note about newer releases,
 # never a verdict. It cannot fail the run, and the Stop hook (-Fast) never sees it.
+# Bounded, the way the web test phase bounds npm: `go list -m -u all` and `npm outdated`
+# ask a registry, and a stalled one held every full run -- the commit hook included --
+# for as long as it liked, over a note that cannot change the verdict. The tree is
+# killed on timeout because pwsh is only the parent; go or npm is what hangs.
 if ($Full -and -not $script:Failed) {
-    $note = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'outdated.ps1') -Root $Root -Summary 2>$null)
-    if ($note) { $report += $note }
+    $advisoryTimeoutSec = 30
+    $outFile = Join-Path ([IO.Path]::GetTempPath()) "quality-gate-advisory-$PID.out"
+    # Quoted by hand: Start-Process joins -ArgumentList with bare spaces, so a root with
+    # a space in it would arrive as two arguments.
+    $p = Start-Process 'pwsh' -ArgumentList '-NoProfile', '-File', "`"$(Join-Path $PSScriptRoot 'outdated.ps1')`"", '-Root', "`"$Root`"", '-Summary' `
+        -NoNewWindow -PassThru -RedirectStandardOutput $outFile -RedirectStandardError "$outFile.err"
+    if ($p.WaitForExit($advisoryTimeoutSec * 1000)) {
+        $note = @(Get-Content $outFile -ErrorAction SilentlyContinue | Where-Object { $_ })
+        if ($note) { $report += $note }
+    } else {
+        try { $p.Kill($true) } catch { }
+        [void]$p.WaitForExit(5000)
+        $report += "[WARN] dependency update advisory timed out after ${advisoryTimeoutSec}s; update status is unknown"
+    }
+    Remove-Item $outFile, "$outFile.err" -Force -ErrorAction SilentlyContinue
 }
 
 # -Quiet keeps a PASSING run silent -- that is its whole documented job, and the
@@ -1950,7 +1967,8 @@ if ($Full -and -not $script:Failed) {
 # a passing condition though: it is the gate saying its input is broken, and
 # swallowing it here hid it exactly where it guards a commit. Same rule the
 # qgate.json unknown-key warning already follows; the advisory [INFO] about newer
-# releases and the per-stack notes stay silent on green.
-if ($Quiet -and -not $script:Failed) { $report = @($report | Where-Object { $_ -match '^\[WARN\] qgate\.' }) }
+# releases and the per-stack notes stay silent on green. A timed-out advisory is shown:
+# it is the reason this commit took 30s longer, and it says nothing was checked.
+if ($Quiet -and -not $script:Failed) { $report = @($report | Where-Object { $_ -match '^\[WARN\] (qgate\.|dependency update advisory timed out)' }) }
 if ($report) { $report | ForEach-Object { Write-Output $_ } }
 exit ($(if ($script:Failed) { 1 } else { 0 }))
