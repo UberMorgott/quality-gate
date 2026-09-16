@@ -457,6 +457,10 @@ function Invoke-GoStack($s) {
         # Advisory Go checks: never a verdict, and noise over code that does not build.
         if (-not $script:Failed) {
             $script:Warnings += @(Get-GoleakGaps $s.Dir)
+            $fsw = [Diagnostics.Stopwatch]::StartNew()
+            $fuzz = Invoke-GoFuzz $s.Dir
+            if ($fuzz.Ran) { $script:Lines += "$(if ($fuzz.Warn -match ' failed -- ') { '[WARN]' } else { '[PASS]' }) go fuzz $($fuzz.Ran) target(s) ($($fsw.Elapsed.TotalSeconds.ToString('0.0', [Globalization.CultureInfo]::InvariantCulture))s)" }
+            $script:Warnings += @($fuzz.Warn)
         }
     } else {
         # Both -count=1 and -shuffle=on defeat the Go test cache, so the fast lane

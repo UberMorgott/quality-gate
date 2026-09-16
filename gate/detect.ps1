@@ -343,6 +343,55 @@ function Get-GoleakGaps([string]$Dir) {
     }
 }
 
+# quality-gate#49: run the module's existing Fuzz* targets for a short budget. One
+# target per `go test -fuzz` (it accepts exactly one match in one package), -run=^$ so
+# the package's tests do not run a second time. Bounded for a commit hook: $PerTargetSec
+# each, and no new target is started once that would pass $BudgetSec -- the ones left
+# out are named. A crash is ADVISORY until calibrated: go writes the failing input into
+# the package's testdata/fuzz/<Target>/, where every later plain `go test` would fail on
+# it -- the gate would have turned its own warning into a verdict. So a file this run
+# created is printed into the warning (enough to re-create it) and removed.
+# ponytail: sequential; targets beyond the budget are skipped, not rotated between runs.
+function Invoke-GoFuzz([string]$Dir, [int]$PerTargetSec = 10, [int]$BudgetSec = 60) {
+    $prev = $global:LASTEXITCODE
+    Push-Location $Dir
+    $res = [pscustomobject]@{ Ran = 0; Warn = @() }
+    try {
+        $pkgDir = @{}
+        foreach ($l in @(& go list -f '{{.ImportPath}}|{{.Dir}}' ./... 2>$null)) { $p = $l -split '\|', 2; $pkgDir[$p[0]] = $p[1] }
+        $targets = @(); $names = @()
+        foreach ($l in @(& go test -list '^Fuzz' ./... 2>$null)) {
+            if ($l -match '^Fuzz\w*$') { $names += $l }
+            elseif ($l -match '^ok\s+(\S+)') { $targets += @($names | ForEach-Object { [pscustomobject]@{ Pkg = $Matches[1]; Name = $_ } }); $names = @() }
+            else { $names = @() }
+        }
+        $sw = [Diagnostics.Stopwatch]::StartNew()
+        $skipped = @()
+        foreach ($t in $targets) {
+            if ($sw.Elapsed.TotalSeconds + $PerTargetSec -gt $BudgetSec) { $skipped += $t.Name; continue }
+            $corpus = Join-Path $pkgDir[$t.Pkg] "testdata/fuzz/$($t.Name)"
+            $before = @(Get-ChildItem $corpus -File -ErrorAction SilentlyContinue | ForEach-Object FullName)
+            # The outermost directory the run may create: removed whole if it did.
+            $created = @('testdata', 'testdata/fuzz', "testdata/fuzz/$($t.Name)") | ForEach-Object { Join-Path $pkgDir[$t.Pkg] $_ } |
+                Where-Object { -not (Test-Path $_) } | Select-Object -First 1
+            $out = (& go test -run='^$' "-fuzz=^$($t.Name)$" "-fuzztime=$($PerTargetSec)s" $t.Pkg 2>&1 | Out-String)
+            $res.Ran++
+            if ($LASTEXITCODE -eq 0) { continue }
+            $new = @(Get-ChildItem $corpus -File -ErrorAction SilentlyContinue | Where-Object { $_.FullName -notin $before })
+            $res.Warn += "[WARN] go fuzz: $($t.Pkg) $($t.Name) failed -- advisory, not a failure"
+            $res.Warn += @($out -split "`r?`n" | Where-Object { $_ -match '^\s+\S' -and $_ -notmatch 'Failing input written|To re-run|go test -run=' } | Select-Object -First 10 | ForEach-Object { "       $($_.Trim())" })
+            foreach ($f in $new) {
+                $res.Warn += "       failing input (removed from the tree; save as $($t.Name)/$($f.Name) under testdata/fuzz to keep it as a regression):"
+                $res.Warn += @(Get-Content $f.FullName | ForEach-Object { "         $_" })
+                Remove-Item $f.FullName -Force
+            }
+            if ($created -and (Test-Path $created)) { Remove-Item $created -Recurse -Force -ErrorAction SilentlyContinue }
+        }
+        if ($skipped) { $res.Warn += "[WARN] go fuzz: budget ${BudgetSec}s spent -- not run: $($skipped -join ', ')" }
+    } finally { Pop-Location; $global:LASTEXITCODE = $prev }
+    $res
+}
+
 function Get-GodotBin {
     if ($env:GODOT_BIN -and (Test-Path $env:GODOT_BIN)) { return $env:GODOT_BIN }
     $cmd = Get-Command godot -ErrorAction SilentlyContinue

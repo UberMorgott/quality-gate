@@ -186,6 +186,25 @@ Check 'a tested package starting goroutines without goleak is warned' ($lw -matc
 Set-GoFile (Join-Path $leak 'leak_test.go') "package main`n`n// TestMain would call goleak.VerifyTestMain(m); a mention is what the scan reads."
 Check 'a goleak check in the package tests clears the warning' (-not (Get-GoleakGaps $leak))
 
+# #49: a Fuzz target that crashes within its budget is warned with the failing input,
+# and the input go wrote into testdata/ is gone again (left there, every later plain
+# `go test` would fail on it). A target that holds is run and warns nothing, and one
+# past the budget is named, not silently dropped.
+$fz = Join-Path $tmp 'fuzz'
+Copy-Item (Join-Path $PSScriptRoot 'testdata\go-fixture') $fz -Recurse
+$fuzzSrc = "package main`n`nimport `"testing`"`n`nfunc FuzzAdd(f *testing.F) {`n`tf.Add(`"a`")`n`tf.Fuzz(func(t *testing.T, s string) {`n`t`tif len(s) > 1 && s[0] == 'z' {`n`t`t`tt.Fatal(`"crash`")`n`t`t}`n`t})`n}"
+Set-GoFile (Join-Path $fz 'fuzz_test.go') $fuzzSrc
+$fr = Invoke-GoFuzz $fz 5 60
+$fw = $fr.Warn -join "`n"
+Check 'a crashing fuzz target is warned with its failing input' `
+    (($fr.Ran -eq 1) -and ($fw -match '\[WARN\] go fuzz: \S+ FuzzAdd failed -- advisory') -and ($fw -match 'go test fuzz v1')) $fw
+Check 'the failing input go wrote is removed from the tree' (-not (Test-Path (Join-Path $fz 'testdata'))) $fw
+Set-GoFile (Join-Path $fz 'fuzz_test.go') ($fuzzSrc -replace 'len\(s\) > 1', 'false')
+$fr = Invoke-GoFuzz $fz 2 60
+Check 'a fuzz target that holds runs and warns nothing' (($fr.Ran -eq 1) -and -not $fr.Warn) ($fr.Warn -join "`n")
+$fr = Invoke-GoFuzz $fz 2 1
+Check 'a fuzz target past the budget is named, not dropped' (($fr.Ran -eq 0) -and (($fr.Warn -join ' ') -match 'budget 1s spent -- not run: FuzzAdd')) ($fr.Warn -join "`n")
+
 # 3b. Probe: is a -Full run green on a fixture already proven clean? govulncheck
 # needs a live vulnerability database, so with no network the full level fails --
 # correctly, because unverifiable is not clean. That makes every later check that
