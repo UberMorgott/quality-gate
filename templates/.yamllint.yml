@@ -1,0 +1,10 @@
+# The quality gate's yamllint defaults, used only when a repository has no
+# .yamllint* of its own. Keeps syntax errors, duplicate keys and indentation
+# consistency; drops the style rules YAML in the wild disagrees about.
+extends: default
+rules:
+  line-length: disable
+  truthy: disable           # yes/no and true/false both accepted (GitHub Actions uses `on:`)
+  document-start: disable
+  comments: disable
+  comments-indentation: disable

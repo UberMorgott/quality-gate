@@ -1586,6 +1586,49 @@ function Invoke-BaseStack($s) {
         }
     }
 
+    # Advisory linters, one per file kind. Each runs only when files of its kind exist --
+    # the changed ones on the fast lane, the git-tracked ones at -Full/-All, so ignored and
+    # vendored trees stay out the same way they do for typos -- and it is [WARN] only,
+    # never a verdict: style of markdown and YAML is a policy, and the rest are new here.
+    # A missing binary is a [SKIP] naming it, same as every other base tool.
+    # A repository's own config always wins; the gate's templates fill in only when there
+    # is none, the same rule the gitleaks -c above follows.
+    $lintPool = @(if (-not $Full -and -not $All) { Get-ChangedPaths $Root } else { & git -C $Root ls-files 2>$null }) |
+        Where-Object { $_ -and (Test-Path -LiteralPath (Join-Path $Root $_) -PathType Leaf) }
+    $tpl = Join-Path $PSScriptRoot '..\templates'
+    $mdCfg = @(if (-not (Get-ChildItem -LiteralPath $Root -Force -Filter '.markdownlint*' -ErrorAction SilentlyContinue)) {
+            '--config'; (Join-Path $tpl '.markdownlint.jsonc') })
+    $yCfg = @(if (-not (Get-ChildItem -LiteralPath $Root -Force -Filter '.yamllint*' -ErrorAction SilentlyContinue)) {
+            '-c'; (Join-Path $tpl '.yamllint.yml') })
+    $linters = @(
+        @{ Name = 'shellcheck'; Exe = 'shellcheck'; Match = '\.(sh|bash)$'; Args = @('-f', 'gcc'); Url = 'https://www.shellcheck.net' }
+        @{ Name = 'actionlint'; Exe = 'actionlint'; Match = '^\.github/workflows/[^/]+\.ya?ml$'; Args = @('-no-color'); Url = 'https://github.com/rhysd/actionlint' }
+        @{ Name = 'hadolint'; Exe = 'hadolint'; Match = '(^|/)(Dockerfile[^/]*|[^/]+\.dockerfile)$'; Args = @('--no-color'); Url = 'https://github.com/hadolint/hadolint' }
+        @{ Name = 'markdownlint'; Exe = 'markdownlint-cli2'; Match = '\.md$'; Args = $mdCfg; Url = 'https://github.com/DavidAnson/markdownlint-cli2' }
+        @{ Name = 'yamllint'; Exe = 'yamllint'; Match = '\.ya?ml$'; Args = @('-f', 'parsable') + $yCfg; Url = 'https://github.com/adrienverge/yamllint' }
+        # Only what the repository declared: no .editorconfig, nothing to check against.
+        @{ Name = 'editorconfig'; Exe = 'editorconfig-checker'; Match = $(if (Test-Path -LiteralPath (Join-Path $Root '.editorconfig')) { '.' } else { '^$' }); Args = @('-no-color'); Url = 'https://github.com/editorconfig-checker/editorconfig-checker' }
+    )
+    foreach ($l in $linters) {
+        $files = @($lintPool | Where-Object { $_ -match $l.Match })
+        if (-not $files) { continue }
+        if (-not (Have $l.Exe)) { $script:Lines += "[SKIP] $($l.Name) -- $($l.Exe) not on PATH ($($l.Url))"; continue }
+        # markdownlint-cli2 reads its arguments as globs; ':' makes each a literal path.
+        if ($l.Name -eq 'markdownlint') { $files = @($files | ForEach-Object { ":$_" }) }
+        $lOut = ''; $lBad = $false
+        # ponytail: 100 paths per call keeps a big -Full tree under the Windows command-line limit.
+        for ($i = 0; $i -lt $files.Count; $i += 100) {
+            $lOut += (& $l.Exe @($l.Args) @($files[$i..([Math]::Min($i + 99, $files.Count - 1))]) 2>&1 | Out-String)
+            if ($LASTEXITCODE -ne 0) { $lBad = $true }
+        }
+        $global:LASTEXITCODE = 0
+        if (-not $lBad) { continue }
+        $hits = @($lOut -split "`r?`n" | Where-Object { $_.Trim() })
+        $script:Lines += "[WARN] $($l.Name): findings in $($files.Count) checked file(s) -- advisory, not a failure"
+        $script:Lines += @($hits | Select-Object -First 20 | ForEach-Object { "       $_" })
+        if ($hits.Count -gt 20) { $script:Lines += "       ... $($hits.Count - 20) more line(s): run $($l.Exe) on those files" }
+    }
+
     # Full level only: the advisory database lives on the network, and no agent turn
     # should pay for that -- the same rule govulncheck and `npm audit` already follow.
     if (-not $Full) { return }

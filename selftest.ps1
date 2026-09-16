@@ -2447,6 +2447,54 @@ try {
         (($noToolCode -eq 0) -and ($out -notmatch '\[FAIL\]')) "code=$noToolCode $out"
 } finally { $env:PATH = $priorPath }
 
+# The advisory file-kind linters (#53-#58): skipped by name when absent, [WARN] and never
+# [FAIL] when they find something, silent when they do not. The tools are stood in for by
+# shims that exit 1 or 0, so every machine judges the gate's handling, not the tool.
+$lintExes = @('shellcheck', 'actionlint', 'hadolint', 'markdownlint-cli2', 'yamllint', 'editorconfig-checker')
+$lint = Join-Path $tmp 'base-lint'
+New-Item -ItemType Directory -Path (Join-Path $lint '.github\workflows') -Force | Out-Null
+git -C $lint init -q 2>$null
+foreach ($f in @('run.sh', '.github/workflows/ci.yml', 'Dockerfile', 'notes.md', '.editorconfig')) {
+    [IO.File]::WriteAllText((Join-Path $lint $f), "root = true`n")
+}
+git -C $lint add -A 2>$null
+$env:PATH = @($priorPath -split $sep | Where-Object {
+        $d = $_
+        $d -and -not ($lintExes | Where-Object {
+                (Test-Path -LiteralPath (Join-Path $d "$_.exe") -ErrorAction SilentlyContinue) -or
+                (Test-Path -LiteralPath (Join-Path $d "$_.cmd") -ErrorAction SilentlyContinue) -or
+                (Test-Path -LiteralPath (Join-Path $d $_) -ErrorAction SilentlyContinue) })
+    }) -join $sep
+$strippedPath = $env:PATH
+try {
+    $out = (& pwsh -NoProfile -File $gate -Root $lint -Only base -Full 2>&1 | Out-String)
+    Check 'a missing file-kind linter is a named skip, not a failed run' `
+        (($LASTEXITCODE -eq 0) -and ($out -notmatch '\[FAIL\]') -and
+        -not ($lintExes | Where-Object { $out -notmatch "\[SKIP\] .* -- $([regex]::Escape($_)) not on PATH" })) $out
+    foreach ($exit in 1, 0) {
+        $shim = Join-Path $tmp "lint-shim-$exit"
+        New-Item -ItemType Directory -Path $shim -Force | Out-Null
+        foreach ($e in $lintExes) {
+            if ($IsWindows) { [IO.File]::WriteAllText((Join-Path $shim "$e.cmd"), "@echo shimfinding %*`r`n@exit /b $exit`r`n") }
+            else {
+                $p = Join-Path $shim $e
+                [IO.File]::WriteAllText($p, "#!/bin/sh`necho shimfinding `"`$@`"`nexit $exit`n")
+                chmod +x $p
+            }
+        }
+        $env:PATH = "$shim$sep$strippedPath"
+        $out = (& pwsh -NoProfile -File $gate -Root $lint -Only base -Full 2>&1 | Out-String)
+        $code = $LASTEXITCODE
+        if ($exit) {
+            Check 'file-kind linter findings are [WARN], never [FAIL]' `
+                (($code -eq 0) -and ($out -notmatch '\[FAIL\]') -and
+                ([regex]::Matches($out, '\[WARN\] (shellcheck|actionlint|hadolint|markdownlint|yamllint|editorconfig):').Count -eq 6)) "code=$code $out"
+        } else {
+            Check 'a clean file-kind linter prints nothing' (($code -eq 0) -and ($out -notmatch 'shimfinding')) "code=$code $out"
+        }
+    }
+} finally { $env:PATH = $priorPath }
+
 # The vulnerability database lives on the network, so vuln is full-level only -- the
 # same rule govulncheck and `npm audit` follow. Asserted on the LINE, not on a verdict:
 # whether it passes, skips for a missing binary or skips for an osv-scanner v1 that has

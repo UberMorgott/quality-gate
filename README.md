@@ -781,7 +781,19 @@ workspace. Нет `cargo` на PATH — стек падает (непровер�
    параллельно, поэтому выживший префикс **менялся между прогонами** на одном и том же дереве (56
    общих строк из ~76), и pre-commit хук требовал нескольких прогонов, чтобы увидеть один список.
    Поэтому строки ещё и сортируются: показанные двадцать — те же двадцать на следующем прогоне.
-3. (только `-Full`) `vuln` — `osv-scanner scan source -r <root>`. База уязвимостей
+3. Линтеры по типу файла (оба уровня, **только `[WARN]`, никогда не `[FAIL]`**). Каждый запускается,
+   только если есть файлы его типа: на быстром уровне — среди изменённых, на `-Full`/`-All` — среди
+   `git ls-files` (игнорируемое и vendor не попадают). Нет бинаря — `[SKIP] <имя> -- <exe> not on PATH`.
+   Находки — `[WARN] <имя>: findings in N checked file(s)` и первые 20 строк вывода.
+   - `shellcheck -f gcc` — `*.sh`, `*.bash`
+   - `actionlint` — `.github/workflows/*.yml|yaml`
+   - `hadolint` — `Dockerfile*`, `*.dockerfile`
+   - `markdownlint-cli2` — `*.md`; без своего `.markdownlint*` в корне — `--config templates/.markdownlint.jsonc`
+     (выключены MD013, MD033, MD041)
+   - `yamllint -f parsable` — `*.yml`, `*.yaml`; без своего `.yamllint*` в корне — `-c templates/.yamllint.yml`
+     (выключены line-length, truthy, document-start, comments)
+   - `editorconfig-checker` — все файлы, **только если** в корне есть `.editorconfig`
+4. (только `-Full`) `vuln` — `osv-scanner scan source -r <root>`. База уязвимостей
    живёт в сети, поэтому уровень тот же, что у `govulncheck` и `npm audit`. Без `--licenses`: в v2
    флаг принимает allowlist, и любое значение, `false` тоже, **включает** проверку лицензий (онлайн —
    лишняя таблица лицензий, офлайн — exit 127 `cannot retrieve licenses locally`). Лицензия — вопрос
@@ -1416,7 +1428,8 @@ cpp-стек определяется по верхнему `CMakeLists.txt` (ф
 краснеет — иначе равенство ничего не стоит), хеш коммита и псевдоверсия `go.mod` не находки, а
 настоящая опечатка на той же строке рядом с хешем — находка, и свой `_typos.toml` репозитория
 продолжает действовать при переданном конфиге гейта; отпечаток, который печатает `secrets`, не
-содержит пути этой машины и, записанный в `.gitleaksignore`, гасит ту же находку.
+содержит пути этой машины и, записанный в `.gitleaksignore`, гасит ту же находку; линтеры по типу
+файла без бинаря — `[SKIP]` с именем, с находками (шимы с exit 1) — `[WARN]` и exit 0, чистые — ни строки.
 Часть проверок уходит в `[skip]`, когда нет `GODOT_BIN`, gdtoolkit, .NET SDK, `typos` или сети; финальная
 строка печатает фактическое число — `all checks passed (241/241)` на машине с полным тулчейном и
 доступным crates.io; без реестра проверка «живой» rust-находки уходит в `[skip]` и число 235.
@@ -1454,6 +1467,8 @@ templates/.golangci.yml  конфиг линтера с обоснованием
 templates/pre-commit     тело git-хука, когда lefthook недоступен
 templates/lefthook.yml   git-хуки через lefthook + замеренные ловушки Windows
 templates/ci.yml         GitHub Actions воркфлоу
+templates/.markdownlint.jsonc  конфиг base-линтера markdownlint, если у репозитория нет своего
+templates/.yamllint.yml        конфиг base-линтера yamllint, если у репозитория нет своего
 testdata/                минимальные фикстуры для selftest
 testdata/rust-fixture/src/main.rs
 testdata/godot-fixture/  фикстуры godot-стека

@@ -1,0 +1,9 @@
+// The quality gate's markdownlint defaults, used only when a repository has no
+// .markdownlint* of its own. Structural rules stay on (heading increment MD001,
+// reversed links MD011, `$` in commands MD014, ...); the opinionated ones are off.
+{
+  "default": true,
+  "MD013": false, // line length: prose wraps wherever the editor does
+  "MD033": false, // inline HTML: GitHub renders it, READMEs use it
+  "MD041": false  // first line a top-level heading: badges and front matter come first
+}
