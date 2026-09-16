@@ -34,7 +34,7 @@ qgate -- one quality gate for every stack in the repository
   qgate selftest        the gate's own red-then-green self-test
   qgate where           install path, commit and the tool versions in use
 
-Gate flags: -All  -Fast  -Full  -Only <stack[,stack]>  -Quiet  -Why  -Baseline <rev>  -Mutate  -Root <path>  -Sarif <file>
+Gate flags: -All  -Fast  -Full  -Only <stack[,stack]>  -Quiet  -Why  -Baseline <rev>  -Mutate  -Root <path>  -Sarif <file>  -Parallel
   -Quiet prints nothing on a green run and the whole report on a red one
        (what the generated pre-commit hook uses; CI wants the [PASS] lines).
        A [WARN] about the gate's own unreadable config is not silenced.

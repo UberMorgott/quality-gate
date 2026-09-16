@@ -21,6 +21,11 @@ param(
     [switch]$Mutate,      # on demand only: Go mutation testing (gremlins), advisory; scoped by -Baseline
     [string]$Root,        # repo root; defaults to the git root of the cwd
     [string]$Sarif,       # opt-in: also write the report as SARIF 2.1.0 to this file; stdout unchanged
+    [switch]$Parallel,    # opt-in: run independent stacks (go web rust dotnet cpp godot) as concurrent child processes
+    # Internal to -Parallel: the child runs exactly these stacks ("stack|rel;...") and
+    # writes its per-stack results to ParallelOut instead of printing a report.
+    [Parameter(DontShow)][string]$ParallelStacks,
+    [Parameter(DontShow)][string]$ParallelOut,
     # Nothing binds here on a correct call. Positional binding used to swallow the
     # second word of `-Only go python` into -Baseline, and the run then died with
     # "baseline revision not found: python" -- a verdict about a feature the user
@@ -43,16 +48,21 @@ $ErrorActionPreference = 'Continue'
 # ponytail: location only for `path:line[:col]` with no spaces in the path, relative
 # paths as the tool printed them (a stack in a subdirectory prints them relative to
 # it); -Quiet on a green run prints nothing, so the SARIF is empty too.
-if ($PSBoundParameters.ContainsKey('Sarif')) {
-    if (-not $Sarif) { Write-Output '[FAIL] -Sarif was given an empty value -- name the output file: -Sarif qgate.sarif'; exit 1 }
+# This run's own command line, minus the named parameters: how -Sarif and -Parallel re-run the gate.
+function Get-SelfArgv($Bound, [string[]]$Drop) {
     $argv = @()
-    foreach ($k in $PSBoundParameters.Keys) {
-        if ($k -in 'Sarif', 'Extra') { continue }
-        $v = $PSBoundParameters[$k]
+    foreach ($k in $Bound.Keys) {
+        if ($k -in $Drop) { continue }
+        $v = $Bound[$k]
         if ($v -is [switch]) { if ($v) { $argv += "-$k" } }
         elseif ($k -eq 'Only') { $argv += '-Only', (@($v) -join ',') }
         else { $argv += "-$k", $v }
     }
+    $argv
+}
+if ($PSBoundParameters.ContainsKey('Sarif')) {
+    if (-not $Sarif) { Write-Output '[FAIL] -Sarif was given an empty value -- name the output file: -Sarif qgate.sarif'; exit 1 }
+    $argv = @(Get-SelfArgv $PSBoundParameters 'Sarif', 'Extra')
     if ($Extra) { $argv += $Extra }
     $childOut = @(& pwsh -NoProfile -File $PSCommandPath @argv)
     $code = $LASTEXITCODE
@@ -319,7 +329,11 @@ function Select-BaselineHits($Hits, [string]$Name, [string]$Dir) {
 }
 
 # --- select which stacks to run -------------------------------------------
-if ($onlyGiven) {
+if ($ParallelStacks) {
+    # A -Parallel child: the parent already selected; run exactly what it was handed.
+    $keys = $ParallelStacks -split ';'
+    $stacks = @($allStacks | Where-Object { $keys -contains "$($_.Stack)|$($_.Rel)" })
+} elseif ($onlyGiven) {
     # `-Only nonsense` checked nothing and exited 0, which reads exactly like a clean
     # run: a typo'd `-Only godo` in a CI or lefthook invocation was a green pipeline.
     # A warning was not enough -- nobody reads a warning in a passing log. This exits
@@ -413,6 +427,7 @@ $script:BaseDeferred = $false
 # How many check phases actually executed. The one number the green verdict at the
 # bottom of this file is not allowed to ignore.
 $script:Phases = 0
+$script:Warnings = @()
 
 # Concurrent commits in one worktree. Git serialises the final write -- the second
 # `git commit` loses -- but it does NOT protect the INDEX while a hook runs, and this
@@ -2084,8 +2099,45 @@ function Invoke-DeployStack($s) {
 # --- run -------------------------------------------------------------------
 $cwd = (Get-Location).Path
 $report = @()
+
+# -Parallel: stacks that only read and build inside their own directory run first, one
+# child process per stack type (all go stacks share one child: the CI-parity question is
+# asked once per run; all dotnet stacks share one `dotnet format` pass). The loop below
+# then walks the stacks in the usual order and takes each child's result where the stack
+# would have run, so the report, fail-fast SKIPs, warnings order and exit code are the
+# sequential run's. The children ran every stack, so a stack after a failure costs time
+# here but is still reported as not run. base, custom, deploy and proto stay in-process,
+# after every child has exited: base scans the working tree, proto writes generated code
+# into it and puts it back, custom runs arbitrary commands (deploy compares their output),
+# and none of them may run while another stack is changing the tree.
+# ponytail: one child per stack type, not per stack directory; split further if a repo
+# with many modules of one type shows it matters.
+$script:ChildResults = @{}
+$parallelKeys = @()
+if ($Parallel -and -not $ParallelStacks) {
+    $groups = @($stacks | Where-Object { $_.Implemented -and $_.Stack -in 'go', 'web', 'rust', 'dotnet', 'cpp', 'godot' } | Group-Object Stack)
+    if ($groups.Count -gt 1) {
+        $pdir = Join-Path ([IO.Path]::GetTempPath()) "quality-gate-parallel-$PID"
+        New-Item -ItemType Directory -Force $pdir | Out-Null
+        $childArgv = @(Get-SelfArgv $PSBoundParameters 'Parallel', 'Sarif', 'Extra', 'Root', 'ParallelStacks', 'ParallelOut') + @('-Root', $Root)
+        $jobs = @($groups | ForEach-Object {
+            [pscustomobject]@{ Keys = @($_.Group | ForEach-Object { "$($_.Stack)|$($_.Rel)" }); Out = Join-Path $pdir "$($_.Name).xml" }
+        })
+        $parallelKeys = @($jobs | ForEach-Object { $_.Keys })
+        $jobs | ForEach-Object -ThrottleLimit ([Math]::Min($jobs.Count, [Environment]::ProcessorCount)) -Parallel {
+            & pwsh -NoProfile -File $using:PSCommandPath @using:childArgv -ParallelStacks ($_.Keys -join ';') -ParallelOut $_.Out *> $null
+        }
+        foreach ($j in $jobs) {
+            if (Test-Path $j.Out) { $r = Import-Clixml $j.Out; foreach ($k in $r.Keys) { $script:ChildResults[$k] = $r[$k] } }
+        }
+        Remove-Item $pdir -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+$childRec = @{}
+
 foreach ($s in $stacks) {
     $label = if ($s.Rel) { "$($s.Stack) $($s.Rel)/" } else { $s.Stack }
+    $key = "$($s.Stack)|$($s.Rel)"
     if (-not $s.Implemented) {
         $report += "[SKIP] $label ($($s.Marker)) -- $($s.Warn)"
         continue
@@ -2096,6 +2148,19 @@ foreach ($s in $stacks) {
     # "nothing to check". The work is still skipped; the skipping is now on the record.
     if ($script:Failed) { $report += "[SKIP] $label ($($s.Marker)) -- an earlier stack failed, not run"; continue }
     if ($s.Warn) { $report += "[WARN] $label -- $($s.Warn)" }
+    if ($parallelKeys -contains $key) {
+        # Fail closed: a child that died without a result is a failure, not a pass.
+        $r = $script:ChildResults[$key]
+        if (-not $r) { $r = @{ Report = @("[FAIL] $label", "[FAIL] ${label}: -Parallel worker exited without a result"); Warnings = @(); Phases = 0; Failed = $true; Soft = $false } }
+        $report += @($r.Report | Where-Object { $null -ne $_ })
+        $script:Warnings += @($r.Warnings | Where-Object { $null -ne $_ })
+        $script:Phases += $r.Phases
+        if ($r.Failed) { $script:Failed = $true }
+        if ($r.Soft) { $script:SoftFailed = $true }
+        continue
+    }
+    $reportAt = $report.Count
+    $warnAt = $script:Warnings.Count
     $script:Lines = @()
     $script:StackSoft = $false
     $before = $script:Phases
@@ -2145,6 +2210,12 @@ foreach ($s in $stacks) {
         $ran = $script:Phases -gt $before
         $report += "$(if ($ran) { '[PASS]' } else { '[SKIP]' }) $label ($($s.Marker))$(if (-not $ran) { ' -- no check phase applies here' }) $timings"
     }
+    if ($ParallelStacks) {
+        $childRec[$key] = @{
+            Report = @($report | Select-Object -Skip $reportAt); Warnings = @($script:Warnings | Select-Object -Skip $warnAt)
+            Phases = $script:Phases - $before; Failed = $script:Failed; Soft = $script:StackSoft
+        }
+    }
 }
 # Advisory, never a verdict: printed after the stack lines, shown under -Quiet (below).
 if ($script:Warnings) { $report += $script:Warnings }
@@ -2157,6 +2228,7 @@ if ($script:SoftFailed) { $script:Failed = $true }
 # every path out of the loop reaches this line, and a killed process leaves a directory
 # named by its own PID, which nothing else will ever collide with.
 if ($script:FmtSlnDir) { Remove-Item $script:FmtSlnDir -Recurse -Force -ErrorAction SilentlyContinue }
+if ($ParallelStacks) { $childRec | Export-Clixml -LiteralPath $ParallelOut; exit 0 }
 
 # THE INVARIANT: a run that executed zero check phases is not a green run.
 # Every false green this gate has shipped was a different door into this one room --

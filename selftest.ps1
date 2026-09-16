@@ -2665,6 +2665,35 @@ try {
         (($code -eq 1) -and ($out -match '\[FAIL\]') -and $errs.Count -ge 1 -and $located.Count -ge 1) "code=$code $out $(Get-Content $sarifFile -Raw -ErrorAction SilentlyContinue)"
 } finally { $env:PATH = $priorPath }
 
+# #61: -Parallel is opt-in and changes wall-clock only. Two independent stacks (go, web)
+# run as child processes; the report must be the sequential one line for line (timings
+# aside) with the same exit code -- green, a red web stack, and a red go stack whose
+# later web stack is still reported as not run although its child did run it.
+$par = Join-Path $tmp 'parallel'
+Copy-Item (Join-Path $PSScriptRoot 'testdata\go-fixture') (Join-Path $par 'svc') -Recurse
+Copy-Item (Join-Path $PSScriptRoot 'testdata\web-fixture') (Join-Path $par 'ui') -Recurse
+Remove-Item (Join-Path $par 'ui\node_modules') -Recurse -Force -ErrorAction SilentlyContinue
+function Get-ParRun([string[]]$More) {
+    $o = (& pwsh -NoProfile -File $gate -Root $par -All @More 2>&1 | Out-String)
+    [pscustomobject]@{ Code = $LASTEXITCODE; Raw = $o; Norm = ($o -replace '\(\d+\.\d+s\)', '(t)').Trim() }
+}
+$parCases = @(
+    @{ Name = 'a red web stack'; Setup = {}; Code = 1 },
+    @{ Name = 'green'; Setup = {
+            New-Item -ItemType Directory (Join-Path $par 'ui\node_modules\.bin') -Force | Out-Null
+            [IO.File]::WriteAllText((Join-Path $par 'ui\package.json'), '{ "name": "ui", "private": true }')
+        }; Code = 0 },
+    @{ Name = 'a red go stack before web'; Setup = { Set-GoFile (Join-Path $par 'svc\main.go') "package main`n`nfunc main() { undefinedName() }" }; Code = 1 }
+)
+foreach ($pc in $parCases) {
+    & $pc.Setup
+    $seq = Get-ParRun @()
+    $pr = Get-ParRun @('-Parallel')
+    Check "-Parallel reports what the sequential run does: $($pc.Name)" `
+        (($seq.Code -eq $pc.Code) -and ($pr.Code -eq $seq.Code) -and ($pr.Norm -eq $seq.Norm) -and ($seq.Norm -match '\[(PASS|FAIL)\] go svc/') -and ($seq.Norm -match 'web ui/')) "seq=$($seq.Code) par=$($pr.Code)`n$($seq.Raw)`n---`n$($pr.Raw)"
+}
+Check '-Parallel red go stack still reports web as not run' ($pr.Norm -match '\[SKIP\] web ui/ .* an earlier stack failed') $pr.Raw
+
 # The vulnerability database lives on the network, so vuln is full-level only -- the
 # same rule govulncheck and `npm audit` follow. Asserted on the LINE, not on a verdict:
 # whether it passes, skips for a missing binary or skips for an osv-scanner v1 that has
