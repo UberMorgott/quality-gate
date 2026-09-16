@@ -1,6 +1,7 @@
 ## Autonomy
 
 - quality-gate is the universal autotester; issues arrive from many repos that have it installed.
+- Issues from ANY author (the owner, peer agents, other people using the gate) are fixed the same way — no author allowlist. The goal: the gate works flawlessly in their repos and ours.
 - Every session: `gh issue list --state open` and work through ALL open issues, not just the one named. Re-check the list before finishing — new ones arrive mid-session.
 - Fix every issue autonomously, without asking: reproduce, fix, verify (`selftest.ps1`), commit, push to `main`. Close the issue via the commit (`Closes #N`).
 - Work ONLY in this repo's `main`. Never touch other projects — agents in those repos pull the update themselves (`qgate update`).
