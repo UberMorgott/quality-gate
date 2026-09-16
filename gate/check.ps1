@@ -461,6 +461,13 @@ function Invoke-GoStack($s) {
             $fuzz = Invoke-GoFuzz $s.Dir
             if ($fuzz.Ran) { $script:Lines += "$(if ($fuzz.Warn -match ' failed -- ') { '[WARN]' } else { '[PASS]' }) go fuzz $($fuzz.Ran) target(s) ($($fsw.Elapsed.TotalSeconds.ToString('0.0', [Globalization.CultureInfo]::InvariantCulture))s)" }
             $script:Warnings += @($fuzz.Warn)
+            if (-not (Have 'deadcode')) {
+                $script:Lines += '[SKIP] deadcode -- not on PATH (go install golang.org/x/tools/cmd/deadcode@latest)'
+            } elseif ($stale = Test-GoToolStale 'deadcode' $modGo 'go install golang.org/x/tools/cmd/deadcode@latest') {
+                $script:Lines += "[SKIP] $stale"
+            } else {
+                $script:Warnings += @(Get-GoDeadcode $s.Dir)
+            }
         }
     } else {
         # Both -count=1 and -shuffle=on defeat the Go test cache, so the fast lane

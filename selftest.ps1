@@ -205,6 +205,22 @@ Check 'a fuzz target that holds runs and warns nothing' (($fr.Ran -eq 1) -and -n
 $fr = Invoke-GoFuzz $fz 2 1
 Check 'a fuzz target past the budget is named, not dropped' (($fr.Ran -eq 0) -and (($fr.Warn -join ' ') -match 'budget 1s spent -- not run: FuzzAdd')) ($fr.Warn -join "`n")
 
+# #51: an unreachable function is warned; the clean fixture, a helper only its tests call,
+# and a module with no main package and no tests (no program to walk) are not.
+if ((Get-Command deadcode -ErrorAction SilentlyContinue) -and -not (Test-GoToolStale 'deadcode' ((go env GOVERSION) -replace '^go', '') 'x')) {
+    $dc = Join-Path $tmp 'deadcode'
+    Copy-Item (Join-Path $PSScriptRoot 'testdata\go-fixture') $dc -Recurse
+    Check 'deadcode is silent on the clean fixture' (-not (Get-GoDeadcode $dc))
+    Set-GoFile (Join-Path $dc 'helper.go') "package main`n`nfunc testOnly() int { return 1 }`n`nfunc orphan() {}"
+    Set-GoFile (Join-Path $dc 'helper_test.go') "package main`n`nimport `"testing`"`n`nfunc TestHelper(t *testing.T) { _ = testOnly() }"
+    $dw = (Get-GoDeadcode $dc) -join "`n"
+    Check 'an unreachable function is warned by deadcode' (($dw -match '^\[WARN\] deadcode: 1 unreachable') -and ($dw -match 'unreachable func: orphan')) $dw
+    Check 'a helper only tests call is not dead code' ($dw -notmatch 'testOnly') $dw
+    Set-GoFile (Join-Path $dc 'main.go') "// Package lib is a library.`npackage lib`n`n// Add returns the sum of a and b.`nfunc Add(a, b int) int { return a + b }"
+    Get-ChildItem $dc -Filter '*.go' | Where-Object Name -ne 'main.go' | Remove-Item
+    Check 'a module with no main package is not a deadcode warning' (-not (Get-GoDeadcode $dc)) "$(Get-GoDeadcode $dc)"
+} else { Write-Output '[skip] deadcode not on PATH or stale -- deadcode checks cannot run' }
+
 # 3b. Probe: is a -Full run green on a fixture already proven clean? govulncheck
 # needs a live vulnerability database, so with no network the full level fails --
 # correctly, because unverifiable is not clean. That makes every later check that

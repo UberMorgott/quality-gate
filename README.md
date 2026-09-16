@@ -1330,6 +1330,13 @@ qgate -All -Baseline HEAD~
 `go test` падал бы на нём, и предупреждение само стало бы вердиктом. Сохранить как регрессию — руками,
 по пути из предупреждения.
 
+**deadcode.** На `-Full` после зелёных тестов — `deadcode -test ./...`
+(`go install golang.org/x/tools/cmd/deadcode@latest`): `[WARN] deadcode: N unreachable function(s)`
+и до 20 строк `file:line:col: unreachable func: X`. `-test` — хелпер, который зовут только тесты,
+живой, а тестовые бинари библиотеки тоже корни анализа. Не падает. Нет на PATH или собран
+старым Go — строка `[SKIP]`. Модуль без `main` и без тестов — молчит. Известный шум до калибровки:
+точки входа через reflection/регистрацию, `//go:linkname`.
+
 **goleak.** На `-Full` (после зелёных тестов) — `[WARN] goleak: N package(s) start goroutines but
 no test checks for leaks: <dirs>` для пакета, у которого есть тесты, в не-тестовых файлах есть
 строка `go func(`/`go f(`, а ни один тестовый файл не упоминает `goleak.`

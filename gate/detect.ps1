@@ -392,6 +392,28 @@ function Invoke-GoFuzz([string]$Dir, [int]$PerTargetSec = 10, [int]$BudgetSec = 
     $res
 }
 
+# quality-gate#51: whole-program unreachable functions (golang.org/x/tools/cmd/deadcode).
+# -test, so a helper only tests call is reachable -- the first false-positive class the
+# report named; it also makes a library's test binaries the roots, so a library with
+# tests is analyzed too. It exits 0 with findings, so the verdict is the output. A module
+# with neither main nor tests has no program to walk (`deadcode: no main packages`,
+# exit 1): nothing to say. Any other error is named once, never raised: this check is advisory.
+function Get-GoDeadcode([string]$Dir) {
+    $prev = $global:LASTEXITCODE
+    Push-Location $Dir
+    try { $out = @(& deadcode -test ./... 2>&1 | ForEach-Object { "$_" }); $code = $LASTEXITCODE }
+    finally { Pop-Location; $global:LASTEXITCODE = $prev }
+    if ($code -ne 0) {
+        if ($out -match 'no main packages') { return }
+        return "[WARN] deadcode could not analyze this module -- $(@($out | Select-Object -Last 1))"
+    }
+    $hits = @($out | Where-Object { $_ -match 'unreachable func' })
+    if (-not $hits) { return }
+    "[WARN] deadcode: $($hits.Count) unreachable function(s) -- advisory, not a failure"
+    $hits | Select-Object -First 20 | ForEach-Object { "       $_" }
+    if ($hits.Count -gt 20) { "       ... $($hits.Count - 20) more: run deadcode -test ./..." }
+}
+
 function Get-GodotBin {
     if ($env:GODOT_BIN -and (Test-Path $env:GODOT_BIN)) { return $env:GODOT_BIN }
     $cmd = Get-Command godot -ErrorAction SilentlyContinue
