@@ -1593,8 +1593,10 @@ function Invoke-BaseStack($s) {
     # A missing binary is a [SKIP] naming it, same as every other base tool.
     # A repository's own config always wins; the gate's templates fill in only when there
     # is none, the same rule the gitleaks -c above follows.
-    $lintPool = @(if (-not $Full -and -not $All) { Get-ChangedPaths $Root } else { & git -C $Root ls-files 2>$null }) |
-        Where-Object { $_ -and (Test-Path -LiteralPath (Join-Path $Root $_) -PathType Leaf) }
+    # Assigned before the pipe: Get-ChangedPaths returns its list comma-wrapped, and piped
+    # straight on that arrived as ONE item, so the fast lane linted nothing.
+    $lintPool = if (-not $Full -and -not $All) { Get-ChangedPaths $Root } else { & git -C $Root ls-files 2>$null }
+    $lintPool = @($lintPool) | Where-Object { $_ -and (Test-Path -LiteralPath (Join-Path $Root $_) -PathType Leaf) }
     $tpl = Join-Path $PSScriptRoot '..\templates'
     $mdCfg = @(if (-not (Get-ChildItem -LiteralPath $Root -Force -Filter '.markdownlint*' -ErrorAction SilentlyContinue)) {
             '--config'; (Join-Path $tpl '.markdownlint.jsonc') })
@@ -1615,18 +1617,29 @@ function Invoke-BaseStack($s) {
         if (-not (Have $l.Exe)) { $script:Lines += "[SKIP] $($l.Name) -- $($l.Exe) not on PATH ($($l.Url))"; continue }
         # markdownlint-cli2 reads its arguments as globs; ':' makes each a literal path.
         if ($l.Name -eq 'markdownlint') { $files = @($files | ForEach-Object { ":$_" }) }
+        $lArgs = $l.Args
+        # core.autocrlf=true (Git for Windows' default) checks an LF script out as CRLF, and
+        # shellcheck then flags every line SC1017 over bytes the repository never holds.
+        # Measured: Git Bash runs that CRLF copy fine. A script committed CRLF keeps it.
+        # ponytail: all-or-nothing per run; one CRLF-committed script re-enables SC1017 for the batch.
+        if ($l.Name -eq 'shellcheck') {
+            $crIdx = @(& git -C $Root ls-files --eol 2>$null | Where-Object { $_ -match '^i/crlf' -and ($_ -split "`t", 2)[1] -in $files })
+            if (-not $crIdx) { $lArgs = @($l.Args) + @('-e', 'SC1017') }
+        }
         $lOut = ''; $lBad = $false
         # ponytail: 100 paths per call keeps a big -Full tree under the Windows command-line limit.
         for ($i = 0; $i -lt $files.Count; $i += 100) {
-            $lOut += (& $l.Exe @($l.Args) @($files[$i..([Math]::Min($i + 99, $files.Count - 1))]) 2>&1 | Out-String)
+            $lOut += (& $l.Exe @($lArgs) @($files[$i..([Math]::Min($i + 99, $files.Count - 1))]) 2>&1 | Out-String)
             if ($LASTEXITCODE -ne 0) { $lBad = $true }
         }
         $global:LASTEXITCODE = 0
         if (-not $lBad) { continue }
         $hits = @($lOut -split "`r?`n" | Where-Object { $_.Trim() })
-        $script:Lines += "[WARN] $($l.Name): findings in $($files.Count) checked file(s) -- advisory, not a failure"
-        $script:Lines += @($hits | Select-Object -First 20 | ForEach-Object { "       $_" })
-        if ($hits.Count -gt 20) { $script:Lines += "       ... $($hits.Count - 20) more line(s): run $($l.Exe) on those files" }
+        # Report-level, like the Go warnings: a green stack line keeps only the [WARN] header,
+        # so the findings themselves would never be seen.
+        $script:Warnings += @("[WARN] $($l.Name): findings in $($files.Count) checked file(s) -- advisory, not a failure"
+            $hits | Select-Object -First 20 | ForEach-Object { "       $_" }
+            if ($hits.Count -gt 20) { "       ... $($hits.Count - 20) more line(s): run $($l.Exe) on those files" })
     }
 
     # Full level only: the advisory database lives on the network, and no agent turn

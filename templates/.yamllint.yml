@@ -8,3 +8,4 @@ rules:
   document-start: disable
   comments: disable
   comments-indentation: disable
+  new-lines: disable        # core.autocrlf checks LF files out as CRLF; line endings are git's and .editorconfig's

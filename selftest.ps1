@@ -2489,6 +2489,13 @@ try {
             Check 'file-kind linter findings are [WARN], never [FAIL]' `
                 (($code -eq 0) -and ($out -notmatch '\[FAIL\]') -and
                 ([regex]::Matches($out, '\[WARN\] (shellcheck|actionlint|hadolint|markdownlint|yamllint|editorconfig):').Count -eq 6)) "code=$code $out"
+            # A green stack line drops its detail lines; the findings are report-level.
+            Check 'file-kind linter findings are printed, not just counted' ($out -match 'shimfinding') $out
+            # An LF script in the index is not a literal-CR defect, whatever the checkout wrote.
+            Check 'shellcheck skips SC1017 for a script the index holds LF' ($out -match 'shimfinding -f gcc -e SC1017') $out
+            $fastOut = (& pwsh -NoProfile -File $gate -Root $lint -Only base 2>&1 | Out-String)
+            Check 'the fast lane lints the changed files' `
+                ([regex]::Matches($fastOut, '\[WARN\] (shellcheck|actionlint|hadolint|markdownlint|yamllint|editorconfig):').Count -eq 6) $fastOut
         } else {
             Check 'a clean file-kind linter prints nothing' (($code -eq 0) -and ($out -notmatch 'shimfinding')) "code=$code $out"
         }
