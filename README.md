@@ -1296,6 +1296,24 @@ qgate -All -Baseline HEAD~
 `--whole-files` судит тронутый файл целиком, а не только изменённые строки. Проверено:
 на одном и том же коде `-Baseline HEAD` даёт 0, без него — тот же errcheck и код 1.
 
+**Инструменты без своего baseline — фильтр по изменённым строкам.** typos, clang-tidy,
+cppcheck и advisory-линтеры base (shellcheck, actionlint, hadolint, markdownlint-cli2,
+yamllint, editorconfig-checker) запускаются как обычно, затем из вывода убираются находки
+`path:line[:col]` на строках, не изменённых от `<rev>` (`git diff -U0 <rev>` по рабочему дереву
+плюс неотслеживаемые файлы — целиком новые). Итог — строка
+`[NOTE] <tool>: N pre-existing finding(s) hidden by -Baseline <rev>`. Если скрыты все находки,
+FAIL-фаза (typos) становится PASS, WARN-линтер молчит. Новая находка на изменённой строке
+по-прежнему FAIL/WARN. Строка вывода, которую нельзя привязать к файлу репозитория, не
+скрывается никогда, а упавший инструмент без единой привязанной находки остаётся FAIL.
+editorconfig-checker под `-Baseline` идёт с `-format gcc` (его формат по умолчанию группирует
+находки под заголовком файла). Без `-Baseline` вывод не меняется.
+
+Потолок: фильтр строковый, поэтому **не видит находку на неизменённой строке, вызванную
+изменением** (новый неиспользуемый импорт, ставшая мёртвой ветка). Это режим снижения шума,
+а не гарантия. Не фильтруются: ESLint и stylelint (форматы `stylish`/`compact` не дают
+`path:line`, а замена форматтера не проверена на реальном прогоне — у ESLint свой baseline,
+см. ниже); golangci-lint, `dotnet format` и `buf breaking` оставляют свой нативный режим.
+
 Фронтенд: у ESLint есть свой baseline — `eslint --fix --suppress-all` создаёт
 `eslint-suppressions.json` (коммитить), и дальше **лишнее подавление само становится ошибкой**:
 «There are suppressions left that do not occur anymore», чистится `--prune-suppressions`.

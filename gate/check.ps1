@@ -245,6 +245,79 @@ function Get-ChangedPaths([string]$Repo, [string]$Since = 'HEAD') {
     , @($paths | ForEach-Object { $_.Trim("`n", "`r") -replace '\\', '/' } | Where-Object { $_ } | Sort-Object -Unique)
 }
 
+# -Baseline for the tools that have no baseline of their own: a diff-line filter.
+# Changed lines since the rev: repo-relative path -> list of @(first, last), or $true for
+# an untracked file (all of it is new). Same change set as Get-ChangedPaths: working tree
+# against the rev, staged or not, plus untracked files.
+# ponytail: changed LINES only -- a finding on an untouched line that the change caused
+# (a new unused import, a now-dead branch) is hidden too. Per-tool snapshots if that bites.
+function Get-BaselineLines([string]$Repo, [string]$Since) {
+    $map = @{}
+    $cur = $null; $prev = ''
+    foreach ($l in @(& git -C $Repo -c core.quotepath=false diff --no-color --no-ext-diff -U0 $Since 2>$null)) {
+        # `+++` only right after `---`: an added line reading `++ b/x` is content, not a header.
+        if ($prev -like '--- *' -and $l -match '^\+\+\+ (?:b/(.*?)\t?$|/dev/null)') {
+            $cur = $Matches[1]
+            if ($cur -and -not $map.ContainsKey($cur)) { $map[$cur] = [Collections.Generic.List[object]]::new() }
+        } elseif ($cur -and $l -match '^@@ -\S+ \+(\d+)(?:,(\d+))? @@') {
+            $n = if ($null -ne $Matches[2]) { [int]$Matches[2] } else { 1 }
+            if ($n) { $map[$cur].Add(@([int]$Matches[1], ([int]$Matches[1] + $n - 1))) }
+        }
+        $prev = $l
+    }
+    foreach ($u in @((& git -C $Repo ls-files --others --exclude-standard -z 2>$null | Out-String) -split "`0")) {
+        $u = $u.Trim("`n", "`r")
+        if ($u) { $map[$u] = $true }
+    }
+    $map
+}
+
+# One tool output line: $null when it is not `path:line[:col]` naming a file in this repo
+# (never hidden -- what cannot be attributed stays), else $true to keep, $false to hide.
+# $Dir is what a relative path in the tool's output is relative to.
+function Test-BaselineLine([string]$Line, [string]$Dir) {
+    if ($Line -notmatch '^\s*(?<p>(?:[A-Za-z]:[\\/])?[^:\t]+?):(?<l>\d+)(?=[:\s]|$)') { return $null }
+    $n = [int]$Matches.l
+    $abs = try { [IO.Path]::GetFullPath($Matches.p.Trim(), $Dir) } catch { return $null }
+    if (-not (Test-Path -LiteralPath $abs -PathType Leaf)) { return $null }
+    $rel = [IO.Path]::GetRelativePath($Root, $abs) -replace '\\', '/'
+    if ($rel -like '../*' -or [IO.Path]::IsPathRooted($rel)) { return $null }
+    $r = $script:BaselineLines[$rel]
+    if ($r -is [bool]) { return $true }
+    if (-not $r) { return $false }
+    # Line 0 is a whole-file finding: kept when the file changed at all.
+    if ($n -eq 0) { return $r.Count -gt 0 }
+    [bool]($r | Where-Object { $n -ge $_[0] -and $n -le $_[1] })
+}
+
+# Filters a tool's output. A line under a hidden finding that is indented or a `N |`
+# snippet (actionlint's source excerpt) goes with it; every other unlocated line stays.
+# Located/Hidden: a tool that failed with all Located findings Hidden has nothing new.
+function Select-BaselineFindings([string]$Text, [string]$Dir) {
+    $kept = [Collections.Generic.List[string]]::new()
+    $located = 0; $hidden = 0; $drop = $false
+    foreach ($ln in ($Text -split "`r?`n")) {
+        $k = Test-BaselineLine $ln $Dir
+        if ($null -ne $k) {
+            $located++
+            $drop = -not $k
+            if ($drop) { $hidden++ } else { $kept.Add($ln) }
+            continue
+        }
+        if ($drop -and $ln -match '^(\s|\d*\s*\|)') { continue }
+        $drop = $false
+        $kept.Add($ln)
+    }
+    @{ Text = ($kept -join "`n"); Located = $located; Hidden = $hidden }
+}
+
+# The same filter over regex hits already known to be findings (tidy, cppcheck).
+function Select-BaselineHits($Hits, [string]$Name, [string]$Dir) {
+    $keep = @($Hits | Where-Object { (Test-BaselineLine $_.Value.TrimEnd() $Dir) -ne $false })
+    if ($Hits.Count -gt $keep.Count) { $script:Warnings += @("[NOTE] ${Name}: $($Hits.Count - $keep.Count) pre-existing finding(s) hidden by -Baseline $Baseline") }
+    $keep
+}
+
 # --- select which stacks to run -------------------------------------------
 if ($onlyGiven) {
     # `-Only nonsense` checked nothing and exited 0, which reads exactly like a clean
@@ -318,6 +391,7 @@ if ($onlyGiven) {
 if ($Baseline) {
     & git -C $Root rev-parse --verify --quiet "$Baseline^{commit}" *> $null
     if ($LASTEXITCODE -ne 0) { Write-Output "[FAIL] baseline revision not found: $Baseline"; exit 1 }
+    $script:BaselineLines = Get-BaselineLines $Root $Baseline
 }
 
 $script:Failed = $false
@@ -1489,6 +1563,7 @@ function Invoke-CppStack($s) {
                 # with the compiler the build phase used. Counted and named, never silent.
                 $errs = @([regex]::Matches($o, '(?m)^.+?:\d+:\d+: error: ')).Count
                 if ($code -ne 0 -and $hits.Count -eq 0 -and $errs -eq 0) { $o; return }
+                if ($Baseline) { $hits = @(Select-BaselineHits $hits 'tidy' $s.Dir) }
                 if ($hits.Count) {
                     $top = (@($hits | Group-Object { $_.Groups[2].Value } | Sort-Object Count, Name -Descending |
                             Select-Object -First 5 | ForEach-Object { "$($_.Name) x$($_.Count)" }) -join ', ')
@@ -1513,6 +1588,7 @@ function Invoke-CppStack($s) {
             $hits = @([regex]::Matches($o, '(?m)^(.+?):\d+:\d+: [a-z]+: .*\[(\w+)\]\s*$') |
                 Where-Object { Test-CppOwn $_.Groups[1].Value $s.Dir })
             if ($code -ne 0 -and $hits.Count -eq 0 -and $o -notmatch '(?m):\d+:\d+: ') { $o; return }
+            if ($Baseline) { $hits = @(Select-BaselineHits $hits 'cppcheck' $s.Dir) }
             if ($hits.Count) {
                 $top = (@($hits | Group-Object { $_.Groups[2].Value } | Sort-Object Count, Name -Descending |
                         Select-Object -First 5 | ForEach-Object { "$($_.Name) x$($_.Count)" }) -join ', ')
@@ -1670,6 +1746,12 @@ function Invoke-BaseStack($s) {
             $tOut = (& typos @targs @paths 2>&1 | Out-String)
             $tCode = $LASTEXITCODE
             $tsw.Stop()
+            if ($Baseline) {
+                $bf = Select-BaselineFindings $tOut $Root
+                $tOut = $bf.Text
+                if ($tCode -ne 0 -and $bf.Located -and $bf.Located -eq $bf.Hidden) { $tCode = 0 }
+                if ($bf.Hidden) { $script:Warnings += @("[NOTE] typos: $($bf.Hidden) pre-existing finding(s) hidden by -Baseline $Baseline") }
+            }
             Phase 'typos' {
                 $hits = @($tOut -split "`r?`n" | Where-Object { $_ -match '^(.*?):\d+:\d+: ' } | Sort-Object)
                 if ($hits.Count -gt 20) {
@@ -1717,6 +1799,9 @@ function Invoke-BaseStack($s) {
         # markdownlint-cli2 reads its arguments as globs; ':' makes each a literal path.
         if ($l.Name -eq 'markdownlint') { $files = @($files | ForEach-Object { ":$_" }) }
         $lArgs = $l.Args
+        # Its default groups findings under a file header; gcc is `path:line:col:`, which
+        # the -Baseline filter can attribute. Only then, so the plain run stays as it was.
+        if ($Baseline -and $l.Name -eq 'editorconfig') { $lArgs = @($lArgs) + @('-format', 'gcc') }
         # core.autocrlf=true (Git for Windows' default) checks an LF script out as CRLF, and
         # shellcheck then flags every line SC1017 over bytes the repository never holds.
         # Measured: Git Bash runs that CRLF copy fine. A script committed CRLF keeps it.
@@ -1732,6 +1817,12 @@ function Invoke-BaseStack($s) {
             if ($LASTEXITCODE -ne 0) { $lBad = $true }
         }
         $global:LASTEXITCODE = 0
+        if ($Baseline -and $lBad) {
+            $bf = Select-BaselineFindings $lOut $Root
+            $lOut = $bf.Text
+            if ($bf.Located -and $bf.Located -eq $bf.Hidden) { $lBad = $false }
+            if ($bf.Hidden) { $script:Warnings += @("[NOTE] $($l.Name): $($bf.Hidden) pre-existing finding(s) hidden by -Baseline $Baseline") }
+        }
         if (-not $lBad) { continue }
         $hits = @($lOut -split "`r?`n" | Where-Object { $_.Trim() })
         # Report-level, like the Go warnings: a green stack line keeps only the [WARN] header,

@@ -2816,9 +2816,78 @@ const raw = "" +
     Check 'a couple of findings still print in full, with no summary line' `
         (($LASTEXITCODE -ne 0) -and ($tmFew -notmatch 'showing first 20') -and
             ($tmFew -match 'notes\.md')) "code=$LASTEXITCODE $tmFew"
+
+    # #60: -Baseline filters typos to the lines changed since the rev. Both sides: an old
+    # typo on an untouched line is hidden (and still red without -Baseline), a new one on a
+    # changed line still fails. In a subdirectory with a space, as typos prints `.\sub dir\`.
+    $tl = Join-Path $tmp 'typos-baseline'
+    New-Item -ItemType Directory -Path (Join-Path $tl 'sub dir') -Force | Out-Null
+    git -C $tl init -q 2>$null
+    $tlFile = Join-Path $tl 'sub dir\notes.txt'
+    [IO.File]::WriteAllText($tlFile, "you will $typo this`nclean line`n")
+    git -C $tl add -A 2>$null
+    git -C $tl -c user.email=selftest@local -c user.name=selftest commit -qm init 2>$null
+    [IO.File]::WriteAllText($tlFile, "you will $typo this`nclean line`nanother clean line`n")
+    $out = (& pwsh -NoProfile -File $gate -Root $tl -Only base -Full 2>&1 | Out-String)
+    Check 'without -Baseline a pre-existing typo still fails' (($LASTEXITCODE -ne 0) -and ($out -match '\[FAIL\] typos')) "code=$LASTEXITCODE $out"
+    $out = (& pwsh -NoProfile -File $gate -Root $tl -Only base -Full -Baseline HEAD 2>&1 | Out-String)
+    Check '-Baseline hides a typo on an untouched line and says so' `
+        (($LASTEXITCODE -eq 0) -and ($out -notmatch $typo) -and ($out -match '\[NOTE\] typos: 1 pre-existing finding\(s\) hidden by -Baseline HEAD')) "code=$LASTEXITCODE $out"
+    [IO.File]::WriteAllText($tlFile, "you will $typo this`nclean line`nwe $typo more`n")
+    $out = (& pwsh -NoProfile -File $gate -Root $tl -Only base -Full -Baseline HEAD 2>&1 | Out-String)
+    Check '-Baseline still fails a typo on a changed line' `
+        (($LASTEXITCODE -ne 0) -and ($out -match '\[FAIL\] typos') -and ($out -match 'notes\.txt:3:') -and ($out -notmatch 'notes\.txt:1:')) "code=$LASTEXITCODE $out"
+    # A tool that fails with nothing attributable is never filtered to green.
+    $tyShim = Join-Path $tmp 'typos-crash-shim'
+    New-Item -ItemType Directory -Path $tyShim -Force | Out-Null
+    if ($IsWindows) { [IO.File]::WriteAllText((Join-Path $tyShim 'typos.cmd'), "@echo boom: config unreadable`r`n@exit /b 2`r`n") }
+    else { $p = Join-Path $tyShim 'typos'; [IO.File]::WriteAllText($p, "#!/bin/sh`necho 'boom: config unreadable'`nexit 2`n"); chmod +x $p }
+    try {
+        $env:PATH = "$tyShim$sep$priorPath"
+        $out = (& pwsh -NoProfile -File $gate -Root $tl -Only base -Full -Baseline HEAD 2>&1 | Out-String)
+        Check '-Baseline keeps a tool failure with no location red' (($LASTEXITCODE -ne 0) -and ($out -match '\[FAIL\] typos') -and ($out -match 'boom')) "code=$LASTEXITCODE $out"
+    } finally { $env:PATH = $priorPath }
 } else {
     Write-Output '[skip] typos not on PATH -- its fast/full scoping cannot be judged here'
 }
+
+# #60: the same -Baseline filter over the real advisory linters, each where installed.
+# Old findings committed; then a new finding on a changed line for shellcheck and yamllint.
+$bl = Join-Path $tmp 'lint-baseline'
+New-Item -ItemType Directory -Path (Join-Path $bl 'sub dir'), (Join-Path $bl '.github\workflows') -Force | Out-Null
+git -C $bl init -q 2>$null
+[IO.File]::WriteAllText((Join-Path $bl 'sub dir\a.sh'), "#!/bin/sh`necho `$1`nls x`n")
+[IO.File]::WriteAllText((Join-Path $bl 'sub dir\a.yml'), "---`na: 1`nb:   2`nc: 3`n")
+[IO.File]::WriteAllText((Join-Path $bl '.github\workflows\ci.yml'), "on: push`njobs:`n  x:`n    runs-on: ubuntu-latest`n    steps:`n      - run: echo `${{ github.foo }}`n")
+[IO.File]::WriteAllText((Join-Path $bl '.editorconfig'), "root = true`n[*]`ntrim_trailing_whitespace = true`n")
+[IO.File]::WriteAllText((Join-Path $bl 'sub dir\e.txt'), "bad `nok`n")
+git -C $bl add -A 2>$null
+git -C $bl -c user.email=selftest@local -c user.name=selftest commit -qm init 2>$null
+$blHave = @{}
+foreach ($e in 'shellcheck', 'yamllint', 'actionlint', 'editorconfig-checker') { $blHave[$e] = [bool](Get-Command $e -ErrorAction SilentlyContinue) }
+$out = (& pwsh -NoProfile -File $gate -Root $bl -Only base -Full 2>&1 | Out-String)
+foreach ($n in @{ shellcheck = 'shellcheck'; yamllint = 'yamllint'; actionlint = 'actionlint'; 'editorconfig-checker' = 'editorconfig' }.GetEnumerator()) {
+    if ($blHave[$n.Key]) { Check "without -Baseline $($n.Value) still warns on old findings" ($out -match "\[WARN\] $($n.Value):") $out }
+}
+[IO.File]::WriteAllText((Join-Path $bl 'sub dir\a.sh'), "#!/bin/sh`necho `$1`nls `$y`n")
+[IO.File]::WriteAllText((Join-Path $bl 'sub dir\a.yml'), "---`na: 1`nb:   2`nc:    3`n")
+$out = (& pwsh -NoProfile -File $gate -Root $bl -Only base -Full -Baseline HEAD 2>&1 | Out-String)
+if ($blHave['shellcheck']) {
+    Check '-Baseline: shellcheck warns on the changed line only' `
+        (($out -match 'a\.sh:3:\d+: ') -and ($out -notmatch 'a\.sh:2:') -and ($out -match '\[NOTE\] shellcheck: 1 pre-existing')) $out
+}
+if ($blHave['yamllint']) {
+    Check '-Baseline: yamllint warns on the changed line only' (($out -match 'a\.yml:4:') -and ($out -notmatch 'a\.yml:3:')) $out
+}
+if ($blHave['actionlint']) {
+    Check '-Baseline: an untouched actionlint finding is hidden with its snippet' `
+        (($out -notmatch '\[WARN\] actionlint') -and ($out -notmatch 'github\.foo') -and ($out -match '\[NOTE\] actionlint: 1 pre-existing')) $out
+}
+if ($blHave['editorconfig-checker']) {
+    Check '-Baseline: an untouched editorconfig finding is hidden' `
+        (($out -notmatch '\[WARN\] editorconfig') -and ($out -match '\[NOTE\] editorconfig: 1 pre-existing')) $out
+}
+Check '-Baseline over advisory linters exits 0' ($LASTEXITCODE -eq 0) "code=$LASTEXITCODE $out"
 
 # 38. secrets. Measured across nine real repositories, the phase reported 51 findings
 # and every one was false -- so the two questions here are "does it still catch a real
