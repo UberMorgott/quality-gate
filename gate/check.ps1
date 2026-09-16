@@ -1152,14 +1152,19 @@ function Invoke-GodotStack($s) {
             [void]$known.Add($e.FullName.Substring($s.Dir.Length).TrimStart('\').Replace('\', '/'))
         }
         # A uid:// resolves through the file that DECLARES it, never through a path.
-        # Only the [gd_scene]/[gd_resource] header line and an .import sidecar declare
-        # one; every other uid= (an [ext_resource], a preload) is a reference to a
-        # file that must exist.
+        # Only the [gd_scene]/[gd_resource] header line, an .import sidecar and a
+        # .uid sidecar (scripts and shaders, Godot 4.4+: the bare `uid://...` line)
+        # declare one; every other uid= (an [ext_resource], a preload) is a
+        # reference to a file that must exist.
         $decl = '^\[gd_(scene|resource)\b'
         $uids = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
         foreach ($f in Get-ChildItem $s.Dir -Recurse -File -ErrorAction SilentlyContinue |
-            Where-Object { $_.Extension -in '.tscn', '.tres', '.import' -and $_.FullName -notmatch $noGodotDir }) {
+            Where-Object { $_.Extension -in '.tscn', '.tres', '.import', '.uid' -and $_.FullName -notmatch $noGodotDir }) {
             foreach ($l in [IO.File]::ReadAllLines($f.FullName)) {
+                if ($f.Extension -eq '.uid') {
+                    if ($l -match '^\s*uid://(\S+)\s*$') { [void]$uids.Add($Matches[1]) }
+                    continue
+                }
                 if ($f.Extension -ne '.import' -and $l -notmatch $decl) { continue }
                 foreach ($m in [regex]::Matches($l, 'uid\s*=\s*"uid://([^"]+)"')) { [void]$uids.Add($m.Groups[1].Value) }
             }

@@ -966,6 +966,11 @@ $scClean = [IO.File]::ReadAllText($gdScene)
 $r = Invoke-Gate $gdt
 Check 'dangling uid:// reference fails the gate' `
     (($r.Code -ne 0) -and ($r.Out -match 'main\.tscn:\d+: uid://cnotdeclared matches nothing')) $r.Out
+# Godot 4.4+ declares a script's uid in a `.gd.uid` sidecar, not in any .tscn/.import.
+[IO.File]::WriteAllText("$gdMain.uid", "uid://cnotdeclared`n")
+$r = Invoke-Gate $gdt
+Check 'uid:// declared by a .gd.uid sidecar resolves' ($r.Out -notmatch 'matches nothing') $r.Out
+Remove-Item "$gdMain.uid"
 [IO.File]::WriteAllText($gdScene, $scClean)
 $r = Invoke-Gate $gdt
 Check 'res:// scan clean once the reference is fixed' (($r.Out -notmatch 'does not resolve') -and ($r.Out -notmatch 'matches nothing')) $r.Out
