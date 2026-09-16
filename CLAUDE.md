@@ -1,3 +1,10 @@
+## Autonomy
+
+- quality-gate is the universal autotester; issues arrive from many repos that have it installed.
+- Fix every issue autonomously, without asking: reproduce, fix, verify (`selftest.ps1`), commit, push to `main`. Close the issue via the commit (`Closes #N`).
+- Work ONLY in this repo's `main`. Never touch other projects — agents in those repos pull the update themselves (`qgate update`).
+- Still confirm first: force push, history rewrite, `reset --hard`, deleting data.
+
 ## graphify
 
 This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
