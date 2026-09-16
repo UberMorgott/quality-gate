@@ -3700,7 +3700,7 @@
       "file_type": "code",
       "norm_label": "invoke-deploygate()",
       "source_file": "selftest.ps1",
-      "source_location": "L2106"
+      "source_location": "L2138"
     },
     {
       "id": "selftest_invoke_gate",
@@ -3722,7 +3722,7 @@
       "file_type": "code",
       "norm_label": "invoke-smoke()",
       "source_file": "selftest.ps1",
-      "source_location": "L1980"
+      "source_location": "L2012"
     },
     {
       "id": "selftest_invoke_stophook",
@@ -3744,7 +3744,7 @@
       "file_type": "code",
       "norm_label": "invoke-trust()",
       "source_file": "selftest.ps1",
-      "source_location": "L1856"
+      "source_location": "L1888"
     },
     {
       "id": "selftest_set_deferrals",
@@ -9190,7 +9190,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "selftest.ps1",
-      "source_location": "L1985",
+      "source_location": "L2017",
       "weight": 1.0
     },
     {
@@ -9982,7 +9982,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "selftest.ps1",
-      "source_location": "L1856",
+      "source_location": "L1888",
       "weight": 1.0
     },
     {
@@ -9993,7 +9993,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "selftest.ps1",
-      "source_location": "L1980",
+      "source_location": "L2012",
       "weight": 1.0
     },
     {
@@ -10004,7 +10004,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "selftest.ps1",
-      "source_location": "L2106",
+      "source_location": "L2138",
       "weight": 1.0
     },
     {
@@ -12755,5 +12755,5 @@
       "source_file": "HANDOFF.md"
     }
   ],
-  "built_at_commit": "5175feb243bb9abde3476c0528a3ea4ec9120dd1"
+  "built_at_commit": "92b3e48af7791ffa05d772b8699c1d4b2dcf2e90"
 }
