@@ -1322,6 +1322,27 @@ qgate -All -Baseline HEAD~
 находку чинить или исключать по пути в `exclusions.rules`, не через `//nolint`.
 `govet nilness` уже включён в шаблоне. `govet shadow` **не включать**: 178 находок, почти все —
 легитимный скоупинг `err`.
+Шумный линтер не обязательно «всё или ничего»: `exhaustruct_v5` (все поля struct-литерала заданы)
+по всему репо — шум (замерено: 284 находки, 220 в тестах), а нацеленный на типы состояния — защита
+детерминизма. В v2.13.x `exhaustruct` deprecated, а `exhaustruct_v5` **отвергает** `include`;
+ключ — `enforce-patterns`, полное имя типа с путём пакета, и **обязательно** `explicit-mode: true`
+— без него v5 проверяет все структуры, а паттерны ничего не меняют (проверено `config verify` +
+`run`):
+
+```yaml
+linters:
+  enable: [exhaustruct_v5]
+  settings:
+    exhaustruct_v5:
+      explicit-mode: true
+      enforce-patterns:
+        - '.*/internal/sim\.(State|Snapshot)$'
+  exclusions:
+    rules:
+      - path: '_test\.go$'
+        linters: [exhaustruct_v5]
+```
+
 Форматтеры `gofumpt` + `gci` (секция `formatters:` golangci v2) — в шаблоне закомментированы:
 `golangci-lint run` репортит каждый неотформатированный файл, и репо со стилем «только gofmt»
 покраснело бы на пробелах. Внедрять одним коммитом: раскомментировать, `golangci-lint fmt ./...`

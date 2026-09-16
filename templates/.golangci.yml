@@ -225,6 +225,22 @@ issues:
 #   NilAway (go.uber.org/nilaway)  nil-panic analysis. Worth it, but adopt it
 #                       per package -- a whole-repo first run is unusable.
 #   govet nilness       already enabled above under `govet.enable`.
+#   exhaustruct_v5      every struct literal must set every field. Repo-wide it
+#                       is noise (measured: 284 hits, 220 in tests); TARGETED
+#                       at determinism-critical state/snapshot types it is a
+#                       real guard. Full type name incl. package path; v5
+#                       rejects the old `include`/`exclude` keys (use
+#                       `enforce-patterns`/`ignore-patterns`, v2.13.2).
+#                       `explicit-mode: true` is REQUIRED: without it v5
+#                       checks every struct and enforce-patterns change
+#                       nothing (measured):
+#                         linters.enable: [exhaustruct_v5]
+#                         linters.settings.exhaustruct_v5.explicit-mode: true
+#                         linters.settings.exhaustruct_v5.enforce-patterns:
+#                           - '.*/internal/sim\.(State|Snapshot)$'
+#                       Plus, to skip test literals, an exclusions.rules entry:
+#                           - path: '_test\.go$'
+#                             linters: [exhaustruct_v5]
 #   gosec G7xx (taint)  excluded in gosec.excludes above. Real value, but its
 #                       findings are nondeterministic and cannot be kept
 #                       suppressed with `//nolint`; trial it by hand only.
