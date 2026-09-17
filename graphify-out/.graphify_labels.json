@@ -1,7 +1,7 @@
 {
   "0": "harmony.cs",
   "1": "detect.ps1",
-  "2": "quality_gate job anchor shared by both hooks",
+  "2": "GitHub Actions quality-gate workflow",
   "3": ".Scan",
   "4": "Lookups",
   "5": "selftest.ps1",
