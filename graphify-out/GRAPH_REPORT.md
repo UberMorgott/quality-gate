@@ -1,7 +1,7 @@
 # Graph Report - quality-gate  (2026-09-17)
 
 ## Corpus Check
-- 44 files · ~105,296 words
+- 44 files · ~105,539 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 17 file(s) not represented in the graph (top: (none) 5, .toml 3, .gd 2)
 
@@ -11,7 +11,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `b213be3e`
+- Built from commit: `d7f959de`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -75,8 +75,8 @@
   templates/ci.yml → README.md
 - `Incoming agent reports: symptom right, cause wrong half the time` --semantically_similar_to--> `Second-engine review`  [INFERRED] [semantically similar]
   HANDOFF.md → PLAYBOOK.md
-- `Cancellability findings (context propagation)` --conceptually_related_to--> `.golangci.yml template`  [INFERRED]
-  PLAYBOOK.md → templates/.golangci.yml
+- `"Gate is wrong" issue template` --conceptually_related_to--> `Incoming agent reports: symptom right, cause wrong half the time`  [INFERRED]
+  .github/ISSUE_TEMPLATE/gate-bug.md → HANDOFF.md
 
 ## Import Cycles
 - None detected.
