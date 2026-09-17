@@ -19,12 +19,13 @@
 #
 # Sections run as parallel child processes (#84): the run is waiting on processes, not
 # CPU, so one section at a time left the cores idle. -Sequential runs everything in this
-# process, as before. -SectionTimeoutSec bounds each child.
+# process, as before. -SectionTimeoutSec bounds each child. -Throttle caps concurrent
+# jobs (#101); each job's Go/.NET runtimes get cores / Throttle processors.
 #
 # The longest sections are split into parts (go2, dotnet2, dotnet3) so they run as parallel
 # jobs too; naming a section runs its parts. -Exact (what each job gets) runs only the
 # names given.
-param([string[]]$Only, [switch]$Sequential, [switch]$Exact, [int]$SectionTimeoutSec = 1500)
+param([string[]]$Only, [switch]$Sequential, [switch]$Exact, [int]$SectionTimeoutSec = 1500, [int]$Throttle = 4)
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'gate\detect.ps1')
 
@@ -55,7 +56,11 @@ if (-not $Sequential -and $Only.Count -ne 1) {
         [pscustomobject]@{ Name = $s; Dir = $dir; Out = Join-Path $ptmp "$s.out"; Proc = $null; Watch = $null; TimedOut = $false }
     }
     $sw = [Diagnostics.Stopwatch]::StartNew()
-    $throttle = [Math]::Max(2, [Environment]::ProcessorCount)
+    # One job per core oversubscribed the machine: every gate run spawns go build,
+    # golangci-lint and dotnet build that each want all cores, and the full run took
+    # 10-17 min or hit the section timeout (#101). Few jobs, each held to its share.
+    $throttle = [Math]::Max(1, $Throttle)
+    $cores = [Math]::Max(1, [Math]::Floor([Environment]::ProcessorCount / $throttle))
     while ($jobs | Where-Object { -not $_.Proc -or -not $_.Proc.HasExited }) {
         $jobs | Where-Object { $_.Proc -and $_.Proc.HasExited } | ForEach-Object { $_.Watch.Stop() }
         foreach ($j in @($jobs | Where-Object { $_.Proc -and -not $_.Proc.HasExited -and $_.Watch.Elapsed.TotalSeconds -gt $SectionTimeoutSec })) {
@@ -66,7 +71,7 @@ if (-not $Sequential -and $Only.Count -ne 1) {
         foreach ($j in @($jobs | Where-Object { -not $_.Proc } | Select-Object -First ($throttle - $busy))) {
             # Own TEMP per child: the gate keys temp files and tools keep lock files there
             # (golangci-lint's parallel-runner lock), which concurrent sections must not share.
-            $cmd = "`$env:TMP = `$env:TEMP = '$($j.Dir)'; & '$self' -Only $($j.Name) -Sequential -Exact *> '$($j.Out)'; exit `$LASTEXITCODE"
+            $cmd = "`$env:TMP = `$env:TEMP = '$($j.Dir)'; `$env:GOMAXPROCS = '$cores'; `$env:DOTNET_PROCESSOR_COUNT = '$cores'; & '$self' -Only $($j.Name) -Sequential -Exact *> '$($j.Out)'; exit `$LASTEXITCODE"
             $j.Proc = Start-Process pwsh -ArgumentList '-NoProfile', '-Command', $cmd -PassThru -WindowStyle Hidden
             $j.Watch = [Diagnostics.Stopwatch]::StartNew()
         }
