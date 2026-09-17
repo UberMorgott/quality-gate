@@ -404,6 +404,27 @@ pre-commit-хука: файл, который гейт не смог прочи�
 тоже; exit code не меняется.
 Stop-хук агента работает на `-Fast` и этой строки не видит — сети на ход агента нет.
 
+### Признанные уязвимости
+
+Уязвимость без исправленной версии (`Fixed in: N/A`) иначе краснит каждый `-Full` и каждый коммит.
+Тот же `qgate.deferrals.json`, секция `vulnerabilities` (#82):
+
+```json
+{"vulnerabilities": [
+  {"id": "GO-2026-5932", "until": "2026-11-01", "reason": "go-selfupdate v1.6.0 -- последний релиз, фикса нет"}
+]}
+```
+
+Учитывают `govulncheck` (id из `govulncheck -format openvex`), `vuln` базового стека (`osv-scanner
+--format json`, группа совпадает по `ids` и `aliases`) и `vuln` dotnet (последний сегмент
+`advisoryurl`, `GHSA-…`). Повторный JSON-запуск делается только когда есть и находки, и записи.
+
+- Все находки признаны и срок не прошёл — фаза `[PASS]`, на каждую печатается
+  `[WARN] qgate.deferrals.json: <фаза> <id> acknowledged until <дата> -- <причина>` — на каждом `-Full`, в том числе с `-Quiet`.
+- Любая непризнанная находка — `[FAIL]` как раньше, плюс `not acknowledged: <id>`.
+- Срок прошёл — `[FAIL]` с `acknowledgement expired: <id> was acknowledged until <дата> -- <причина>`.
+- Запись без `id`/`reason` или с `until` не `yyyy-MM-dd` — `[WARN]` и ничего не признаёт.
+
 ## Проверка уязвимостей
 
 На `-Full` (перед коммитом и в CI, не на ход агента — база уязвимостей в сети):

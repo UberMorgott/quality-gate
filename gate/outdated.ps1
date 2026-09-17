@@ -41,32 +41,8 @@ $newestManifest = Get-ChildItem $Root -Recurse -Depth 3 -File -Force -ErrorActio
 # a silence, and a reason nobody can find later is why this file exists at all.
 # Parsed BEFORE the cache branch below, because that branch returns early and an
 # expired deferral would then stay unreported for the life of the cache.
-$deferrals = @()
-$deferFile = Join-Path $Root 'qgate.deferrals.json'
-if (Test-Path $deferFile) {
-    $parsed = $null
-    try { $parsed = (Get-Content $deferFile -Raw | ConvertFrom-Json).dependencies } catch { $parsed = $null }
-    # The else is load-bearing: `@($null)` iterates ONE null element, so an
-    # unparseable file printed its own "not readable" warning and then a second,
-    # untrue one about "entry 1" that no entry ever produced -- the exact
-    # right-outcome-wrong-reason shape PLAYBOOK.md 0.1 is about.
-    if ($null -eq $parsed) {
-        $deferrals += , @{ Bad = 'qgate.deferrals.json is not readable as {"dependencies": [...]}' }
-    } else {
-        $n = 0
-        foreach ($d in @($parsed)) {
-            $n++
-            $due = [datetime]::MinValue
-            if (-not $d.name -or -not $d.reason) {
-                $deferrals += , @{ Bad = "qgate.deferrals.json entry $n needs both 'name' and 'reason'" }
-            } elseif (-not [datetime]::TryParseExact([string]$d.until, 'yyyy-MM-dd', [cultureinfo]::InvariantCulture, 'None', [ref]$due)) {
-                $deferrals += , @{ Bad = "qgate.deferrals.json entry for '$($d.name)' needs 'until' as yyyy-MM-dd" }
-            } else {
-                $deferrals += , @{ Name = [string]$d.name; Until = $due; Reason = [string]$d.reason }
-            }
-        }
-    }
-}
+# The loader is Read-Deferrals (detect.ps1), shared with the vulnerability phases.
+$deferrals = @(Read-Deferrals $Root 'dependencies' 'name')
 $badDeferrals = @($deferrals | Where-Object { $_.Bad } | ForEach-Object { "[WARN] $($_.Bad)" })
 # Printed here rather than with the report at the bottom, because both the cache
 # branch and -Summary return before that report -- and -Summary is the path the

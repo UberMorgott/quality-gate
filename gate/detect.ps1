@@ -253,6 +253,39 @@ function Get-GoBuiltWith([string]$Exe) {
     if ($first -match ':\s+go(\d+\.\d+(?:\.\d+)?)') { $Matches[1] }
 }
 
+# Optional qgate.deferrals.json in the repo root, one loader for both of its sections:
+#
+#   {"dependencies":    [{"name": "vue",          "until": "2026-11-01", "reason": "..."}],
+#    "vulnerabilities": [{"id":   "GO-2026-5932", "until": "2026-11-01", "reason": "..."}]}
+#
+# `qgate outdated` reads "dependencies"; the vulnerability phases read "vulnerabilities".
+# `until` and `reason` are mandatory: a deferral with no expiry is just a silence. Returns
+# @{ Name; Until; Reason } per valid entry and @{ Bad = message } per invalid one.
+function Read-Deferrals([string]$Root, [string]$Section, [string]$Key) {
+    $file = Join-Path $Root 'qgate.deferrals.json'
+    if (-not (Test-Path $file)) { return }
+    $json = try { Get-Content $file -Raw | ConvertFrom-Json } catch { $null }
+    # A file that parses but holds neither section is as unreadable as broken JSON.
+    if (-not $json -or -not ($json.PSObject.Properties.Name | Where-Object { $_ -in 'dependencies', 'vulnerabilities' })) {
+        return @{ Bad = 'qgate.deferrals.json is not readable as {"dependencies": [...], "vulnerabilities": [...]}' }
+    }
+    $where = if ($Section -eq 'dependencies') { '' } else { "$Section " }
+    $n = 0
+    # The -and is load-bearing: `@($null)` iterates ONE null element, which reported an
+    # "entry 1" nobody wrote for a section the file does not have.
+    foreach ($d in @($json.$Section | Where-Object { $null -ne $_ })) {
+        $n++
+        $due = [datetime]::MinValue
+        if (-not $d.$Key -or -not $d.reason) {
+            @{ Bad = "qgate.deferrals.json ${where}entry $n needs both '$Key' and 'reason'" }
+        } elseif (-not [datetime]::TryParseExact([string]$d.until, 'yyyy-MM-dd', [cultureinfo]::InvariantCulture, 'None', [ref]$due)) {
+            @{ Bad = "qgate.deferrals.json ${where}entry for '$($d.$Key)' needs 'until' as yyyy-MM-dd" }
+        } else {
+            @{ Name = [string]$d.$Key; Until = $due; Reason = [string]$d.reason }
+        }
+    }
+}
+
 function Test-GoToolStale([string]$Exe, [string]$ModuleGo, [string]$Install) {
     if (-not $ModuleGo) { return }
     $built = Get-GoBuiltWith $Exe

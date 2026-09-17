@@ -546,6 +546,26 @@ function Format-StackOutput([string[]]$Lines, [int]$Max) {
 
 function Have([string]$Exe) { [bool](Get-Command $Exe -ErrorAction SilentlyContinue) }
 
+# quality-gate#82: an advisory with no fixed version failed every -Full run and every
+# commit, and nothing in the repository could fix it. qgate.deferrals.json
+# "vulnerabilities" acknowledges one by id, with a reason and an expiry. $Found holds
+# one id list per advisory (its id plus aliases, so an ack under either name holds).
+# Returns the advisories that still fail; each live acknowledgement is a report-level
+# [WARN], so it is printed on every run, -Quiet included. An expired or invalid entry
+# acknowledges nothing -- its advisory fails like any other, and says why.
+function Get-UnackedVulns([string]$Tool, [object[]]$Found) {
+    $acks = @(Read-Deferrals $Root 'vulnerabilities' 'id')
+    $script:Warnings += @($acks | Where-Object { $_.Bad } | ForEach-Object { "[WARN] $($_.Bad)" })
+    $today = (Get-Date).Date
+    foreach ($ids in $Found) {
+        $a = @($acks | Where-Object { $_.Name -and $ids -contains $_.Name })[0]
+        if (-not $a) { "not acknowledged: $($ids[0])" }
+        elseif ($a.Until -lt $today) { "acknowledgement expired: $($a.Name) was acknowledged until $($a.Until.ToString('yyyy-MM-dd')) -- $($a.Reason)" }
+        else { $script:Warnings += "[WARN] qgate.deferrals.json: $Tool $($a.Name) acknowledged until $($a.Until.ToString('yyyy-MM-dd')) -- $($a.Reason)" }
+    }
+}
+function Test-VulnAcks { [bool]@(Read-Deferrals $Root 'vulnerabilities' 'id').Count }
+
 # --- stack runners ---------------------------------------------------------
 function Invoke-GoStack($s) {
     Set-Location $s.Dir
@@ -697,7 +717,23 @@ function Invoke-GoStack($s) {
             # version" once per package of the user's own code. Phase would print all
             # of it under a heading that says nothing.
             if ($stale) { Fail $stale }
-            Phase 'govulncheck' { govulncheck ./... }
+            # Exit 3 is "vulnerabilities found". Only then, and only when the repo acknowledges
+            # any, is it asked again for ids: -format openvex is one JSON document whose
+            # `affected` statements are exactly the called vulnerabilities the text lists.
+            Phase 'govulncheck' {
+                govulncheck ./...
+                if ($LASTEXITCODE -eq 3 -and (Test-VulnAcks)) {
+                    $vex = try { govulncheck -format openvex ./... 2>$null | Out-String | ConvertFrom-Json } catch { $null }
+                    $found = @(foreach ($st in @($vex.statements | Where-Object { $_.status -eq 'affected' })) {
+                            , @(@($st.vulnerability.name) + @($st.vulnerability.aliases) | Where-Object { $_ }) })
+                    # No ids read is not "all acknowledged": the verdict stays the text run's.
+                    if ($found) {
+                        $left = @(Get-UnackedVulns 'govulncheck' $found)
+                        $left
+                        $global:LASTEXITCODE = [int][bool]$left.Count
+                    }
+                }
+            }
         }
         else { $script:Lines += '[WARN] govulncheck not on PATH -- phase skipped (go install golang.org/x/vuln/cmd/govulncheck@latest)' }
     }
@@ -1280,11 +1316,18 @@ function Invoke-DotnetStack($s) {
             # parsed before it can be a verdict), so the stopwatch inside Phase wrapped a
             # loop over an in-memory array and printed `(0.0s)` for a phase that just went
             # to the advisory database over the network.
-            Phase 'vuln' {
-                foreach ($p in $vulnerable) {
+            # #82: the advisory id is the last segment of its URL (GHSA-...).
+            $vulnLines = @(foreach ($p in $vulnerable) {
                     foreach ($v in $p.vulnerabilities) { "$($p.id) $($p.resolvedVersion): $($v.severity) -- $($v.advisoryurl)" }
-                }
-                if ($vulnerable) { $global:LASTEXITCODE = 1 }
+                })
+            if ($vulnLines -and (Test-VulnAcks)) {
+                $found = @(foreach ($p in $vulnerable) { foreach ($v in $p.vulnerabilities) { , @(($v.advisoryurl -split '/')[-1]) } })
+                $left = @(Get-UnackedVulns 'vuln' $found)
+                $vulnLines = if ($left) { $vulnLines + $left } else { @() }
+            }
+            Phase 'vuln' {
+                $vulnLines
+                if ($vulnLines) { $global:LASTEXITCODE = 1 }
             } -Elapsed $vulnSw.Elapsed.TotalSeconds
         }
     }
@@ -2089,6 +2132,16 @@ function Invoke-BaseStack($s) {
             '--experimental-exclude'; "r:(^|/)$rootRe/$($n -replace '([.\\+*?()\[\]{}|^$])', '\$1')$" })
     $osvOut = (& osv-scanner scan source -r @osvEx $Root 2>&1 | Out-String).TrimEnd()
     $osvCode = $LASTEXITCODE
+    # #82: exit 1 is findings. With acknowledgements in the repo, ask again in JSON: a
+    # group is one advisory, `ids` plus `aliases` every name it goes by.
+    if ($osvCode -eq 1 -and (Test-VulnAcks)) {
+        $oj = try { & osv-scanner scan source -r --format json @osvEx $Root 2>$null | Out-String | ConvertFrom-Json } catch { $null }
+        $found = @(foreach ($g in @($oj.results.packages.groups)) { , @(@($g.ids) + @($g.aliases) | Where-Object { $_ } | Select-Object -Unique) })
+        if ($found) {
+            $left = @(Get-UnackedVulns 'vuln' $found)
+            if ($left) { $osvOut = (@($osvOut) + $left) -join "`n" } else { $osvCode = 0 }
+        }
+    }
     $sw.Stop()
     if ($osvCode -eq 128) {
         $script:Lines += '[SKIP] vuln -- no package sources found (osv-scanner)'
@@ -2509,5 +2562,8 @@ if ($Full -and -not $script:Failed) {
 # test package is shown: the hook is the only early warning before CI's -race times out.
 # So is a CI Go variant the gate never runs: green here says nothing about that target.
 if ($Quiet -and -not $script:Failed) { $report = @($report | Where-Object { $_ -match '^\[WARN\] (qgate\.|dependency update advisory timed out|slow tests:|CI parity:)' }) }
+# A broken qgate.deferrals.json is read by outdated and by every vuln phase; say it once.
+$seenDefer = [Collections.Generic.HashSet[string]]::new()
+$report = @($report | Where-Object { "$_" -notmatch '^\[WARN\] qgate\.deferrals\.json (is not|.*entry)' -or $seenDefer.Add("$_") })
 if ($report) { $report | ForEach-Object { Write-Output $_ } }
 exit ($(if ($script:Failed) { 1 } else { 0 }))

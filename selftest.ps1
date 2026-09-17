@@ -55,6 +55,20 @@ function Set-GoFile([string]$Path, [string]$Text) {
     # wrong phase and hide the violation we are testing for.
     [IO.File]::WriteAllText($Path, (($Text -replace "`r`n", "`n").TrimEnd() + "`n"))
 }
+# #82: a vulnerability scanner stand-in. Prints $Json when its arguments contain $JsonArg
+# (exit 0), otherwise $Text with exit $Code; `--version` answers as osv-scanner v2.
+function New-VulnShim([string]$Dir, [string]$Name, [string]$JsonArg, [string]$Json, [string]$Text, [int]$Code) {
+    New-Item -ItemType Directory -Path $Dir -Force | Out-Null
+    $jf = Join-Path $Dir "$Name.json"
+    [IO.File]::WriteAllText($jf, $Json)
+    if ($IsWindows) {
+        [IO.File]::WriteAllText((Join-Path $Dir "$Name.cmd"), "@if `"%1`"==`"--version`" (echo osv-scanner version: 2.5.1& exit /b 0)`r`n@echo %* | findstr /c:`"$JsonArg`" >nul && (type `"$jf`" & exit /b 0)`r`n@echo $Text`r`n@exit /b $Code`r`n")
+    } else {
+        $p = Join-Path $Dir $Name
+        [IO.File]::WriteAllText($p, "#!/bin/sh`n[ `"`$1`" = --version ] && { echo 'osv-scanner version: 2.5.1'; exit 0; }`ncase `"`$*`" in *'$JsonArg'*) cat '$jf'; exit 0;; esac`necho '$Text'`nexit $Code`n")
+        chmod +x $p
+    }
+}
 function Invoke-Gate([string]$Root) {
     $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $Root -All 2>&1 | Out-String)
     [pscustomobject]@{ Code = $LASTEXITCODE; Out = $out }
@@ -2399,6 +2413,37 @@ $wireRoot = (& pwsh -NoProfile -File $installer -Root $nm -NoHook 2>&1 | Out-Str
 Check 'wire accepts -Root as the repository to wire' `
     (($LASTEXITCODE -eq 0) -and ($wireRoot -match [regex]::Escape($nm))) "code=$LASTEXITCODE $wireRoot"
 
+# #82: govulncheck honours qgate.deferrals.json "vulnerabilities" too (ids from -format
+# openvex). A stand-in, so no network; the rest of the -Full run still needs $fullGreen.
+if ($fullGreen) {
+    $gvRepo = Join-Path $tmp 'govuln-ack'
+    Copy-Item (Join-Path $PSScriptRoot 'testdata\go-fixture') $gvRepo -Recurse
+    $gvShim = Join-Path $tmp 'govulncheck-shim'
+    New-VulnShim $gvShim 'govulncheck' 'openvex' `
+        '{"statements":[{"vulnerability":{"name":"GO-2026-5932"},"status":"affected"},{"vulnerability":{"name":"GO-2026-7777","aliases":["GHSA-aaaa-bbbb-cccc"]},"status":"affected"},{"vulnerability":{"name":"GO-2021-0001"},"status":"not_affected"}]}' `
+        'Vulnerability #1: GO-2026-5932 shimtext' 3
+    $gvPrior = $env:PATH
+    $gvAck = { param($Entries) [IO.File]::WriteAllText((Join-Path $gvRepo 'qgate.deferrals.json'), (@{ vulnerabilities = $Entries } | ConvertTo-Json -Depth 5)) }
+    try {
+        $env:PATH = "$gvShim$([IO.Path]::PathSeparator)$gvPrior"
+        & $gvAck @(@{ id = 'GO-2026-5932'; until = '2099-01-01'; reason = 'no fix' }, @{ id = 'GHSA-aaaa-bbbb-cccc'; until = '2099-01-01'; reason = 'no fix either' })
+        $out = (& pwsh -NoProfile -File $gate -Root $gvRepo -All -Full -Only go 2>&1 | Out-String); $code = $LASTEXITCODE
+        Check 'govulncheck: every affected advisory acknowledged passes and names each one' `
+            (($code -eq 0) -and ($out -match '\[PASS\] govulncheck') -and
+            ($out -match '\[WARN\] qgate\.deferrals\.json: govulncheck GO-2026-5932 acknowledged until 2099-01-01 -- no fix') -and
+            ($out -match 'govulncheck GHSA-aaaa-bbbb-cccc acknowledged') -and ($out -notmatch 'GO-2021-0001')) "code=$code $out"
+        & $gvAck @(@{ id = 'GO-2026-5932'; until = '2099-01-01'; reason = 'no fix' })
+        $out = (& pwsh -NoProfile -File $gate -Root $gvRepo -All -Full -Only go 2>&1 | Out-String); $code = $LASTEXITCODE
+        Check 'govulncheck: a new advisory beside an acknowledged one still fails, named' `
+            (($code -ne 0) -and ($out -match '\[FAIL\] govulncheck') -and ($out -match 'not acknowledged: GO-2026-7777') -and
+            ($out -notmatch 'not acknowledged: GO-2026-5932') -and ($out -match 'shimtext')) "code=$code $out"
+        & $gvAck @(@{ id = 'GO-2026-5932'; until = '2020-01-01'; reason = 'no fix' }, @{ id = 'GO-2026-7777'; until = '2099-01-01'; reason = 'no fix either' })
+        $out = (& pwsh -NoProfile -File $gate -Root $gvRepo -All -Full -Only go 2>&1 | Out-String); $code = $LASTEXITCODE
+        Check 'govulncheck: an expired acknowledgement fails, and says it expired' `
+            (($code -ne 0) -and ($out -match 'acknowledgement expired: GO-2026-5932 was acknowledged until 2020-01-01')) "code=$code $out"
+    } finally { $env:PATH = $gvPrior }
+} else { Write-Output '[skip] govulncheck acknowledgements -- a -Full run is not green on this machine' }
+
 }
 
 if (Want 'custom') {
@@ -2947,6 +2992,44 @@ try {
         ($out -match '\[SKIP\] vuln -- osv-scanner not on PATH') $out
     Check 'an absent optional tool is a skip, not a failed run' `
         (($noToolCode -eq 0) -and ($out -notmatch '\[FAIL\]')) "code=$noToolCode $out"
+
+    # #82: qgate.deferrals.json "vulnerabilities" acknowledges an advisory with no fix, by
+    # id or alias, with an expiry. Both sides: everything acknowledged passes and names each
+    # acknowledgement; a new id, an expired entry or an invalid one still fails.
+    $osvShim = Join-Path $tmp 'osv-shim'
+    New-VulnShim $osvShim 'osv-scanner' '--format json' `
+        '{"results":[{"packages":[{"groups":[{"ids":["GHSA-q7pp-wcgr-pffx"],"aliases":["GHSA-q7pp-wcgr-pffx","CVE-2026-0001"]}]}]},{"packages":[{"groups":[{"ids":["GO-2026-5932"],"aliases":["GO-2026-5932"]}]}]}]}' `
+        'shimtable GHSA-q7pp-wcgr-pffx GO-2026-5932' 1
+    $env:PATH = "$osvShim$sep$env:PATH"
+    $ackFile = Join-Path $baseRepo 'qgate.deferrals.json'
+    $ack = { param($Entries) [IO.File]::WriteAllText($ackFile, (@{ vulnerabilities = $Entries } | ConvertTo-Json -Depth 5)) }
+    & $ack @(@{ id = 'CVE-2026-0001'; until = '2099-01-01'; reason = 'no fixed version' }, @{ id = 'GO-2026-5932'; until = '2099-01-01'; reason = 'latest release' })
+    $out = (& pwsh -NoProfile -File $gate -Root $baseRepo -Only base -Full 2>&1 | Out-String); $code = $LASTEXITCODE
+    Check 'vuln: every advisory acknowledged (one by alias) passes and names each one' `
+        (($code -eq 0) -and ($out -match '\[PASS\] vuln') -and ($out -notmatch '\[FAIL\]') -and
+        ($out -match '\[WARN\] qgate\.deferrals\.json: vuln CVE-2026-0001 acknowledged until 2099-01-01 -- no fixed version') -and
+        ($out -match '\[WARN\] qgate\.deferrals\.json: vuln GO-2026-5932 acknowledged until 2099-01-01 -- latest release')) "code=$code $out"
+    $out = (& pwsh -NoProfile -File $gate -Root $baseRepo -Only base -Full -Quiet 2>&1 | Out-String)
+    Check 'vuln: an acknowledgement is printed under -Quiet too' ($out -match 'vuln GO-2026-5932 acknowledged until') $out
+    & $ack @(@{ id = 'GO-2026-5932'; until = '2099-01-01'; reason = 'latest release' })
+    $out = (& pwsh -NoProfile -File $gate -Root $baseRepo -Only base -Full 2>&1 | Out-String); $code = $LASTEXITCODE
+    Check 'vuln: an unacknowledged advisory beside an acknowledged one still fails, named' `
+        (($code -ne 0) -and ($out -match '\[FAIL\] vuln') -and ($out -match 'not acknowledged: GHSA-q7pp-wcgr-pffx') -and
+        ($out -notmatch 'not acknowledged: GO-2026-5932') -and ($out -match 'shimtable')) "code=$code $out"
+    & $ack @(@{ id = 'GHSA-q7pp-wcgr-pffx'; until = '2020-01-01'; reason = 'waiting upstream' }, @{ id = 'GO-2026-5932'; until = '2099-01-01'; reason = 'latest release' })
+    $out = (& pwsh -NoProfile -File $gate -Root $baseRepo -Only base -Full 2>&1 | Out-String); $code = $LASTEXITCODE
+    Check 'vuln: an expired acknowledgement fails, and says it expired' `
+        (($code -ne 0) -and ($out -match 'acknowledgement expired: GHSA-q7pp-wcgr-pffx was acknowledged until 2020-01-01') -and
+        ($out -notmatch 'not acknowledged: GHSA')) "code=$code $out"
+    & $ack @(@{ id = 'GHSA-q7pp-wcgr-pffx'; reason = 'no until' }, @{ id = 'GO-2026-5932'; until = '2099-01-01'; reason = 'latest release' })
+    $out = (& pwsh -NoProfile -File $gate -Root $baseRepo -Only base -Full 2>&1 | Out-String); $code = $LASTEXITCODE
+    Check 'vuln: an acknowledgement without until is invalid, warned once, and acknowledges nothing' `
+        (($code -ne 0) -and ($out -match 'not acknowledged: GHSA-q7pp-wcgr-pffx') -and
+        ([regex]::Matches($out, "\[WARN\] qgate\.deferrals\.json vulnerabilities entry for 'GHSA-q7pp-wcgr-pffx' needs 'until'").Count -eq 1)) "code=$code $out"
+    Remove-Item $ackFile
+    $out = (& pwsh -NoProfile -File $gate -Root $baseRepo -Only base -Full 2>&1 | Out-String); $code = $LASTEXITCODE
+    Check 'vuln: with no acknowledgements the findings fail as before' `
+        (($code -ne 0) -and ($out -match '\[FAIL\] vuln') -and ($out -match 'shimtable') -and ($out -notmatch 'acknowledg')) "code=$code $out"
 } finally { $env:PATH = $priorPath }
 
 # The advisory file-kind linters (#53-#58): skipped by name when absent, [WARN] and never
