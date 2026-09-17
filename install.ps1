@@ -143,6 +143,33 @@ if ($stacks | Where-Object { $_.Stack -eq 'go' -and $_.Implemented }) {
 function Set-StopHook {
     $file = Join-Path $root '.claude\settings.json'
     $cmd = 'qgate stop-hook'
+    # Opt-out, persisted in the repo so a later wire/update does not put it back:
+    # qgate.json {"stopHook": false}. The hook runs the gate on every turn end, which
+    # misfires while background subagents are still mid-edit.
+    $qj = Join-Path $root 'qgate.json'
+    $optOut = $false
+    if (Test-Path $qj) { try { $optOut = (Get-Content $qj -Raw | ConvertFrom-Json).stopHook -eq $false } catch { } }
+    if ($optOut) {
+        if (-not (Test-Path $file)) { Write-Output 'stop-hook -- skipped (qgate.json stopHook: false)'; return }
+        $settings = Get-Content $file -Raw | ConvertFrom-Json -AsHashtable
+        $before = @($settings.hooks.Stop | Where-Object { $_ }) | ConvertTo-Json -Depth 10
+        if ($settings.hooks -and $settings.hooks.ContainsKey('Stop')) {
+            # Only our own command goes; the user's hooks, even in the same group, stay.
+            $kept = @(foreach ($g in @($settings.hooks.Stop | Where-Object { $_ })) {
+                if ($g -isnot [hashtable] -or -not $g.hooks) { $g; continue }
+                $g.hooks = @($g.hooks | Where-Object { $_.command -notmatch [regex]::Escape($cmd) })
+                if ($g.hooks) { $g }
+            })
+            if ($kept) { $settings.hooks.Stop = $kept } else { $settings.hooks.Remove('Stop') }
+        }
+        if ((@($settings.hooks.Stop | Where-Object { $_ }) | ConvertTo-Json -Depth 10) -ne $before) {
+            Set-Content -Path $file -Value ($settings | ConvertTo-Json -Depth 10) -Encoding utf8
+            Write-Output "stop-hook -- removed from $file (qgate.json stopHook: false)"
+        } else {
+            Write-Output 'stop-hook -- skipped (qgate.json stopHook: false)'
+        }
+        return
+    }
     $settings = if (Test-Path $file) {
         Get-Content $file -Raw | ConvertFrom-Json -AsHashtable
     } else {

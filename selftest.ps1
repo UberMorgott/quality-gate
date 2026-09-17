@@ -1645,6 +1645,20 @@ Set-Content $swFile '{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"ec
 $swCmds = @((Get-Content $swFile -Raw | ConvertFrom-Json).hooks.Stop.hooks.command)
 Check 'wire keeps other Stop hooks and never duplicates its own' `
     ((@($swCmds | Where-Object { $_ -eq 'echo mine' }).Count -eq 1) -and (@($swCmds | Where-Object { $_ -match 'qgate' }).Count -eq 1)) ($swCmds -join ' | ')
+# Opt-out: qgate.json {"stopHook": false} removes only our entry -- including one
+# sharing a group with the user's hook -- and a rewire does not add it back.
+$soRepo = Join-Path $tmp 'stopoptout'
+New-Item -ItemType Directory -Path (Join-Path $soRepo '.claude') -Force | Out-Null
+git -C $soRepo init -q 2>$null
+$soFile = Join-Path $soRepo '.claude\settings.json'
+Set-Content $soFile '{"hooks":{"PreToolUse":[{"hooks":[{"type":"command","command":"echo pre"}]}],"Stop":[{"hooks":[{"type":"command","command":"echo mine"},{"type":"command","command":"qgate stop-hook"}]},{"hooks":[{"type":"command","command":"qgate stop-hook"}]}]}}'
+Set-Content (Join-Path $soRepo 'qgate.json') '{"stopHook": false}'
+& pwsh -NoProfile -File $installer -Target $soRepo -NoRun -NoHook *> $null
+& pwsh -NoProfile -File $installer -Target $soRepo -NoRun -NoHook *> $null
+$soJson = Get-Content $soFile -Raw | ConvertFrom-Json
+$soCmds = @($soJson.hooks.Stop.hooks.command)
+Check 'stopHook: false removes our Stop hook, keeps the user''s hooks, and stays off on rewire' `
+    (($soCmds -join '|') -eq 'echo mine' -and (@($soJson.hooks.PreToolUse.hooks.command) -join '|') -eq 'echo pre') ($soJson | ConvertTo-Json -Depth 10)
 $gitRoot = Split-Path (Split-Path (Split-Path (Split-Path (& git --exec-path))))
 $bashExe = @((Join-Path $gitRoot 'bin\bash.exe'), (Get-Command bash -ErrorAction SilentlyContinue).Source) |
     Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
