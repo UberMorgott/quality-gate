@@ -1,7 +1,7 @@
 # Quality gate: one entry point for every static check in the repository.
 #
-# Token-cheap by design: on success one line per stack, on failure the raw tool
-# output truncated to 6000 chars. Fail-fast -- the first failing phase stops the
+# Token-cheap by design: on success one short line per phase, on failure the raw tool
+# output with its detail capped at 6000 chars (status lines are never cut). Fail-fast -- the first failing phase stops the
 # rest, because a linter report on non-compiling code is noise.
 #
 # Levels: -Fast drops the expensive bundling phase and is what the agent Stop
@@ -72,7 +72,7 @@ if ($PSBoundParameters.ContainsKey('Sarif')) {
     $rule = 'gate'; $tagLevel = $null
     $levels = @{ FAIL = 'error'; WARN = 'warning'; UNKNOWN = 'warning'; SKIP = 'note'; NOTE = 'note'; INFO = 'note' }
     foreach ($line in @($childOut | ForEach-Object { "$_" -split "`r?`n" })) {
-        # A passing stack line carries its phases inline: `[PASS] go (go.mod) [PASS] build [WARN] ...`.
+        # Older reports carried a passing stack's phases inline: `[PASS] go (go.mod) [PASS] build [WARN] ...`.
         foreach ($seg in ($line -split ' (?=\[(?:PASS|FAIL|WARN|SKIP|UNKNOWN|NOTE|INFO)\] )')) {
             if ($seg -match '^\[(PASS|FAIL|WARN|SKIP|UNKNOWN|NOTE|INFO|WHY)\] (.*)$') {
                 $tagLevel = $levels[$Matches[1]]
@@ -517,6 +517,31 @@ function Phase {
 function Fail([string]$Message) {
     $script:Lines += "[FAIL] $Message"
     $script:Failed = $true
+}
+
+# quality-gate#75: the cap applies to DETAIL, never to status. Cut from the head of the
+# whole stack text, a formatter diff with long paths ate the 6000 chars and the later
+# `[FAIL] harmony` line of the same stack never reached the report -- a real finding
+# hidden behind the one that happened to print first. Status lines ([PASS]/[FAIL]/[SKIP]/
+# [UNKNOWN]/[WARN]/[NOTE], `fix:`, `run:`) are always kept; the detail budget is split evenly
+# across the detail blocks between them, so one loud phase cannot starve the next.
+function Format-StackOutput([string[]]$Lines, [int]$Max) {
+    $status = '^\s*(\[(PASS|FAIL|SKIP|UNKNOWN|WARN|NOTE)\]|fix:|run:)'
+    $rows = @($Lines | ForEach-Object { "$_" -split "`r?`n" })
+    $blocks = 0; $inDetail = $false
+    foreach ($r in $rows) { $d = $r -notmatch $status; if ($d -and -not $inDetail) { $blocks++ }; $inDetail = $d }
+    $cap = if ($blocks) { [Math]::Floor($Max / $blocks) } else { $Max }
+    $out = [Collections.Generic.List[string]]::new()
+    $used = 0; $cut = 0
+    foreach ($r in $rows) {
+        if ($r -match $status) {
+            if ($cut) { $out.Add("...[truncated, $cut more chars]"); $cut = 0 }
+            $out.Add($r); $used = 0; continue
+        }
+        if ($used + $r.Length + 1 -le $cap) { $out.Add($r); $used += $r.Length + 1 } else { $cut += $r.Length + 1; $used = $cap + 1 }
+    }
+    if ($cut) { $out.Add("...[truncated, $cut more chars]") }
+    ($out -join "`n").TrimEnd()
 }
 
 function Have([string]$Exe) { [bool](Get-Command $Exe -ErrorAction SilentlyContinue) }
@@ -2326,11 +2351,7 @@ foreach ($s in $stacks) {
 
     if ($script:StackSoft) { $script:SoftFailed = $true }
     if ($script:Failed -or $script:StackSoft) {
-        $out = ($script:Lines -join "`n").TrimEnd()
-        if ($out.Length -gt $MaxChars) {
-            $extra = $out.Length - $MaxChars
-            $out = $out.Substring(0, $MaxChars) + "`n...[truncated, $extra more chars]"
-        }
+        $out = Format-StackOutput $script:Lines $MaxChars
         $report += "[FAIL] $label"
         $report += $out
     } elseif (-not $Quiet) {
@@ -2343,14 +2364,17 @@ foreach ($s in $stacks) {
         # `[PASS] dotnet ... [PASS] build` and exit 0 over a question nobody answered. An
         # unperformed check hidden behind a green line is the one thing this report must
         # never do. One filter, so every stack that ever emits one is covered.
-        $timings = ($script:Lines | Where-Object { $_ -match '^\[(PASS|WARN|SKIP|UNKNOWN)\]' }) -join ' '
+        # One phase per line, as a failing stack prints them (#75): joined with spaces, a
+        # passing stack after a red one read as a single run-on line of [PASS]/[WARN] tags.
+        $timings = @($script:Lines | Where-Object { $_ -match '^\[(PASS|WARN|SKIP|UNKNOWN)\]' }) | ForEach-Object { "`n$_" }
+        $timings = $timings -join ''
         # Same rule one level down from the invariant below. Every web phase is
         # conditional on a config file or a package script, so a project with none of
         # them ran nothing and was still reported [PASS]. A stack that verified
         # nothing is flagged, never passed -- beside a stack that did real work the
         # run as a whole still stands, exactly as it does for an unimplemented stack.
         $ran = $script:Phases -gt $before
-        $report += "$(if ($ran) { '[PASS]' } else { '[SKIP]' }) $label ($($s.Marker))$(if (-not $ran) { ' -- no check phase applies here' }) $timings"
+        $report += "$(if ($ran) { '[PASS]' } else { '[SKIP]' }) $label ($($s.Marker))$(if (-not $ran) { ' -- no check phase applies here' })$timings"
     }
     if ($ParallelStacks) {
         $childRec[$key] = @{

@@ -2276,6 +2276,17 @@ try {
     # cannot name it.
     $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $cust -Only 'custom' -Full 2>&1 | Out-String)
     Check '-Only custom selects the stack' (($LASTEXITCODE -eq 0) -and ($out -match '\[PASS\] custom')) $out
+    # #75: a phase line printed after more than 6000 chars of detail used to fall off the
+    # head-truncated report. Both sides: the later status line survives, the detail is
+    # still capped.
+    [IO.File]::WriteAllText($custJson,
+        '{"checks":[{"name":"loud","run":"1..200 | % { ''x'' * 60 }; exit 1","level":"fast"},{"name":"later","run":"exit 0","level":"fast"}]}')
+    $null = Invoke-Trust $cust
+    $r = Invoke-Gate $cust
+    Check 'a status line after 6000+ chars of detail is still reported' `
+        (($r.Code -ne 0) -and ($r.Out -match '\[FAIL\] loud') -and ($r.Out -match '\[SKIP\] later -- not run')) $r.Out
+    Check 'the detail of a failing stack is still capped' `
+        (($r.Out -match '\.\.\.\[truncated, \d+ more chars\]') -and ($r.Out.Length -lt 8000)) "len=$($r.Out.Length)"
 
     # Trust is a hash of the checks, so editing the command re-arms the gate. This is
     # the case the feature exists to survive: a pull, a branch switch or a teammate
