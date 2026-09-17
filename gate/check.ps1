@@ -736,6 +736,41 @@ function Invoke-GoStack($s) {
                 $mine = @($det.Dirs | Where-Object { $_ -eq $s.Dir.TrimEnd('\', '/') -or $_.StartsWith($s.Dir.TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar) })
                 if ($mine) { $script:Warnings += @(Get-GoPurity $s.Dir $mine) + @(Get-GoPropertyGaps $s.Dir $mine) }
             }
+            # quality-gate#103: opt-in (qgate.json go.flaky) re-run of the CHANGED test
+            # packages under constrained scheduling, plus the cheap static scan beside it.
+            # Changed, not the whole module: the reported cost is minutes per package, and
+            # a -Full lane that pays that for untouched code would be turned off in a week.
+            # A repo that wants a fixed set regardless of the diff names it in "packages".
+            $fl = Get-GoFlaky $Root
+            if ($fl.Error) { $script:Warnings += "[WARN] $($fl.Error)" }
+            elseif ($fl) {
+                $script:Warnings += @(Get-GoFlakyGaps $s.Dir)
+                $pkgs = @($fl.Packages)
+                if (-not $pkgs) {
+                    $ch = Get-ChangedPaths $Root $(if ($Baseline) { $Baseline } else { 'HEAD' })
+                    $pkgs = @($ch | Where-Object { $_ -like '*_test.go' } |
+                            ForEach-Object { Split-Path (Join-Path $Root ($_ -replace '/', '\')) -Parent } | Sort-Object -Unique)
+                }
+                # Other modules' packages are not this module's to run: a repo with two
+                # go.mod files would otherwise run each changed package under both.
+                $mine = @($pkgs | Where-Object { $_ -eq $s.Dir.TrimEnd('\', '/') -or $_.StartsWith($s.Dir.TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar) } |
+                        Where-Object { Test-Path $_ -PathType Container })
+                if (-not $mine) {
+                    $script:Lines += '[SKIP] flaky tests -- no changed test packages (qgate.json go.flaky "packages" runs a fixed set)'
+                } else {
+                    $lsw = [Diagnostics.Stopwatch]::StartNew()
+                    $fr = Invoke-GoFlakyTests $s.Dir $fl $mine
+                    $secs = $lsw.Elapsed.TotalSeconds.ToString('0.0', [Globalization.CultureInfo]::InvariantCulture)
+                    if ($fr.Failed -eq 0) {
+                        $script:Lines += "[PASS] flaky tests ($($fr.Ran) package(s), -count=$($fl.Count) -cpu=$($fl.Cpu)$(if ($fl.Race) { ' -race' })) (${secs}s)"
+                    } elseif ($fl.Fail) {
+                        $script:Lines += $fr.Lines; $script:Failed = $true
+                    } else {
+                        $script:Warnings += $fr.Lines
+                    }
+                    $script:Warnings += @($fr.Warn)
+                }
+            }
             $fsw = [Diagnostics.Stopwatch]::StartNew()
             $fuzz = Invoke-GoFuzz $s.Dir
             if ($fuzz.Ran) { $script:Lines += "$(if ($fuzz.Warn -match ' failed -- ') { '[WARN]' } else { '[PASS]' }) go fuzz $($fuzz.Ran) target(s) ($($fsw.Elapsed.TotalSeconds.ToString('0.0', [Globalization.CultureInfo]::InvariantCulture))s)" }

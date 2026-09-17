@@ -627,6 +627,150 @@ function Get-GoLintGoos([string]$Root, [string]$HostGoos) {
     [pscustomobject]@{ Goos = $goos; Error = '' }
 }
 
+# quality-gate#103: qgate.json {"go": {"flaky": true}} -- re-run the CHANGED test packages
+# under constrained scheduling, where a test that treats a short wall-clock window as a
+# verdict ("no pong in 100ms" = "the client is dead") stops passing. Reported from the
+# field: a commit that touched no test at all turned a 2-core Windows CI runner red twice,
+# because a new CPU-heavy package now ran in parallel with an already-tight heartbeat test.
+# The gate could not see it -- on an idle dev machine those tests pass every time.
+#
+# `-cpu 1,2` is the whole mechanism: GOMAXPROCS=1 makes one busy goroutine delay every
+# other one, which is what a starved runner does, and it is portable (no affinity masks,
+# no burner processes). Probabilistic, not a proof: the reported incident reproduced in
+# 4 of 80 one-core runs, and `-race -cpu 1,2 -count=40` surfaced a second race that plain
+# `-count=30` never did.
+#
+# Opt-in and minutes long, so: -Full only, changed test packages only, a wall-clock budget,
+# and ADVISORY by default -- "fail": true is how a repo asks for a verdict.
+# Same contract as Get-GoDeterministic: $null when nothing is declared, else the settings
+# and .Error. `true` means every default; an object overrides the ones it names.
+function Get-GoFlaky([string]$Root) {
+    $file = Join-Path $Root 'qgate.json'
+    if (-not (Test-Path $file)) { return $null }
+    $json = try { Get-Content $file -Raw | ConvertFrom-Json } catch { $null }
+    if ($null -eq $json -or $null -eq $json.go -or $json.go.PSObject.Properties.Name -notcontains 'flaky') { return $null }
+    $raw = $json.go.flaky
+    $bad = { param($m) [pscustomobject]@{ Error = $m } }
+    $cfg = [pscustomobject]@{ Count = 20; Budget = 180; Cpu = '1,2'; Race = $true; Fail = $false; Packages = @(); Error = '' }
+    if ($raw -is [bool]) {
+        if (-not $raw) { return $null }
+    } elseif ($raw -is [psobject] -and $raw.GetType().Name -eq 'PSCustomObject') {
+        $known = 'count', 'budget', 'cpu', 'race', 'fail', 'packages'
+        $unknown = @($raw.PSObject.Properties.Name | Where-Object { $_ -notin $known })
+        if ($unknown) { return (& $bad "qgate.json go.flaky has unknown key(s): $($unknown -join ', ') -- known: $($known -join ', ')") }
+        foreach ($p in $raw.PSObject.Properties) {
+            switch ($p.Name) {
+                'count' {
+                    if ($p.Value -isnot [int] -and $p.Value -isnot [long]) { return (& $bad 'qgate.json "go.flaky.count" must be a number of test runs') }
+                    if ($p.Value -lt 1 -or $p.Value -gt 500) { return (& $bad 'qgate.json "go.flaky.count" must be between 1 and 500') }
+                    $cfg.Count = [int]$p.Value
+                }
+                'budget' {
+                    if ($p.Value -isnot [int] -and $p.Value -isnot [long]) { return (& $bad 'qgate.json "go.flaky.budget" must be a number of seconds') }
+                    if ($p.Value -lt 10 -or $p.Value -gt 3600) { return (& $bad 'qgate.json "go.flaky.budget" must be between 10 and 3600 seconds') }
+                    $cfg.Budget = [int]$p.Value
+                }
+                'cpu' {
+                    if ("$($p.Value)" -notmatch '^\d+(,\d+)*$') { return (& $bad 'qgate.json "go.flaky.cpu" must be a GOMAXPROCS list like "1,2"') }
+                    $cfg.Cpu = "$($p.Value)"
+                }
+                'race' {
+                    if ($p.Value -isnot [bool]) { return (& $bad 'qgate.json "go.flaky.race" must be true or false') }
+                    $cfg.Race = [bool]$p.Value
+                }
+                'fail' {
+                    if ($p.Value -isnot [bool]) { return (& $bad 'qgate.json "go.flaky.fail" must be true or false') }
+                    $cfg.Fail = [bool]$p.Value
+                }
+                'packages' {
+                    if ($p.Value -isnot [Array]) { return (& $bad 'qgate.json "go.flaky.packages" must be an array of package directories') }
+                    $dirs = @()
+                    foreach ($e in $p.Value) {
+                        if ($e -isnot [string] -or -not $e.Trim()) { return (& $bad 'qgate.json "go.flaky.packages" entries must be non-empty strings') }
+                        $d = Join-Path $Root $e
+                        if (-not (Test-Path $d -PathType Container)) { return (& $bad "qgate.json go.flaky.packages '$e' is not a directory") }
+                        $dirs += (Resolve-Path $d).Path.TrimEnd('\', '/')
+                    }
+                    $cfg.Packages = $dirs
+                }
+            }
+        }
+    } else {
+        return (& $bad 'qgate.json "go.flaky" must be true or an object, e.g. {"count": 20, "budget": 180, "fail": false}')
+    }
+    $cfg
+}
+
+# The dynamic half of #103. $Pkgs are absolute package directories inside the module at
+# $Dir; each is run once as `go test -count=N -cpu ... [-race]`, sequentially, until the
+# budget is spent -- the packages left out are named rather than silently dropped.
+# A failure prints the exact command that produced it: the report exists to hand the
+# reader a reproduction, and re-running a probabilistic check by memory is guesswork.
+# ponytail: one invocation per package, no burner processes and no affinity mask; the
+# catch rate is whatever -cpu 1 plus $Count buys.
+function Invoke-GoFlakyTests([string]$Dir, $Cfg, [string[]]$Pkgs) {
+    $prev = $global:LASTEXITCODE
+    $res = [pscustomobject]@{ Ran = 0; Failed = 0; Lines = @(); Warn = @() }
+    Push-Location $Dir
+    try {
+        $sw = [Diagnostics.Stopwatch]::StartNew()
+        $skipped = @()
+        foreach ($p in $Pkgs) {
+            $r = [IO.Path]::GetRelativePath($Dir, $p).Replace('\', '/')
+            $rel = if ($r -eq '.') { '.' } else { "./$r" }
+            if ($sw.Elapsed.TotalSeconds -ge $Cfg.Budget) { $skipped += $rel; continue }
+            $tArgs = @("-count=$($Cfg.Count)", "-cpu=$($Cfg.Cpu)", '-timeout=10m')
+            if ($Cfg.Race) { $tArgs += '-race' }
+            $out = (& go test @tArgs $rel 2>&1 | Out-String)
+            $code = $LASTEXITCODE
+            $res.Ran++
+            if ($code -eq 0) { continue }
+            $res.Failed++
+            $res.Lines += "$(if ($Cfg.Fail) { '[FAIL]' } else { '[WARN]' }) flaky tests: $rel failed under constrained scheduling"
+            $res.Lines += "       run: go test $($tArgs -join ' ') $rel"
+            $res.Lines += @($out -split "`r?`n" | Where-Object { $_.Trim() } | Select-Object -First 12 | ForEach-Object { "       $($_.TrimEnd())" })
+        }
+        if ($skipped) { $res.Warn += "[WARN] flaky tests: budget $($Cfg.Budget)s spent -- not run: $($skipped -join ', ')" }
+    } finally { Pop-Location; $global:LASTEXITCODE = $prev }
+    $res
+}
+
+# The cheap static half of #103, advisory and under the same opt-in: a *_test.go file that
+# starts a listener, a process or a goroutine AND treats a sub-second wall-clock wait as an
+# assertion deadline. Under CPU starvation that wait expires for reasons that are not the
+# code's, which is exactly how the reported incident failed.
+# A wait that must NOT fire (a negative case: nothing arrived within the window) is fine
+# under starvation -- it only gets weaker -- so the scan takes the positive deadline forms:
+# time.After / time.Sleep / context.WithTimeout as the body of a wait.
+# ponytail: regex over source lines, not the AST -- a duration built from a variable, or
+# assembled across lines, is not seen; expect false positives on deliberate short sleeps.
+function Get-GoFlakyGaps([string]$Dir) {
+    $ms = {
+        param($Text)
+        $hits = @()
+        foreach ($m in [regex]::Matches($Text, '(?:time\.After|time\.Sleep|WithTimeout)\s*\([^()\n]*?(?:(\d+)\s*\*\s*)?time\.(Second|Millisecond|Microsecond|Nanosecond)')) {
+            $n = if ($m.Groups[1].Success) { [double]$m.Groups[1].Value } else { 1 }
+            $unit = switch ($m.Groups[2].Value) { 'Second' { 1000 } 'Millisecond' { 1 } 'Microsecond' { 0.001 } default { 0.000001 } }
+            if ($n * $unit -lt 1000) { $hits += $m.Value.Trim() }
+        }
+        $hits
+    }
+    $files = @(Get-ChildItem $Dir -Recurse -File -Filter '*_test.go' -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName -notmatch '[\\/](testdata|vendor)[\\/]' })
+    $gaps = @(foreach ($f in $files) {
+            $txt = [IO.File]::ReadAllText($f.FullName)
+            if ($txt -notmatch 'net\.Listen|httptest\.New|exec\.Command|(?m)^\s*go\s+(func\s*\(|[\w.]+\s*\()') { continue }
+            $h = @(& $ms $txt)
+            if (-not $h) { continue }
+            "$([IO.Path]::GetRelativePath($Dir, $f.FullName).Replace('\', '/')) ($($h.Count): $(($h | Select-Object -Unique -First 3) -join ', '))"
+        })
+    if ($gaps) {
+        "[WARN] flaky tests: $($gaps.Count) test file(s) use a sub-second wait as a deadline beside a listener, process or goroutine -- advisory, not a failure"
+        $gaps | Select-Object -First 10 | ForEach-Object { "       $_" }
+        if ($gaps.Count -gt 10) { "       ... $($gaps.Count - 10) more" }
+    }
+}
+
 # Runs $Body with GOOS set and cgo off, then puts both variables back as they were.
 function Invoke-WithGoos([string]$Goos, [scriptblock]$Body) {
     $prev = $env:GOOS, $env:CGO_ENABLED

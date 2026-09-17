@@ -445,6 +445,130 @@ Check 'deterministic packages without a property or fuzz test are warned' ($gw -
 Set-GoFile (Join-Path $pur 'fixed\prop_test.go') "package fixed`n`n// rapid.Check(t, func(t *rapid.T) { ... }) is what the scan reads."
 Set-GoFile (Join-Path $pur 'sim\sim_test.go') "package sim`n`nimport `"testing`"`n`nfunc FuzzStep(f *testing.F) { f.Fuzz(func(t *testing.T, n int) {}) }"
 Check 'a rapid property test or a Fuzz target clears the warning' (-not (Get-GoPropertyGaps $pur $det.Dirs)) "$(Get-GoPropertyGaps $pur $det.Dirs)"
+
+# #103: scheduling-dependent tests, opt-in through qgate.json go.flaky. The fixture's
+# deadline is calibrated against one worker's own serial cost, so it passes wherever
+# several workers run at once and fails under `-cpu 1` on any machine -- the same shape as
+# the reported incident (a tight heartbeat window that only a starved runner missed).
+$flk = Join-Path $tmp 'flaky'
+Copy-Item (Join-Path $PSScriptRoot 'testdata\go-fixture') $flk -Recurse
+New-Item -ItemType Directory -Path (Join-Path $flk 'sched'), (Join-Path $flk 'calm') | Out-Null
+Set-GoFile (Join-Path $flk 'sched\sched.go') @'
+package sched
+
+// Work burns cpu for roughly the given number of rounds.
+func Work(rounds int) int {
+	x := 0
+	for i := 0; i < rounds*3000000; i++ {
+		x += i % 7
+	}
+	return x
+}
+'@
+Set-GoFile (Join-Path $flk 'sched\sched_test.go') @'
+package sched
+
+import (
+	"net"
+	"sync"
+	"testing"
+	"time"
+)
+
+func TestWorkersFinishInWindow(t *testing.T) {
+	start := time.Now()
+	if n := Work(30); n < 0 {
+		t.Fatal("impossible")
+	}
+	unit := time.Since(start)
+	done := make(chan struct{})
+	var wg sync.WaitGroup
+	for i := 0; i < 8; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if n := Work(30); n < 0 {
+				panic("impossible")
+			}
+		}()
+	}
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(3 * unit):
+		t.Fatal("workers did not finish in the window")
+	}
+}
+
+func TestListenerCloses(t *testing.T) {
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Skip("no loopback listener")
+	}
+	time.Sleep(20 * time.Millisecond)
+	if err := l.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+'@
+Set-GoFile (Join-Path $flk 'calm\calm.go') "package calm`n`n// Add returns the sum of a and b.`nfunc Add(a, b int) int { return a + b }"
+Set-GoFile (Join-Path $flk 'calm\calm_test.go') "package calm`n`nimport `"testing`"`n`nfunc TestAdd(t *testing.T) {`n`tif Add(1, 2) != 3 {`n`t`tt.Fatal(`"bad`")`n`t}`n}"
+Check 'no qgate.json go.flaky key is no flaky check' ($null -eq (Get-GoFlaky $flk))
+[IO.File]::WriteAllText((Join-Path $flk 'qgate.json'), '{"go": {"flaky": false}}')
+Check 'go.flaky false is no flaky check' ($null -eq (Get-GoFlaky $flk))
+[IO.File]::WriteAllText((Join-Path $flk 'qgate.json'), '{"go": {"flaky": "yes"}}')
+Check 'a string go.flaky is a named config error' ((Get-GoFlaky $flk).Error -match 'must be true or an object')
+[IO.File]::WriteAllText((Join-Path $flk 'qgate.json'), '{"go": {"flaky": {"counts": 5}}}')
+Check 'an unknown go.flaky key is named, not ignored' ((Get-GoFlaky $flk).Error -match 'unknown key\(s\): counts')
+[IO.File]::WriteAllText((Join-Path $flk 'qgate.json'), '{"go": {"flaky": {"count": 9000}}}')
+Check 'an out-of-range go.flaky count is a named config error' ((Get-GoFlaky $flk).Error -match 'count" must be between 1 and 500')
+[IO.File]::WriteAllText((Join-Path $flk 'qgate.json'), '{"go": {"flaky": {"cpu": "all"}}}')
+Check 'a non-numeric go.flaky cpu is a named config error' ((Get-GoFlaky $flk).Error -match 'cpu" must be a GOMAXPROCS list')
+[IO.File]::WriteAllText((Join-Path $flk 'qgate.json'), '{"go": {"flaky": {"packages": ["nosuch"]}}}')
+Check 'a go.flaky package that does not exist is a named config error' ((Get-GoFlaky $flk).Error -match "'nosuch' is not a directory")
+[IO.File]::WriteAllText((Join-Path $flk 'qgate.json'), '{"go": {"flaky": true}}')
+$fc = Get-GoFlaky $flk
+Check 'go.flaky true is every default' (-not $fc.Error -and $fc.Count -eq 20 -and $fc.Cpu -eq '1,2' -and $fc.Race -and -not $fc.Fail) "$($fc | Out-String)"
+[IO.File]::WriteAllText((Join-Path $flk 'qgate.json'), '{"go": {"flaky": {"count": 2, "race": false, "budget": 120}}}')
+$fc = Get-GoFlaky $flk
+Check 'a go.flaky object overrides only the keys it names' `
+    ($fc.Count -eq 2 -and -not $fc.Race -and $fc.Budget -eq 120 -and $fc.Cpu -eq '1,2') "$($fc | Out-String)"
+# The runner itself: the scheduling-dependent package fails, the plain one does not.
+$fr = Invoke-GoFlakyTests $flk $fc @((Join-Path $flk 'sched'))
+$frTxt = $fr.Lines -join "`n"
+Check 'a scheduling-dependent package fails under constrained scheduling' `
+    (($fr.Failed -eq 1) -and ($frTxt -match '\[WARN\] flaky tests: \./sched failed')) $frTxt
+Check 'the failure prints the exact command that produced it' `
+    ($frTxt -match 'run: go test -count=2 -cpu=1,2 -timeout=10m \./sched') $frTxt
+$fr = Invoke-GoFlakyTests $flk $fc @((Join-Path $flk 'calm'))
+Check 'a package with no timing assumption passes the same runner' (($fr.Ran -eq 1) -and ($fr.Failed -eq 0)) ($fr.Lines -join "`n")
+$fr = Invoke-GoFlakyTests $flk ([pscustomobject]@{ Count = 2; Budget = 10; Cpu = '1'; Race = $false; Fail = $false }) @()
+Check 'an empty package list runs nothing and says nothing' (($fr.Ran -eq 0) -and -not $fr.Lines) ($fr.Lines -join "`n")
+# The static companion: the file with a sub-second wait beside a listener is named, the
+# plain one is not.
+$fg = (Get-GoFlakyGaps $flk) -join "`n"
+Check 'a sub-second wait beside a listener is an advisory warning' `
+    (($fg -match '^\[WARN\] flaky tests: 1 test file\(s\)') -and ($fg -match 'sched/sched_test\.go')) $fg
+Check 'a test with no wall-clock wait is not named' ($fg -notmatch 'calm') $fg
+# Wiring: -Full only, and "fail": true is what turns the advisory into a verdict.
+[IO.File]::WriteAllText((Join-Path $flk 'qgate.json'), '{"go": {"flaky": {"count": 2, "race": false, "packages": ["sched"]}}}')
+$r = (& pwsh -NoProfile -File $gate -Root $flk -All -Full 2>&1 | Out-String); $rc = $LASTEXITCODE
+Check 'a flaky package is advisory by default -- warned, not failed' `
+    (($rc -eq 0) -and ($r -match '\[WARN\] flaky tests: \./sched failed')) "code=$rc $r"
+[IO.File]::WriteAllText((Join-Path $flk 'qgate.json'), '{"go": {"flaky": {"count": 2, "race": false, "fail": true, "packages": ["sched"]}}}')
+$r = (& pwsh -NoProfile -File $gate -Root $flk -All -Full 2>&1 | Out-String); $rc = $LASTEXITCODE
+Check 'go.flaky "fail": true makes it a verdict' (($rc -ne 0) -and ($r -match '\[FAIL\] flaky tests: \./sched failed')) "code=$rc $r"
+$r = (& pwsh -NoProfile -File $gate -Root $flk -All 2>&1 | Out-String)
+Check 'the flaky check never runs on the fast lane' ($r -notmatch 'flaky tests') $r
+# No "packages" and nothing changed is a named skip, not a silent no-op.
+[IO.File]::WriteAllText((Join-Path $flk 'qgate.json'), '{"go": {"flaky": true}}')
+$r = (& pwsh -NoProfile -File $gate -Root $flk -All -Full 2>&1 | Out-String); $rc = $LASTEXITCODE
+Check 'no changed test package is a named skip' `
+    (($rc -eq 0) -and ($r -match '\[SKIP\] flaky tests -- no changed test packages')) "code=$rc $r"
+
 # #40: cross-GOOS vet/lint, opt-in through qgate.json go.lintGoos. No key and the host's own
 # GOOS are no extra phase; a bad name is named; a vet defect in a file only the other GOOS
 # compiles passes the host vet and fails the gate at -Full; the clean file passes cross vet.
