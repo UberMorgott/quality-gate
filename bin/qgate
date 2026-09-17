@@ -1,0 +1,10 @@
+#!/bin/sh
+# Shim so a bare `qgate` resolves from bash/sh: Git Bash on Windows (no PATHEXT,
+# so qgate.cmd is invisible to `qgate`), Linux and macOS. Claude Code runs the
+# Stop hook `qgate stop-hook` through Git Bash on Windows; without this file the
+# hook died with exit 127, a NON-blocking error, and the gate never ran (#77).
+# cmd.exe and PowerShell never pick this file: an extensionless name is not in
+# PATHEXT, so they keep resolving qgate.cmd / qgate.ps1.
+# `exec` keeps stdin, stderr and the exit code untouched -- exit 2 must reach
+# Claude Code intact. Must stay LF (.gitattributes) and mode 755 in git.
+exec pwsh -NoLogo -NoProfile -NonInteractive -File "$(dirname "$0")/qgate.ps1" "$@"

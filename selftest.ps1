@@ -1482,6 +1482,40 @@ Check 'stop-hook blocks the turn with exit 2' ($hookCode -eq 2) "code=$hookCode"
 Check 'stop-hook puts the reason on stderr' ($hookErr -match 'Quality gate failed') $hookErr
 Check 'stop-hook keeps stdout clean' ([string]::IsNullOrWhiteSpace(($hookOut | Out-String))) ($hookOut | Out-String)
 
+# 12b (#77). Claude Code on Windows runs command hooks through Git Bash, which has
+# no PATHEXT: the wired `qgate stop-hook` died with exit 127 (non-blocking) and the
+# gate never ran. Run the command wire actually writes, through Git's bash.exe.
+# A rewire over an existing settings.json must keep the user's hook and not
+# duplicate ours.
+$swRepo = Join-Path $tmp 'stopwire'
+New-Item -ItemType Directory -Path (Join-Path $swRepo '.claude') -Force | Out-Null
+git -C $swRepo init -q 2>$null
+$swFile = Join-Path $swRepo '.claude\settings.json'
+Set-Content $swFile '{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"echo mine"}]},{"hooks":[{"type":"command","command":"qgate stop-hook"}]}]}}'
+& pwsh -NoProfile -File $installer -Target $swRepo -NoHook *> $null
+& pwsh -NoProfile -File $installer -Target $swRepo -NoHook *> $null
+$swCmds = @((Get-Content $swFile -Raw | ConvertFrom-Json).hooks.Stop.hooks.command)
+Check 'wire keeps other Stop hooks and never duplicates its own' `
+    ((@($swCmds | Where-Object { $_ -eq 'echo mine' }).Count -eq 1) -and (@($swCmds | Where-Object { $_ -match 'qgate' }).Count -eq 1)) ($swCmds -join ' | ')
+$gitRoot = Split-Path (Split-Path (Split-Path (Split-Path (& git --exec-path))))
+$bashExe = @((Join-Path $gitRoot 'bin\bash.exe'), (Get-Command bash -ErrorAction SilentlyContinue).Source) |
+    Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+if ($bashExe) {
+    $wiredCmd = @($swCmds | Where-Object { $_ -match 'qgate' })[0]
+    $oldPath = $env:PATH
+    Push-Location $hookRepo
+    try {
+        $env:PATH = "$(Join-Path $PSScriptRoot 'bin');$oldPath"
+        $env:CLAUDE_PROJECT_DIR = $hookRepo
+        $bashErr = Join-Path $tmp 'hook-bash.err'
+        "{`"session_id`":`"$([guid]::NewGuid())`"}" | & $bashExe -c $wiredCmd 2>$bashErr | Out-Null
+        $bashCode = $LASTEXITCODE
+    } finally { $env:PATH = $oldPath; $env:CLAUDE_PROJECT_DIR = $null; Pop-Location }
+    Check 'the wired Stop hook blocks with exit 2 under Git Bash' ($bashCode -eq 2) "code=$bashCode $bashExe $(Get-Content $bashErr -Raw)"
+} else {
+    Write-Output '[skip] no bash.exe -- the wired Stop hook cannot be run as Claude Code would'
+}
+
 # 22. The hook's blind spot: the fast level only ever looks at UNCOMMITTED work, so
 # a turn that edits and commits leaves a clean tree and the hook waved it through --
 # and every later turn too, because the commit never becomes uncommitted again. The

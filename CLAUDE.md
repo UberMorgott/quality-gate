@@ -16,6 +16,7 @@ Guardrails — every push lands in every repo's hooks on its next `qgate update`
 - New checks ship opt-in (qgate.json) or advisory `[WARN]` first; calibrate on a real consumer repo (CodeDungeon reports findings as issue comments) before any default-on FAIL.
 - Never loosen a check just to silence a report. A false-positive fix keeps the true positive: the selftest proves both sides (valid input passes, the real defect still fails).
 - Push only with `selftest.ps1` fully green. A red `main` breaks every installed repo.
+- Selftest cost: while iterating on a fix, run only the affected selftest sections (`selftest.ps1 -Only <section>` once it exists). Run the FULL selftest once per batch — commit each issue separately, then one full run, then push the batch. Never one full run per issue.
 
 ## graphify
 
