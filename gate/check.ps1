@@ -1851,6 +1851,38 @@ function Get-CppCompileDb([string]$Dir, [string]$Build) {
     return $null
 }
 
+# The fallback tree above is CONFIGURED and never BUILT, and that is the whole hole
+# reported in #102: a dependency pulled by FetchContent can GENERATE its headers at
+# build time (godot-cpp writes godot_cpp/classes/*.hpp from a custom command), so every
+# translation unit that includes one is unparseable there -- counted as "not analysed"
+# forever, silently blind. The generated headers DO exist, in the main tree, which the
+# build phase just built; the Visual Studio projects there name the directories they
+# live in. Harvest those and hand them to clang-tidy as extra -I. Appended, so they are
+# searched AFTER the database's own flags: a directory that already has the header wins,
+# and a stale one changes nothing. Building the cdb tree instead would pay a second full
+# compile with a second compiler on every commit, and fail wherever clang-cl cannot
+# build what MSVC can.
+function Get-CppGeneratedIncludes([string]$Build) {
+    if (-not (Test-Path $Build)) { return @() }
+    $dirs = [ordered]@{}
+    foreach ($p in @(Get-ChildItem $Build -Recurse -File -Filter '*.vcxproj' -ErrorAction SilentlyContinue)) {
+        try { $x = [xml](Get-Content $p.FullName -Raw -ErrorAction Stop) } catch { continue }
+        foreach ($v in @($x.Project.ItemDefinitionGroup.ClCompile.AdditionalIncludeDirectories)) {
+            foreach ($d in @("$v" -split ';')) {
+                # %(...) is MSBuild's "whatever was there before" and $(...) a macro this
+                # gate is not the one to expand; both are noise, not directories.
+                if (-not $d -or $d -match '%\(|\$\(') { continue }
+                if (-not (Test-Path -LiteralPath $d -PathType Container)) { continue }
+                $full = (Resolve-Path -LiteralPath $d).Path
+                if (-not $dirs.Contains($full)) { $dirs[$full] = $true }
+            }
+        }
+    }
+    # A command line, not a search: a tree with hundreds of projects would blow past the
+    # Windows argument limit long before the extra directory helped anyone.
+    return @($dirs.Keys | Select-Object -First 100)
+}
+
 # --- cpp: clang-format on the sources, cmake configure and build -----------
 function Invoke-CppStack($s) {
     Set-Location $s.Dir
@@ -1917,7 +1949,13 @@ function Invoke-CppStack($s) {
     Phase 'build' { cmake --build $build --config Release }
 
     $cdb = Join-Path $build 'compile_commands.json'
-    if (-not (Test-Path $cdb)) { $cdb = Get-CppCompileDb $s.Dir $build }
+    $extra = @()
+    if (-not (Test-Path $cdb)) {
+        $cdb = Get-CppCompileDb $s.Dir $build
+        # Only the fallback tree needs them: a database the main tree wrote describes the
+        # tree the build phase built, generated headers and all.
+        if ($cdb) { $extra = @(Get-CppGeneratedIncludes $build | ForEach-Object { "--extra-arg=-I$_" }) }
+    }
 
     # clang-tidy, driven by that database. Every finding is a [WARN] and none of them
     # fails the phase -- the same first pass the Roslyn analyzers got in 379f39d: the
@@ -1951,7 +1989,7 @@ function Invoke-CppStack($s) {
             $script:Lines += '[SKIP] tidy -- no sources of this stack in the compile database'
         } else {
             Phase 'tidy' {
-                $o = (& clang-tidy -p (Split-Path $cdb) --quiet "--checks=$checks" @files 2>&1 | Out-String)
+                $o = (& clang-tidy -p (Split-Path $cdb) --quiet "--checks=$checks" @extra @files 2>&1 | Out-String)
                 $code = $LASTEXITCODE
                 $hits = @([regex]::Matches($o, '(?m)^(.+?):\d+:\d+: warning: .*\[([a-z0-9-]+)\]\s*$') |
                     Where-Object { Test-CppOwn $_.Groups[1].Value $s.Dir })

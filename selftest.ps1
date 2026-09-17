@@ -3355,6 +3355,28 @@ New-Item -ItemType Directory -Path (Join-Path $cppAn '_deps\vendor') -Force | Ou
 # Leading newline: the fixture's last line has none, and cmake answers an appended
 # command with `Parse error. Expected a newline`.
 Add-Content (Join-Path $cppAn 'CMakeLists.txt') "`ntarget_sources(qgate_fixture PRIVATE src/rounding.cpp _deps/vendor/vendor.cpp)"
+# ...and a translation unit that includes a header GENERATED AT BUILD TIME (#102): the
+# throwaway Ninja database tree is configured and never built, so the header exists only
+# in the main tree the build phase built. Without the include dirs harvested from that
+# tree this TU is unparseable and silently "not analysed" -- its own finding, in a check
+# nothing else here produces, is the proof that it was.
+# The defect is expressed through a TYPE the generated header declares, so it is
+# diagnosable only when that header was found: a missing include alone would still leave
+# clang-tidy parsing the rest of the file and reporting on it.
+[IO.File]::WriteAllText((Join-Path $cppAn 'src\uses_gen.cpp'),
+    "#include `"qgate_gen.hpp`"`ndouble qgate_gen_use(qgate_gen_t g) { return (double)(g.a / g.b); }`n")
+Add-Content (Join-Path $cppAn 'CMakeLists.txt') @'
+
+set(QGATE_GEN_DIR ${CMAKE_CURRENT_BINARY_DIR}/gen)
+file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/qgate_gen.cmake
+  "file(WRITE \"${QGATE_GEN_DIR}/qgate_gen.hpp\" \"#pragma once\\nstruct qgate_gen_t { int a; int b; };\\n\")")
+add_custom_command(OUTPUT ${QGATE_GEN_DIR}/qgate_gen.hpp
+  COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_BINARY_DIR}/qgate_gen.cmake)
+add_custom_target(qgate_gen_header DEPENDS ${QGATE_GEN_DIR}/qgate_gen.hpp)
+add_dependencies(qgate_fixture qgate_gen_header)
+target_include_directories(qgate_fixture PRIVATE ${QGATE_GEN_DIR})
+target_sources(qgate_fixture PRIVATE src/uses_gen.cpp)
+'@
 
 # Neither phase runs on the fast lane. They cost tens of seconds on a real tree (26.7s
 # for clang-tidy over 22 translation units), and a fast lane that pays that on every
@@ -3396,6 +3418,12 @@ if ((Get-Command clang-tidy -ErrorAction SilentlyContinue) -and ($cdbOk -or -not
     # ...and the dependency's own defect is the build's business, not this repository's.
     Check 'a _deps source the build compiles is not analysed' `
         ($out -notmatch 'bugprone-branch-clone') $out
+    # #102: the TU behind the build-time generated header is analysed like any other,
+    # and nothing is left counted as rejected-and-skipped.
+    Check 'a TU that includes a build-time generated header is analysed' `
+        ($out -match 'bugprone-integer-division') $out
+    Check 'no translation unit is left unparsed by the analysis tree' `
+        ($out -notmatch 'not analysed') $out
 }
 
 }
