@@ -3730,11 +3730,15 @@ git -C $bsSrc -c user.name=t -c user.email=t@t commit -qm init 2>&1 | Out-Null
 git clone -q --bare $bsSrc (Join-Path $bs 'bare.git') 2>&1 | Out-Null
 $bsOrigin = 'https://github.com/UberMorgott/quality-gate.git'
 $bsUrl = 'file:///' + ((Join-Path $bs 'bare.git') -replace '\\', '/')
+# Every other qgate is taken off the child's PATH: when a fixture clone failed (a TEMP path
+# past MAX_PATH, measured), bootstrap adopted the developer's real install instead and
+# fetched this fixture's bare repo over its origin/main.
 function Invoke-Bootstrap79([string]$Inst, [string]$Name) {
     $qh = Join-Path $bs "qh-$Name"
     $cmd = "`$env:QUALITY_GATE_HOME=`$null; `$env:QGATE_HOME='$qh'; `$env:GITHUB_PATH='$bs\gp-$Name.txt'; " +
         "`$env:GIT_CONFIG_COUNT='1'; `$env:GIT_CONFIG_KEY_0='url.$bsUrl.insteadOf'; `$env:GIT_CONFIG_VALUE_0='$bsOrigin'; " +
-        "`$env:Path='$Inst\bin;' + `$env:Path; & '$(Join-Path $PSScriptRoot 'bootstrap.ps1')'"
+        "`$env:Path='$Inst\bin;' + ((`$env:Path -split ';' | Where-Object { `$_ -and -not (Test-Path (Join-Path `$_ 'qgate.ps1')) }) -join ';'); " +
+        "& '$(Join-Path $PSScriptRoot 'bootstrap.ps1')'"
     [pscustomobject]@{ Out = (& pwsh -NoProfile -Command $cmd 2>&1 | Out-String); Cloned = (Test-Path (Join-Path $qh 'quality-gate')) }
 }
 $bsInst = Join-Path $bs 'inst'
