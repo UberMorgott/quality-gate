@@ -462,8 +462,12 @@ Check 'the property-test template parses and is gofmt-clean' ($LASTEXITCODE -eq 
 # correctly, because unverifiable is not clean. That makes every later check that
 # asserts a green -Full run an unmet precondition here, not a defect to report, so
 # they [skip] rather than fail, exactly like a check whose tool is off PATH.
-& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $go -All -Full *> $null
+$probeOut = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $go -All -Full 2>&1 | Out-String)
 $fullGreen = ($LASTEXITCODE -eq 0)
+# #84: with no go.lintGoos key there is no cross-GOOS phase at all -- a $null list once ran
+# vet and golangci-lint a second time under "GOOS=". The configured side is asserted above.
+Check 'a -Full run with no go.lintGoos key runs no GOOS= phase' `
+    (($probeOut -match '\[(PASS|FAIL)\] go vet') -and ($probeOut -notmatch 'GOOS=')) $probeOut
 
 # 4. RED: a go vet violation. 5. GREEN: the same file restored.
 $main = Join-Path $go 'main.go'

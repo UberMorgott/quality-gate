@@ -674,7 +674,9 @@ function Invoke-GoStack($s) {
         $script:GoHostOs = if ($script:GoHostOs) { $script:GoHostOs } else { go env GOOS }
         $lg = Get-GoLintGoos $Root $script:GoHostOs
         if ($lg.Error) { Fail $lg.Error }
-        foreach ($os in @($lg.Goos)) {
+        # No lintGoos key is $null, and @($null.Goos) is one $null element: every -Full run
+        # repeated go vet and golangci-lint under an empty "GOOS=" heading (#84, measured).
+        foreach ($os in @($lg.Goos | Where-Object { $_ })) {
             Phase "go vet GOOS=$os" { Invoke-WithGoos $os { go vet ./... } }
             if (Have 'golangci-lint') {
                 Phase "golangci-lint GOOS=$os" {
