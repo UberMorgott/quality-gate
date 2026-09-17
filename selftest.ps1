@@ -904,6 +904,40 @@ if ($dnSdks) {
         Write-Output '[skip] no NuGet source reachable -- the Directory.Build.props package checks cannot run'
     }
 
+    # The true positive the offline [UNKNOWN] above must not swallow: a restored project with
+    # a known-vulnerable package, checked AFTER the analyzer build. That build restores obj/
+    # with the injected packages, and `dotnet list package` used to read the result as out of
+    # sync -- [UNKNOWN] on every restored project, never a verdict (#74).
+    $dnVuln = Join-Path $tmp 'dotnet-vuln'
+    Copy-Item (Join-Path $PSScriptRoot 'testdata\dotnet-fixture') $dnVuln -Recurse
+    [IO.File]::WriteAllText((Join-Path $dnVuln 'Directory.Build.props'), @'
+<Project>
+  <ItemGroup>
+    <PackageReference Include="Newtonsoft.Json" Version="12.0.1" />
+  </ItemGroup>
+</Project>
+'@)
+    Push-Location $dnVuln
+    & dotnet restore Fixture.csproj -nologo *> $null
+    # Online means the advisory database answers on the plainly restored project -- asked
+    # before the gate, so the gate's own answer is the only thing under test.
+    $dnVulnOnline = ($LASTEXITCODE -eq 0) -and
+        ((& dotnet list Fixture.csproj package --vulnerable --format json --output-version 1 2>&1 | Out-String) -match '"advisoryurl"')
+    Pop-Location
+    if ($dnVulnOnline) {
+        $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $dnVuln -All -Full 2>&1 | Out-String)
+        if ($out -match 'injection failed[^\r\n]*\bNU\d') {
+            Write-Output '[skip] analyzer packages not restorable -- the vulnerable-package check cannot run'
+        } else {
+            Check 'a known-vulnerable package fails vuln after the analyzer build, not [UNKNOWN]' `
+                (($LASTEXITCODE -ne 0) -and ($out -match 'Newtonsoft\.Json 12\.0\.1: High')) $out
+        }
+        $assets = Get-Content -LiteralPath (Join-Path $dnVuln 'obj\project.assets.json') -Raw
+        Check 'the gate leaves obj/project.assets.json without the injected analyzer packages' ($assets -notmatch 'Meziantou') 'obj/ still injected'
+    } else {
+        Write-Output '[skip] advisory source unreachable -- the vulnerable-package check cannot run'
+    }
+
     # Roslyn analyzers, injected through -p:CustomBeforeMicrosoftCommonProps: not one of
     # these repositories edits its csproj to get static analysis, so the gate carries the
     # packages into the build and leaves the work tree alone. Four questions: does anything
@@ -988,12 +1022,13 @@ internal class Sealable
             ($out -notmatch 'compiler warning\(s\)') $out
         Check 'the fast lane does not pay for the analyzer build' `
             (($anaFastOut -notmatch 'analyzer diagnostic') -and ($anaFastOut -notmatch 'MA0084')) $anaFastOut
-        # Unity rules on a project with no UnityEngine anywhere are noise. The assets file is
-        # the honest witness: it says what restore actually pulled, not what was asked for.
-        $anaAssets = [IO.File]::ReadAllText((Join-Path $dnAna 'obj\project.assets.json'))
+        # Unity rules on a project with no UnityEngine anywhere are noise. The assets file used
+        # to be the witness, but the gate now restores obj/ back to the repository's own state
+        # (#74). CA1001 is: qgate.analyzers.props silences it under the same QGateUnity
+        # condition that adds Microsoft.Unity.Analyzers, so a live CA1001 beside MA0084 means
+        # the analyzers arrived and the Unity half did not.
         Check 'Unity analyzers are not injected into a project with no UnityEngine reference' `
-            (($anaAssets -match 'Meziantou\.Analyzer/3\.0\.224') -and ($anaAssets -notmatch 'Microsoft\.Unity\.Analyzers')) `
-            'obj/project.assets.json'
+            (($out -match 'MA0084') -and ($out -match 'CA1001') -and ($out -notmatch '\bUNT\d')) $out
     }
 
     # And the failure this feature must survive. Injecting PackageReferences forces a

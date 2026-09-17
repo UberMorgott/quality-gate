@@ -1206,6 +1206,13 @@ function Invoke-DotnetStack($s) {
     # level where the reader is entitled to the difference: -Full is what CI and the
     # generated pre-commit hook run. The fast lane says nothing -- it never promised these.
     else { $script:Lines += '[SKIP] test -- no test project (IsTestProject/Microsoft.NET.Test.Sdk)' }
+    # The analyzer build restored obj/project.assets.json WITH the injected packages. Every
+    # later reader evaluates the project without them: `dotnet list package` then reported
+    # the assets file out of sync in problems[] and vuln was [UNKNOWN] on every restored
+    # project (reported from the field, measured), and the user's obj/ stayed injected.
+    # A plain restore puts obj/ back to what the repository itself restores; the phases
+    # above that reuse the build (--no-build) have already run.
+    & dotnet restore $proj -nologo -v q *> $null
     # See the govulncheck note above: a known vulnerability is a defect, it lives on the
     # network, and a project with no PackageReference has nothing to ask about.
     if ($pkgIds) {
