@@ -1820,7 +1820,22 @@ function Invoke-BaseStack($s) {
         # line can never suppress it for both. Measured: `.` prints `x.md:github-pat:1`,
         # forward slashes even nested on Windows, and that line in .gitleaksignore takes
         # the finding to zero. Set-Location $Root above is what makes `.` the repo root.
-        $raw = (& gitleaks dir @glCfg --redact --no-banner --no-color -f json -r - . 2>$null | Out-String)
+        # A nested repository is another project (see Get-NestedRepos), and `dir` has no
+        # exclude flag: a throwaway config extends the one that would have applied and
+        # allowlists those paths, which gitleaks skips without reading. Measured on #78:
+        # 662 s of secrets scan over repos that were not the commit's content.
+        # ponytail: gitleaks caps [extend] depth at 2, so a repo config that itself
+        # extends a file (not useDefault) loses that base here.
+        $glDirCfg = $glCfg
+        $nested = @(Get-NestedRepos $Root)
+        if ($nested) {
+            $base = if ($glCfg) { $glCfg[1] } else { @('.gitleaks.toml', 'gitleaks.toml') | ForEach-Object { Join-Path $Root $_ } | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1 }
+            $re = ($nested | ForEach-Object { ($_ -replace '([.\\+*?()\[\]{}|^$])', '\$1') }) -join '|'
+            $glTmp = Join-Path ([IO.Path]::GetTempPath()) "qgate-gitleaks-$(Get-PathKey $Root).toml"
+            Set-Content -LiteralPath $glTmp -Value "[extend]`npath = '''$base'''`n[[allowlists]]`npaths = ['''^($re)/''']"
+            $glDirCfg = @('-c', $glTmp)
+        }
+        $raw = (& gitleaks dir @glDirCfg --redact --no-banner --no-color -f json -r - . 2>$null | Out-String)
         $glCode = $LASTEXITCODE
         $sw.Stop()
         $hits = @(if ($glCode -eq 1) { try { $raw | ConvertFrom-Json } catch { $null } })
@@ -1900,6 +1915,9 @@ function Invoke-BaseStack($s) {
             $cfg = Join-Path $PSScriptRoot 'qgate.typos.toml'
             $targs = @('--format', 'brief', '--config', $cfg)
             if ($paths) { $targs += '--force-exclude' }
+            # Nested repositories are other projects (Get-NestedRepos); typos' own walker
+            # descends into them. --exclude adds to the repo's extend-exclude, measured.
+            foreach ($n in Get-NestedRepos $Root) { $targs += '--exclude'; $targs += "/$($n -replace '([\[\]*?{}])', '\$1')/" }
             # Captured and counted, not handed straight to the report, for the reason the
             # format phase next door is: a first run on a repository that never had a
             # dictionary is hundreds of findings -- measured on a game mod, 387 findings and
@@ -2048,7 +2066,13 @@ function Invoke-BaseStack($s) {
     # `[SKIP] vuln -- no package references` for the same reason. 0 is clean, 1 is
     # findings, 127 and everything else is the tool failing.
     $sw = [Diagnostics.Stopwatch]::StartNew()
-    $osvOut = (& osv-scanner scan source -r $Root 2>&1 | Out-String).TrimEnd()
+    # Nested repositories are other projects (Get-NestedRepos). A regex exclude is matched
+    # against the directory path with the volume and leading slash stripped, forward
+    # slashes (measured on 2.5.1: `Temp/qg78/ws/deep/inner`), so it is anchored on that.
+    $rootRe = ((($Root -replace '^[A-Za-z]:', '') -replace '\\', '/').Trim('/') -replace '([.\\+*?()\[\]{}|^$])', '\$1')
+    $osvEx = @(foreach ($n in Get-NestedRepos $Root) {
+            '--experimental-exclude'; "r:(^|/)$rootRe/$($n -replace '([.\\+*?()\[\]{}|^$])', '\$1')$" })
+    $osvOut = (& osv-scanner scan source -r @osvEx $Root 2>&1 | Out-String).TrimEnd()
     $osvCode = $LASTEXITCODE
     $sw.Stop()
     if ($osvCode -eq 128) {

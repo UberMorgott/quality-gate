@@ -52,6 +52,8 @@ function Install-WebConfigs([string]$dir, [string]$where) {
 }
 
 $stacks = @(Get-Stacks $root)
+# Said out loud, so the scope is visible: what the gate does NOT check reads like a pass.
+foreach ($n in Get-NestedRepos $root) { Write-Output "skipped nested repository $n/" }
 foreach ($s in $stacks) {
     $where = if ($s.Rel) { $s.Rel + '/' } else { './' }
     if (-not $s.Implemented) {

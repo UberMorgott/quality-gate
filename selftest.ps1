@@ -108,6 +108,53 @@ $r = Invoke-Gate $gign
 Check 'gofmt still fails on a real unformatted file' `
     (($r.Code -ne 0) -and ($r.Out -match '\[FAIL\] gofmt') -and ($r.Out -match 'ugly\.go') -and ($r.Out -notmatch 'bad\.go')) $r.Out
 
+# #78: a directory with its own .git is another project, even untracked and unignored --
+# git never descends into one, and neither may detection or the whole-tree base phases.
+# The nested repo is red on every axis (CRLF Go, a csproj, typos, a secret); the outer
+# repo stays green, and the same defects placed in the outer repo still fail.
+$nr = Join-Path $tmp 'nested-repo'
+Copy-Item (Join-Path $PSScriptRoot 'testdata\go-fixture') $nr -Recurse
+Set-Content (Join-Path $nr '.gitignore') 'ignored/'
+git -C $nr init -q 2>$null
+git -C $nr add -A 2>$null
+git -C $nr -c user.email=selftest@local -c user.name=selftest commit -qm init 2>$null
+$nrIn = Join-Path $nr 'deep\inner'
+New-Item -ItemType Directory -Path (Join-Path $nrIn 'App'), (Join-Path $nr 'ignored') -Force | Out-Null
+git -C $nrIn init -q 2>$null
+Set-Content (Join-Path $nrIn 'go.mod') 'module example.com/nested'
+[IO.File]::WriteAllText((Join-Path $nrIn 'bad.go'), "package nested`r`n`r`nfunc  Bad()  {}`r`n")
+Set-Content (Join-Path $nrIn 'App\App.csproj') '<Project Sdk="Microsoft.NET.Sdk" />'
+Set-Content (Join-Path $nrIn 'notes.txt') 'teh recieve'
+Set-Content (Join-Path $nrIn 'k.txt') ('token = "ghp_' + 'aB3dE5gH7jK9mN1pQ3sT5vX7zA9cE1gI3kM5"')
+Set-Content (Join-Path $nr 'ignored\go.mod') 'module example.com/ign'
+[IO.File]::WriteAllText((Join-Path $nr 'ignored\bad.go'), "package ign`r`n`r`nfunc  Bad()  {}`r`n")
+$nrStacks = @(Get-Stacks $nr | Where-Object { $_.Stack -ne 'base' })
+Check 'a nested repository and a gitignored dir are not stacks' `
+    ((($nrStacks | ForEach-Object { "$($_.Stack):$($_.Rel)" }) -join ',') -eq 'go:') `
+    (($nrStacks | ForEach-Object { "$($_.Stack):$($_.Rel)" }) -join ',')
+Check 'the nested repository is named' ((@(Get-NestedRepos $nr) -join ',') -eq 'deep/inner')
+$r = Invoke-Gate $nr
+Check 'a red nested repository does not fail the outer gate' `
+    (($r.Code -eq 0) -and ($r.Out -notmatch 'deep[\\/]inner|bad\.go')) $r.Out
+[IO.File]::WriteAllText((Join-Path $nr 'ugly.go'), "package main`n`nfunc  Ugly()  {}`n")
+$r = Invoke-Gate $nr
+Check 'gofmt still fails in the outer repo beside a nested one' `
+    (($r.Code -ne 0) -and ($r.Out -match '\[FAIL\] gofmt') -and ($r.Out -match 'ugly\.go') -and ($r.Out -notmatch 'bad\.go')) $r.Out
+Remove-Item (Join-Path $nr 'ugly.go')
+if (Get-Command typos -ErrorAction SilentlyContinue) {
+    Set-Content (Join-Path $nr 'own.txt') 'teh'
+    $r = Invoke-Gate $nr
+    Check 'typos still fails in the outer repo beside a nested one' `
+        (($r.Code -ne 0) -and ($r.Out -match '\[FAIL\] typos') -and ($r.Out -match 'own\.txt') -and ($r.Out -notmatch 'recieve')) $r.Out
+    Remove-Item (Join-Path $nr 'own.txt')
+}
+if (Get-Command gitleaks -ErrorAction SilentlyContinue) {
+    Copy-Item (Join-Path $nrIn 'k.txt') (Join-Path $nr 'k.txt')
+    $r = Invoke-Gate $nr
+    Check 'gitleaks still fails in the outer repo beside a nested one' `
+        (($r.Code -ne 0) -and ($r.Out -match '\[FAIL\] secrets') -and ($r.Out -match '(?m)^\s*k\.txt:1') -and ($r.Out -notmatch 'deep/inner/k\.txt')) $r.Out
+}
+
 # The Godot runner had the identical hole: it collects every *.gd with
 # Get-ChildItem -Recurse and excluded only .godot/ and addons/, so the same nested
 # checkout reddened a godot repo's root gate. The question is asked per DIRECTORY and

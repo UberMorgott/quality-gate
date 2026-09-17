@@ -84,6 +84,9 @@ function Get-RepoRoot([string]$StartDir) {
 # tracked file belongs to the repo even when a pattern matches it, and the default
 # already answers that way.
 function Test-GitIgnored([string]$Root, [string]$Path) {
+    # A file inside a nested repository is not this repo's either, and git's check-ignore
+    # answers "not ignored" for it (#78). Every per-file filter routes through here.
+    if (Test-InNestedRepo $Root $Path) { return $true }
     $prev = $global:LASTEXITCODE
     & git -C $Root check-ignore -q -- $Path 2>$null
     # 0 = ignored. 1 = not ignored. 128 = no git, or $Root is not a repo -- which is
@@ -149,6 +152,50 @@ function Get-GitIgnoredSet([string]$Root, [string[]]$Paths) {
     # check.ps1's Phase fails a phase on a non-zero $LASTEXITCODE.
     $global:LASTEXITCODE = $prev
     return $set
+}
+
+# Directories below $Root holding their own repository (a `.git` dir or file), repo-
+# relative with forward slashes and no trailing slash. They are separate projects with
+# their own gate, and git itself never descends into one -- neither does the gate.
+# Issue #78: a workspace root holding cloned repos and a decompiled dump got 20 dotnet
+# stacks and 14772 typos findings in files that were not its own.
+#
+# In a work tree git already knows: `ls-files -o` lists an untracked nested repository
+# as `dir/` and never a plain directory that way (measured, including one several levels
+# inside an untracked directory), and a submodule is a 160000 index entry. -z because
+# git C-quotes non-ASCII paths otherwise. Outside a work tree there is no git to ask.
+$script:NestedRepos = @{}
+function Get-NestedRepos([string]$Root) {
+    if ($script:NestedRepos.ContainsKey($Root)) { return $script:NestedRepos[$Root] }
+    $prev = $global:LASTEXITCODE
+    $found = @()
+    & git -C $Root rev-parse --is-inside-work-tree *> $null
+    if ($LASTEXITCODE -eq 0) {
+        $untracked = (& git -C $Root ls-files -z -o --exclude-standard 2>$null | Out-String).Split([char]0)
+        $found += @($untracked | Where-Object { $_.EndsWith('/') } | ForEach-Object { $_.TrimEnd('/') })
+        $staged = (& git -C $Root ls-files -z -s 2>$null | Out-String).Split([char]0)
+        $found += @($staged | Where-Object { $_ -match '^160000 ' } | ForEach-Object { ($_ -split "`t", 2)[1] })
+        $found = @($found | Where-Object { $_ -and (Test-Path -LiteralPath (Join-Path $Root "$_\.git")) })
+    } else {
+        # ponytail: depth 3 = Find-Marker's reach, which is all this path serves (base
+        # phases need a work tree); deeper nested repos in a non-git dir are not seen.
+        $found = @(Get-ChildItem -LiteralPath $Root -Recurse -Depth 3 -Force -Filter '.git' -ErrorAction SilentlyContinue |
+            ForEach-Object { Split-Path $_.FullName -Parent } | Where-Object { $_ -ne $Root.TrimEnd('\') } |
+            ForEach-Object { $_.Substring($Root.TrimEnd('\').Length).Trim('\').Replace('\', '/') })
+    }
+    $global:LASTEXITCODE = $prev
+    $script:NestedRepos[$Root] = @($found | Sort-Object -Unique)
+    return $script:NestedRepos[$Root]
+}
+
+function Test-InNestedRepo([string]$Root, [string]$Path) {
+    $r = $Root.TrimEnd('\')
+    if (-not $Path.StartsWith("$r\", [StringComparison]::OrdinalIgnoreCase)) { return $false }
+    $rel = $Path.Substring($r.Length).Trim('\').Replace('\', '/') + '/'
+    foreach ($n in Get-NestedRepos $Root) {
+        if ($rel.StartsWith("$n/", [StringComparison]::OrdinalIgnoreCase)) { return $true }
+    }
+    return $false
 }
 
 function Find-Marker([string]$Root, [string[]]$Names, [int]$Depth = 3) {
