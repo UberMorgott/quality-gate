@@ -1,8 +1,8 @@
 {
   "bin/qgate.ps1": {
-    "mtime": 1789599517.5108788,
-    "seen": 1789600195.3772562,
-    "ast_hash": "1f45bc821d35b92d39eaeec05bb7cbc7",
+    "mtime": 1789649330.4415987,
+    "seen": 1789649423.975546,
+    "ast_hash": "87d7c88eabd04b5b55e75fd6c18de6d4",
     "semantic_hash": ""
   },
   "bootstrap.ps1": {
@@ -12,15 +12,15 @@
     "semantic_hash": ""
   },
   "gate/check.ps1": {
-    "mtime": 1789641708.6296277,
-    "seen": 1789643440.196977,
-    "ast_hash": "80668316058091993202198cc24bb108",
+    "mtime": 1789649328.8604052,
+    "seen": 1789649423.9755507,
+    "ast_hash": "cfa4765dfb5f974f1b714be9fce12cd5",
     "semantic_hash": ""
   },
   "gate/detect.ps1": {
-    "mtime": 1789641672.8245413,
-    "seen": 1789643440.196978,
-    "ast_hash": "4f375c2f3b719b9f320624e0dbe90d19",
+    "mtime": 1789648143.300256,
+    "seen": 1789649323.0809023,
+    "ast_hash": "53a4967f27457e7548228ffbccc0ee18",
     "semantic_hash": ""
   },
   "gate/outdated.ps1": {
@@ -36,15 +36,15 @@
     "semantic_hash": "e724ea899447135164037779e7eb5931"
   },
   "install.ps1": {
-    "mtime": 1789633009.324339,
-    "seen": 1789634648.1611578,
-    "ast_hash": "39926137deee96cfce38a6b7890b4d4a",
+    "mtime": 1789643744.0487423,
+    "seen": 1789649323.0809078,
+    "ast_hash": "7c95e1e86cf194e1663540752ebf4671",
     "semantic_hash": ""
   },
   "selftest.ps1": {
-    "mtime": 1789642266.643082,
-    "seen": 1789643440.1969843,
-    "ast_hash": "40fe7f94e2b031561ee1381c85c73d47",
+    "mtime": 1789649387.7184463,
+    "seen": 1789649423.975562,
+    "ast_hash": "023d225cd720c9aefce3e87fe1d41707",
     "semantic_hash": ""
   },
   "templates/.stylelintrc.json": {
@@ -120,15 +120,15 @@
     "semantic_hash": ""
   },
   "PLAYBOOK.md": {
-    "mtime": 1788366504.5229585,
-    "seen": 1788781201.4389498,
-    "ast_hash": "95af656e0dd8b458d943a5b06dd99b55",
-    "semantic_hash": "95af656e0dd8b458d943a5b06dd99b55"
+    "mtime": 1789649343.5743403,
+    "seen": 1789649423.9755912,
+    "ast_hash": "0195562a8e637bdd29b9b2192d405406",
+    "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1789642422.436697,
-    "seen": 1789643440.1970022,
-    "ast_hash": "eaba9ac00eafce71a2a51777b34e1b3f",
+    "mtime": 1789649388.7699358,
+    "seen": 1789649423.9755921,
+    "ast_hash": "12c20ff2ec533e287a4490f14890a354",
     "semantic_hash": ""
   },
   "templates/.golangci.yml": {
