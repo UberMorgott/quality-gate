@@ -816,7 +816,7 @@ function Get-DotnetEval([string]$ProjPath) {
     if (-not $script:DnEval.ContainsKey($ProjPath)) {
         $sw = [Diagnostics.Stopwatch]::StartNew()
         $q = (& dotnet msbuild $ProjPath -getProperty:TargetFramework -getProperty:TargetFrameworks `
-                -getProperty:IsTestProject -getItem:Reference -getItem:PackageReference -nologo 2>&1 | Out-String).Trim()
+                -getProperty:IsTestProject -getProperty:OutputType -getItem:Reference -getItem:PackageReference -nologo 2>&1 | Out-String).Trim()
         $code = $LASTEXITCODE
         $sw.Stop()
         $script:DnEval[$ProjPath] = @{ Out = $q; Code = $code; Elapsed = $sw.Elapsed.TotalSeconds }
@@ -1333,14 +1333,47 @@ function Invoke-DotnetStack($s) {
         }
     }
 
-    # Test projects in these repos are custom Exe runners, so the phase exists only
-    # where a real test SDK does. Both facts come from the evaluation above, never from
+    # `dotnet test` exists only where a real test SDK does (custom Exe runners below).
+    # Both facts come from the evaluation above, never from
     # the csproj text: IsTestProject is what the SDK itself sets once the project is
     # restored, and the PackageReference list covers the project before its first restore
     # and everything Directory.Build.props imports into it.
     $pkgIds = @($pkgs.Identity)
     if ($info.Properties.IsTestProject -eq 'true' -or $pkgIds -contains 'Microsoft.NET.Test.Sdk') {
         Phase 'test' { dotnet test $proj --no-build -nologo -v q }
+    }
+    # A self-check runner (#88): `Foo.Tests.csproj`, OutputType Exe, no test SDK, exit code
+    # is the verdict. Seen in three BepInEx mod repos, each reported `no test project` while
+    # `dotnet run` printed `all checks passed`. Recognised by the NAME plus Exe, never Exe
+    # alone -- the mod's own tool is an Exe too. Advisory until the repo says otherwise
+    # (qgate.json dotnet.testRunner "fail"): a runner may want a game install or a console,
+    # and a new default-on FAIL over that would be red on machines, not on code.
+    # Bounded and redirected to files, for the reasons the npm test script is.
+    elseif ($info.Properties.OutputType -eq 'Exe' -and [IO.Path]::GetFileNameWithoutExtension($proj) -match '\.Tests?$') {
+        $runTimeoutSec = 600
+        $outFile = Join-Path ([IO.Path]::GetTempPath()) "quality-gate-dntest-$(Get-PathKey $projAbs)-$PID.out"
+        $errFile = "$outFile.err"
+        $sw = [Diagnostics.Stopwatch]::StartNew()
+        # Quoted by hand: Start-Process joins -ArgumentList with bare spaces.
+        $p = Start-Process dotnet -ArgumentList 'run', '--project', "`"$proj`"", '--no-build' `
+            -WorkingDirectory $s.Dir -NoNewWindow -PassThru `
+            -RedirectStandardOutput $outFile -RedirectStandardError $errFile
+        $done = $p.WaitForExit($runTimeoutSec * 1000)
+        $sw.Stop()
+        if (-not $done) { try { $p.Kill($true) } catch { } ; [void]$p.WaitForExit(5000) }
+        $code = if ($done) { $p.ExitCode } else { 1 }
+        $text = ((@((Get-Content $outFile -Raw -ErrorAction SilentlyContinue),
+                    (Get-Content $errFile -Raw -ErrorAction SilentlyContinue)) -join '') -as [string]).TrimEnd()
+        Remove-Item $outFile, $errFile -Force -ErrorAction SilentlyContinue
+        $name = if ($done) { "test (dotnet run $proj)" } else { "test (dotnet run $proj) -- timeout after ${runTimeoutSec}s" }
+        if ($code -eq 0 -or (Get-QGateDotnetConfig $Root).testRunner -eq 'fail') {
+            Phase $name { if ($code -ne 0) { $text; $global:LASTEXITCODE = 1 } } -Elapsed $sw.Elapsed.TotalSeconds
+        }
+        else {
+            $script:Lines += "[WARN] $name exited $code -- advisory; qgate.json {`"dotnet`": {`"testRunner`": `"fail`"}} makes it a failure"
+            # Tagged: a passing stack prints only tagged lines.
+            $script:Lines += @($text -split "`r?`n" | Where-Object { $_.Trim() } | Select-Object -Last 20 | ForEach-Object { "[WARN] test: $_" })
+        }
     }
     # An omitted phase and a passing one read identically in the report, and this is the
     # level where the reader is entitled to the difference: -Full is what CI and the

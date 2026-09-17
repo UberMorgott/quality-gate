@@ -1381,6 +1381,26 @@ internal class Sealable
 
     if (Want 'dotnet3') {
     $nugetPrev = $env:NUGET_PACKAGES
+    # Exe self-check runner (#88): `*.Tests` + OutputType Exe runs as the test phase;
+    # a failing runner is advisory unless qgate.json dotnet.testRunner is "fail".
+    $dnRun = Join-Path $tmp 'dotnet-runner'
+    Copy-Item (Join-Path $PSScriptRoot 'testdata\dotnet-fixture') $dnRun -Recurse
+    Remove-Item (Join-Path $dnRun 'bin'), (Join-Path $dnRun 'obj') -Recurse -Force
+    Remove-Item (Join-Path $dnRun 'Fixture.csproj')
+    [IO.File]::WriteAllText((Join-Path $dnRun 'Fixture.Tests.csproj'), $dnProjClean.Replace('<Nullable>enable</Nullable>', "<OutputType>Exe</OutputType>`n    <Nullable>enable</Nullable>"))
+    $dnRunMain = Join-Path $dnRun 'Program.cs'
+    [IO.File]::WriteAllText($dnRunMain, "Console.WriteLine(`"all checks passed`");`nreturn 0;`n")
+    $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $dnRun -All -Full 2>&1 | Out-String)
+    Check 'an Exe *.Tests runner runs as the test phase' `
+        (($LASTEXITCODE -eq 0) -and ($out -match '\[PASS\] test \(dotnet run Fixture\.Tests\.csproj\)') -and ($out -notmatch 'no test project')) $out
+    [IO.File]::WriteAllText($dnRunMain, "Console.WriteLine(`"check 2 failed`");`nreturn 3;`n")
+    $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $dnRun -All -Full 2>&1 | Out-String)
+    Check 'a failing Exe runner is an advisory warning by default' `
+        (($LASTEXITCODE -eq 0) -and ($out -match '\[WARN\] test \(dotnet run Fixture\.Tests\.csproj\) exited 3') -and ($out -match 'check 2 failed')) $out
+    '{"dotnet": {"testRunner": "fail"}}' | Set-Content (Join-Path $dnRun 'qgate.json')
+    $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $dnRun -All -Full 2>&1 | Out-String)
+    Check 'dotnet.testRunner "fail" makes a failing Exe runner fail the gate' `
+        (($LASTEXITCODE -ne 0) -and ($out -match '\[FAIL\] test \(dotnet run Fixture\.Tests\.csproj\)') -and ($out -match 'check 2 failed')) $out
     $dnBanEmpty = New-Item -ItemType Directory -Force (Join-Path $tmp 'nuget-empty')
     # SonarAnalyzer.CSharp (#62): qgate.json dotnet.sonar, same cache-only injection.
     $dnSonar = Join-Path $tmp 'dotnet-sonar'
