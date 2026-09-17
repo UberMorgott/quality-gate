@@ -545,6 +545,37 @@ function Get-GoDeterministic([string]$Root) {
     [pscustomobject]@{ Dirs = $dirs; Error = '' }
 }
 
+# quality-gate#40: qgate.json {"go": {"lintGoos": ["linux"]}} -- extra GOOS targets that
+# go vet and golangci-lint run under at -Full, so a _linux.go file is not first read by
+# CI. Opt-in only: cross-GOOS turns cgo off, and a cgo package or a Windows-only import
+# then fails for reasons that are not defects (measured on a fixture), so no repo gets it
+# unasked. Same contract as Get-GoDeterministic: $null, or .Goos and .Error. The host's
+# own GOOS is dropped -- the normal phases already ran it.
+function Get-GoLintGoos([string]$Root, [string]$HostGoos) {
+    $file = Join-Path $Root 'qgate.json'
+    if (-not (Test-Path $file)) { return $null }
+    $json = try { Get-Content $file -Raw | ConvertFrom-Json } catch { $null }
+    if ($null -eq $json -or $null -eq $json.go -or $json.go.PSObject.Properties.Name -notcontains 'lintGoos') { return $null }
+    $raw = $json.go.lintGoos
+    $bad = { param($m) [pscustomobject]@{ Goos = @(); Error = $m } }
+    if ($raw -isnot [Array]) { return (& $bad 'qgate.json "go.lintGoos" must be an array of GOOS names, e.g. ["linux"]') }
+    $known = @(go tool dist list 2>$null | ForEach-Object { ($_ -split '/')[0] } | Sort-Object -Unique)
+    $goos = @()
+    foreach ($e in $raw) {
+        if ($e -isnot [string] -or ($known -and $e -notin $known)) { return (& $bad "qgate.json go.lintGoos '$e' is not a GOOS (go tool dist list)") }
+        if ($e -ne $HostGoos -and $e -notin $goos) { $goos += $e }
+    }
+    if (-not $goos) { return $null }
+    [pscustomobject]@{ Goos = $goos; Error = '' }
+}
+
+# Runs $Body with GOOS set and cgo off, then puts both variables back as they were.
+function Invoke-WithGoos([string]$Goos, [scriptblock]$Body) {
+    $prev = $env:GOOS, $env:CGO_ENABLED
+    $env:GOOS = $Goos; $env:CGO_ENABLED = '0'
+    try { & $Body } finally { $env:GOOS, $env:CGO_ENABLED = $prev }
+}
+
 # quality-gate#46: the purity profile over the deterministic packages of the module in
 # $Dir. forbidigo + depguard through golangci-lint with a generated config (tests
 # excluded: a property test may use rand), then gate/gopurity for what those linters

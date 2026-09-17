@@ -918,6 +918,15 @@ git-worktree, `base` не получает вовсе и по-прежнему �
 (и на Linux тоже). Падение выглядит так: `[FAIL] go-386` и
 `cannot use 1 << 31 (untyped int constant 2147483648) as int value in assignment (overflows)`.
 
+**Другая ОС (opt-in, `go.lintGoos`).** Файлы `_linux.go`/`_windows.go` и `//go:build` под чужую ОС
+хост не компилирует, и их дефекты впервые видит CI. `{"go": {"lintGoos": ["linux"]}}` в
+`qgate.json` — на `-Full` после обычного golangci-lint идут `go vet GOOS=linux` и
+`golangci-lint GOOS=linux` (с `CGO_ENABLED=0`; `-Baseline` учитывается). GOOS хоста из списка
+выкидывается, неизвестное имя (не из `go tool dist list`) — `[FAIL]` с названием ключа. Не по
+умолчанию намеренно: под чужой ОС cgo выключен, и cgo-пакет или законный Windows-only импорт
+падает с `build constraints exclude all Go files` — это не дефект репозитория. Шаг CI с тем же
+`GOOS` после этого не считается пробелом `CI parity`.
+
 На `-Full` гейт читает `.github/workflows/*.yml` и называет шаги, которые гоняют `go test`,
 `go vet` или `golangci-lint run` под `GOOS`/`GOARCH`, отличные от `go env GOOS GOARCH` этой
 машины, или с `-tags`: `[WARN] CI parity: go.yml step '<name>' runs Go with GOARCH=386 -- the gate

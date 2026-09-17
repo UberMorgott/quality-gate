@@ -349,6 +349,38 @@ Check 'deterministic packages without a property or fuzz test are warned' ($gw -
 Set-GoFile (Join-Path $pur 'fixed\prop_test.go') "package fixed`n`n// rapid.Check(t, func(t *rapid.T) { ... }) is what the scan reads."
 Set-GoFile (Join-Path $pur 'sim\sim_test.go') "package sim`n`nimport `"testing`"`n`nfunc FuzzStep(f *testing.F) { f.Fuzz(func(t *testing.T, n int) {}) }"
 Check 'a rapid property test or a Fuzz target clears the warning' (-not (Get-GoPropertyGaps $pur $det.Dirs)) "$(Get-GoPropertyGaps $pur $det.Dirs)"
+# #40: cross-GOOS vet/lint, opt-in through qgate.json go.lintGoos. No key and the host's own
+# GOOS are no extra phase; a bad name is named; a vet defect in a file only the other GOOS
+# compiles passes the host vet and fails the gate at -Full; the clean file passes cross vet.
+$hostOs = go env GOOS
+$otherOs = if ($hostOs -eq 'linux') { 'windows' } else { 'linux' }
+$xg = Join-Path $tmp 'cross-goos'
+Copy-Item (Join-Path $PSScriptRoot 'testdata\go-fixture') $xg -Recurse
+Check 'no qgate.json go.lintGoos key is no cross-GOOS phase' ($null -eq (Get-GoLintGoos $xg $hostOs))
+[IO.File]::WriteAllText((Join-Path $xg 'qgate.json'), '{"go": {"lintGoos": "linux"}}')
+Check 'a non-array go.lintGoos is a named config error' ((Get-GoLintGoos $xg $hostOs).Error -match 'must be an array')
+[IO.File]::WriteAllText((Join-Path $xg 'qgate.json'), '{"go": {"lintGoos": ["linx"]}}')
+Check 'an unknown GOOS in go.lintGoos is a named config error' ((Get-GoLintGoos $xg $hostOs).Error -match "'linx' is not a GOOS")
+[IO.File]::WriteAllText((Join-Path $xg 'qgate.json'), "{`"go`": {`"lintGoos`": [`"$hostOs`"]}}")
+Check 'the host GOOS alone in go.lintGoos adds no phase' ($null -eq (Get-GoLintGoos $xg $hostOs))
+[IO.File]::WriteAllText((Join-Path $xg 'qgate.json'), "{`"go`": {`"lintGoos`": [`"$hostOs`", `"$otherOs`"]}}")
+Check 'go.lintGoos keeps only the other GOOS' ((@((Get-GoLintGoos $xg $hostOs).Goos) -join ',') -eq $otherOs)
+Set-GoFile (Join-Path $xg "p_$otherOs.go") "package main`n`nimport `"fmt`"`n`nfunc other() {`n`tfmt.Printf(`"%d`", `"not an int`")`n}"
+Push-Location $xg
+$envBefore = "$env:GOOS|$env:CGO_ENABLED"
+$null = go vet ./... 2>&1; $hostVet = $LASTEXITCODE
+$xOut = (Invoke-WithGoos $otherOs { go vet ./... 2>&1 } | Out-String); $xVet = $LASTEXITCODE
+Pop-Location
+Check "a vet defect only $otherOs compiles passes host vet, fails cross vet" (($hostVet -eq 0) -and ($xVet -ne 0) -and ($xOut -match 'Printf')) "host=$hostVet cross=$xVet $xOut"
+Check 'Invoke-WithGoos restores GOOS and CGO_ENABLED' ("$env:GOOS|$env:CGO_ENABLED" -eq $envBefore)
+$r = (& pwsh -NoProfile -File $gate -Root $xg -All -Full 2>&1 | Out-String)
+Check 'go.lintGoos fails the -Full gate on the other-GOOS defect' (($LASTEXITCODE -ne 0) -and ($r -match "\[FAIL\] go vet GOOS=$otherOs")) $r
+Set-GoFile (Join-Path $xg "p_$otherOs.go") "package main`n`nimport `"fmt`"`n`nfunc other() {`n`tfmt.Println(`"ok`")`n}"
+Push-Location $xg
+$xOut = (Invoke-WithGoos $otherOs { go vet ./... 2>&1 } | Out-String); $xVet = $LASTEXITCODE
+Pop-Location
+Check 'a clean other-GOOS file passes cross vet' ($xVet -eq 0) $xOut
+
 $tplFmt = @(& gofmt -l (Join-Path $PSScriptRoot 'templates\go-determinism_test.go') 2>&1)
 Check 'the property-test template parses and is gofmt-clean' ($LASTEXITCODE -eq 0 -and -not $tplFmt) ($tplFmt -join "`n")
 

@@ -645,6 +645,23 @@ function Invoke-GoStack($s) {
     } else {
         $script:Lines += '[WARN] golangci-lint not on PATH -- phase skipped'
     }
+    # quality-gate#40: opt-in (qgate.json go.lintGoos) vet and lint under other GOOS targets.
+    if ($Full) {
+        $script:GoHostOs = if ($script:GoHostOs) { $script:GoHostOs } else { go env GOOS }
+        $lg = Get-GoLintGoos $Root $script:GoHostOs
+        if ($lg.Error) { Fail $lg.Error }
+        foreach ($os in @($lg.Goos)) {
+            Phase "go vet GOOS=$os" { Invoke-WithGoos $os { go vet ./... } }
+            if (Have 'golangci-lint') {
+                Phase "golangci-lint GOOS=$os" {
+                    Invoke-WithGoos $os {
+                        golangci-lint run --output.text.print-issued-lines=false --output.text.colors=false `
+                            --max-issues-per-linter=0 --max-same-issues=0 @newFrom ./...
+                    }
+                }
+            }
+        }
+    }
     if ($Full) {
         # A trustworthy verdict: no cache, and shuffled so order dependence surfaces.
         Phase 'go test' { go test -count=1 -failfast -shuffle=on -timeout=10m ./... }
@@ -657,6 +674,7 @@ function Invoke-GoStack($s) {
             $goEnv = @(go env GOOS GOARCH)
             $checks = Get-CustomChecks $Root
             $covered = if ($checks -and -not $checks.Error) { ($checks.Checks.Run -join "`n") } else { '' }
+            $covered += "`n" + ((@((Get-GoLintGoos $Root $goEnv[0]).Goos) | Where-Object { $_ } | ForEach-Object { "GOOS=$_" }) -join "`n")
             $script:Warnings += @(Get-CiGoGaps $Root $goEnv[0] $goEnv[1] $covered)
         }
         # The race detector catches a bug class go vet and golangci-lint structurally
