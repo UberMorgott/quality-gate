@@ -12,15 +12,15 @@
     "semantic_hash": ""
   },
   "gate/check.ps1": {
-    "mtime": 1789661239.7443216,
-    "seen": 1789662416.1471343,
-    "ast_hash": "7563e1032e71462aaab7c2eb8eca1028",
+    "mtime": 1789662609.3227289,
+    "seen": 1789663090.7255218,
+    "ast_hash": "bff13f7a3412f8ee3587e4738a2f4410",
     "semantic_hash": ""
   },
   "gate/detect.ps1": {
-    "mtime": 1789648143.300256,
-    "seen": 1789649323.0809023,
-    "ast_hash": "53a4967f27457e7548228ffbccc0ee18",
+    "mtime": 1789662604.4487703,
+    "seen": 1789663090.7255232,
+    "ast_hash": "63af93f51a64c9efcf897ebe680c4997",
     "semantic_hash": ""
   },
   "gate/outdated.ps1": {
@@ -42,9 +42,9 @@
     "semantic_hash": ""
   },
   "selftest.ps1": {
-    "mtime": 1789659634.2469711,
-    "seen": 1789662416.1471446,
-    "ast_hash": "1d7b2310f14032062588a9e9ca968aac",
+    "mtime": 1789663116.0755596,
+    "seen": 1789663447.7563803,
+    "ast_hash": "ba4d82f5ae1c6334aa63e664658abbb2",
     "semantic_hash": ""
   },
   "templates/.stylelintrc.json": {

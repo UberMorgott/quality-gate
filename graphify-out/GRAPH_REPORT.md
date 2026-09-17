@@ -1,7 +1,7 @@
 # Graph Report - quality-gate  (2026-09-17)
 
 ## Corpus Check
-- 48 files · ~115,184 words
+- 48 files · ~115,309 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 17 file(s) not represented in the graph (top: (none) 5, .toml 3, .gd 2)
 
@@ -11,7 +11,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `50cfdde3`
+- Built from commit: `b184e68a`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -179,7 +179,7 @@ Cohesion: 0.05
 Nodes (45): "Gate is wrong" issue template, cherry-pick and revert cannot be covered cheaply, Deliberately chosen boundaries (not TODOs), GIT_INDEX_FILE marks that we are inside a commit, GOTOOLCHAIN=auto unpacking races produce 'missing std package', Measured git hook coverage matrix (git 2.53), Incoming agent reports: symptom right, cause wrong half the time, Parallel commits in one worktree swallow each other's staged files (+37 more)
 
 ## Knowledge Gaps
-- **38 isolated node(s):** `stylelint-config-standard-scss`, `stylelint-config-recommended-vue/scss`, `ignoreFiles`, `net8.0`, `Microsoft.NET.Sdk` (+33 more)
+- **38 isolated node(s):** `Constructor`, `Enumerator`, `Getter`, `Normal`, `Setter` (+33 more)
   These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 188 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
 - **27 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
@@ -194,7 +194,7 @@ _Questions this graph is uniquely positioned to answer:_
   _High betweenness centrality (0.020) - this node is a cross-community bridge._
 - **Are the 5 inferred relationships involving `Invoke-SmokeCheck()` (e.g. with `Invoke-CustomStack()` and `Fail()`) actually correct?**
   _`Invoke-SmokeCheck()` has 5 INFERRED edges - model-reasoned connections that need verification._
-- **What connects `stylelint-config-standard-scss`, `stylelint-config-recommended-vue/scss`, `ignoreFiles` to the rest of the system?**
+- **What connects `Constructor`, `Enumerator`, `Getter` to the rest of the system?**
   _38 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `harmony.cs` be split into smaller, more focused modules?**
   _Cohesion score 0.05398110661268556 - nodes in this community are weakly interconnected._

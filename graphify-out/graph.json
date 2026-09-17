@@ -4176,7 +4176,7 @@
       "file_type": "code",
       "norm_label": "get-parrun()",
       "source_file": "selftest.ps1",
-      "source_location": "L3505"
+      "source_location": "L3509"
     },
     {
       "id": "selftest_get_summary",
@@ -4187,7 +4187,7 @@
       "file_type": "code",
       "norm_label": "get-summary()",
       "source_file": "selftest.ps1",
-      "source_location": "L2309"
+      "source_location": "L2313"
     },
     {
       "id": "selftest_invoke_deploygate",
@@ -4198,7 +4198,7 @@
       "file_type": "code",
       "norm_label": "invoke-deploygate()",
       "source_file": "selftest.ps1",
-      "source_location": "L3072"
+      "source_location": "L3076"
     },
     {
       "id": "selftest_invoke_gate",
@@ -4220,7 +4220,7 @@
       "file_type": "code",
       "norm_label": "invoke-globalcommit()",
       "source_file": "selftest.ps1",
-      "source_location": "L2741"
+      "source_location": "L2745"
     },
     {
       "id": "selftest_invoke_smoke",
@@ -4231,7 +4231,7 @@
       "file_type": "code",
       "norm_label": "invoke-smoke()",
       "source_file": "selftest.ps1",
-      "source_location": "L2946"
+      "source_location": "L2950"
     },
     {
       "id": "selftest_invoke_stophook",
@@ -4242,7 +4242,7 @@
       "file_type": "code",
       "norm_label": "invoke-stophook()",
       "source_file": "selftest.ps1",
-      "source_location": "L1891"
+      "source_location": "L1895"
     },
     {
       "id": "selftest_invoke_trust",
@@ -4253,7 +4253,7 @@
       "file_type": "code",
       "norm_label": "invoke-trust()",
       "source_file": "selftest.ps1",
-      "source_location": "L2811"
+      "source_location": "L2815"
     },
     {
       "id": "selftest_new_globalrepo",
@@ -4264,7 +4264,7 @@
       "file_type": "code",
       "norm_label": "new-globalrepo()",
       "source_file": "selftest.ps1",
-      "source_location": "L2731"
+      "source_location": "L2735"
     },
     {
       "id": "selftest_new_vulnshim",
@@ -4286,7 +4286,7 @@
       "file_type": "code",
       "norm_label": "set-deferrals()",
       "source_file": "selftest.ps1",
-      "source_location": "L2298"
+      "source_location": "L2302"
     },
     {
       "id": "selftest_set_gofile",
@@ -4308,7 +4308,7 @@
       "file_type": "code",
       "norm_label": "set-outdatedcache()",
       "source_file": "selftest.ps1",
-      "source_location": "L2305"
+      "source_location": "L2309"
     },
     {
       "id": "selftest_test_hookrunning",
@@ -4319,7 +4319,7 @@
       "file_type": "code",
       "norm_label": "test-hookrunning()",
       "source_file": "selftest.ps1",
-      "source_location": "L2211"
+      "source_location": "L2215"
     },
     {
       "id": "selftest_want",
@@ -4627,7 +4627,7 @@
       "file_type": "code",
       "norm_label": "get-cppcompiledb()",
       "source_file": "gate/check.ps1",
-      "source_location": "L1770"
+      "source_location": "L1775"
     },
     {
       "id": "gate_check_get_descendants",
@@ -4638,7 +4638,7 @@
       "file_type": "code",
       "norm_label": "get-descendants()",
       "source_file": "gate/check.ps1",
-      "source_location": "L2287"
+      "source_location": "L2292"
     },
     {
       "id": "gate_check_get_dotnetchangedcs",
@@ -4649,7 +4649,7 @@
       "file_type": "code",
       "norm_label": "get-dotnetchangedcs()",
       "source_file": "gate/check.ps1",
-      "source_location": "L863"
+      "source_location": "L868"
     },
     {
       "id": "gate_check_get_dotneteval",
@@ -4660,7 +4660,7 @@
       "file_type": "code",
       "norm_label": "get-dotneteval()",
       "source_file": "gate/check.ps1",
-      "source_location": "L815"
+      "source_location": "L820"
     },
     {
       "id": "gate_check_get_dotnetsharedformat",
@@ -4671,7 +4671,7 @@
       "file_type": "code",
       "norm_label": "get-dotnetsharedformat()",
       "source_file": "gate/check.ps1",
-      "source_location": "L870"
+      "source_location": "L875"
     },
     {
       "id": "gate_check_get_dotnettfms",
@@ -4682,7 +4682,7 @@
       "file_type": "code",
       "norm_label": "get-dotnettfms()",
       "source_file": "gate/check.ps1",
-      "source_location": "L851"
+      "source_location": "L856"
     },
     {
       "id": "gate_check_get_dotnettoonew",
@@ -4693,7 +4693,7 @@
       "file_type": "code",
       "norm_label": "get-dotnettoonew()",
       "source_file": "gate/check.ps1",
-      "source_location": "L857"
+      "source_location": "L862"
     },
     {
       "id": "gate_check_get_leakreport",
@@ -4704,7 +4704,7 @@
       "file_type": "code",
       "norm_label": "get-leakreport()",
       "source_file": "gate/check.ps1",
-      "source_location": "L2306"
+      "source_location": "L2311"
     },
     {
       "id": "gate_check_get_nugetcachedversion",
@@ -4715,7 +4715,7 @@
       "file_type": "code",
       "norm_label": "get-nugetcachedversion()",
       "source_file": "gate/check.ps1",
-      "source_location": "L839"
+      "source_location": "L844"
     },
     {
       "id": "gate_check_get_pdbpath",
@@ -4726,7 +4726,7 @@
       "file_type": "code",
       "norm_label": "get-pdbpath()",
       "source_file": "gate/check.ps1",
-      "source_location": "L2413"
+      "source_location": "L2418"
     },
     {
       "id": "gate_check_get_qgatedotnetconfig",
@@ -4737,7 +4737,7 @@
       "file_type": "code",
       "norm_label": "get-qgatedotnetconfig()",
       "source_file": "gate/check.ps1",
-      "source_location": "L828"
+      "source_location": "L833"
     },
     {
       "id": "gate_check_get_selfargv",
@@ -4781,7 +4781,7 @@
       "file_type": "code",
       "norm_label": "invoke-basestack()",
       "source_file": "gate/check.ps1",
-      "source_location": "L1931"
+      "source_location": "L1936"
     },
     {
       "id": "gate_check_invoke_cppstack",
@@ -4792,7 +4792,7 @@
       "file_type": "code",
       "norm_label": "invoke-cppstack()",
       "source_file": "gate/check.ps1",
-      "source_location": "L1781"
+      "source_location": "L1786"
     },
     {
       "id": "gate_check_invoke_customstack",
@@ -4803,7 +4803,7 @@
       "file_type": "code",
       "norm_label": "invoke-customstack()",
       "source_file": "gate/check.ps1",
-      "source_location": "L2336"
+      "source_location": "L2341"
     },
     {
       "id": "gate_check_invoke_deploystack",
@@ -4814,7 +4814,7 @@
       "file_type": "code",
       "norm_label": "invoke-deploystack()",
       "source_file": "gate/check.ps1",
-      "source_location": "L2425"
+      "source_location": "L2430"
     },
     {
       "id": "gate_check_invoke_dotnetstack",
@@ -4825,7 +4825,7 @@
       "file_type": "code",
       "norm_label": "invoke-dotnetstack()",
       "source_file": "gate/check.ps1",
-      "source_location": "L948"
+      "source_location": "L953"
     },
     {
       "id": "gate_check_invoke_godotstack",
@@ -4836,7 +4836,7 @@
       "file_type": "code",
       "norm_label": "invoke-godotstack()",
       "source_file": "gate/check.ps1",
-      "source_location": "L1619"
+      "source_location": "L1624"
     },
     {
       "id": "gate_check_phase",
@@ -9819,7 +9819,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "gate/check.ps1",
-      "source_location": "L1771",
+      "source_location": "L1776",
       "weight": 1.0
     },
     {
@@ -9830,7 +9830,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "gate/check.ps1",
-      "source_location": "L878",
+      "source_location": "L883",
       "weight": 1.0
     },
     {
@@ -9841,7 +9841,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "gate/check.ps1",
-      "source_location": "L880",
+      "source_location": "L885",
       "weight": 1.0
     },
     {
@@ -9852,7 +9852,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "gate/check.ps1",
-      "source_location": "L887",
+      "source_location": "L892",
       "weight": 1.0
     },
     {
@@ -9863,7 +9863,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "gate/check.ps1",
-      "source_location": "L887",
+      "source_location": "L892",
       "weight": 1.0
     },
     {
@@ -9874,7 +9874,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "gate/check.ps1",
-      "source_location": "L2310",
+      "source_location": "L2315",
       "weight": 1.0
     },
     {
@@ -9885,7 +9885,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "gate/check.ps1",
-      "source_location": "L1943",
+      "source_location": "L1948",
       "weight": 1.0
     },
     {
@@ -9896,7 +9896,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "gate/check.ps1",
-      "source_location": "L2011",
+      "source_location": "L2016",
       "weight": 1.0
     },
     {
@@ -9907,7 +9907,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "gate/check.ps1",
-      "source_location": "L2042",
+      "source_location": "L2047",
       "weight": 1.0
     },
     {
@@ -9918,7 +9918,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "gate/check.ps1",
-      "source_location": "L2101",
+      "source_location": "L2106",
       "weight": 1.0
     },
     {
@@ -9929,7 +9929,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "gate/check.ps1",
-      "source_location": "L2249",
+      "source_location": "L2254",
       "weight": 1.0
     },
     {
@@ -9940,7 +9940,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "gate/check.ps1",
-      "source_location": "L2253",
+      "source_location": "L2258",
       "weight": 1.0
     },
     {
@@ -9951,7 +9951,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "gate/check.ps1",
-      "source_location": "L1792",
+      "source_location": "L1797",
       "weight": 1.0
     },
     {
@@ -9962,7 +9962,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "gate/check.ps1",
-      "source_location": "L1802",
+      "source_location": "L1807",
       "weight": 1.0
     },
     {
@@ -9973,7 +9973,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "gate/check.ps1",
-      "source_location": "L1812",
+      "source_location": "L1817",
       "weight": 1.0
     },
     {
@@ -9984,7 +9984,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "gate/check.ps1",
-      "source_location": "L1825",
+      "source_location": "L1830",
       "weight": 1.0
     },
     {
@@ -9995,7 +9995,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "gate/check.ps1",
-      "source_location": "L1846",
+      "source_location": "L1851",
       "weight": 1.0
     },
     {
@@ -10006,7 +10006,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "gate/check.ps1",
-      "source_location": "L1889",
+      "source_location": "L1894",
       "weight": 1.0
     },
     {
@@ -10017,7 +10017,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "gate/check.ps1",
-      "source_location": "L2339",
+      "source_location": "L2344",
       "weight": 1.0
     },
     {
@@ -10028,7 +10028,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "gate/check.ps1",
-      "source_location": "L2381",
+      "source_location": "L2386",
       "weight": 1.0
     },
     {
@@ -10039,7 +10039,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "gate/check.ps1",
-      "source_location": "L2389",
+      "source_location": "L2394",
       "weight": 1.0
     },
     {
@@ -10050,7 +10050,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "gate/check.ps1",
-      "source_location": "L2428",
+      "source_location": "L2433",
       "weight": 1.0
     },
     {
@@ -10061,7 +10061,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "gate/check.ps1",
-      "source_location": "L2451",
+      "source_location": "L2456",
       "weight": 1.0
     },
     {
@@ -10072,128 +10072,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "gate/check.ps1",
-      "source_location": "L2456",
-      "weight": 1.0
-    },
-    {
-      "source": "gate_check_invoke_dotnetstack",
-      "target": "gate_check_get_changedpaths",
-      "relation": "calls",
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "gate/check.ps1",
-      "source_location": "L1045",
-      "weight": 1.0
-    },
-    {
-      "source": "gate_check_invoke_dotnetstack",
-      "target": "gate_check_get_dotnetchangedcs",
-      "relation": "calls",
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "gate/check.ps1",
-      "source_location": "L1053",
-      "weight": 1.0
-    },
-    {
-      "source": "gate_check_invoke_dotnetstack",
-      "target": "gate_check_get_dotnetsharedformat",
-      "relation": "calls",
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "gate/check.ps1",
-      "source_location": "L1061",
-      "weight": 1.0
-    },
-    {
-      "source": "gate_check_invoke_dotnetstack",
-      "target": "gate_check_get_qgatedotnetconfig",
-      "relation": "calls",
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "gate/check.ps1",
-      "source_location": "L1192",
-      "weight": 1.0
-    },
-    {
-      "source": "gate_check_invoke_dotnetstack",
-      "target": "gate_check_get_nugetcachedversion",
-      "relation": "calls",
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "gate/check.ps1",
-      "source_location": "L1197",
-      "weight": 1.0
-    },
-    {
-      "source": "gate_check_invoke_dotnetstack",
-      "target": "gate_check_test_vulnacks",
-      "relation": "calls",
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "gate/check.ps1",
-      "source_location": "L1420",
-      "weight": 1.0
-    },
-    {
-      "source": "gate_check_invoke_dotnetstack",
-      "target": "gate_check_get_unackedvulns",
-      "relation": "calls",
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "gate/check.ps1",
-      "source_location": "L1422",
-      "weight": 1.0
-    },
-    {
-      "source": "gate_check_invoke_dotnetstack",
-      "target": "gate_check_have",
-      "relation": "calls",
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "gate/check.ps1",
-      "source_location": "L957",
-      "weight": 1.0
-    },
-    {
-      "source": "gate_check_invoke_dotnetstack",
-      "target": "gate_check_fail",
-      "relation": "calls",
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "gate/check.ps1",
-      "source_location": "L961",
-      "weight": 1.0
-    },
-    {
-      "source": "gate_check_invoke_dotnetstack",
-      "target": "gate_check_get_dotneteval",
-      "relation": "calls",
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "gate/check.ps1",
-      "source_location": "L986",
-      "weight": 1.0
-    },
-    {
-      "source": "gate_check_invoke_dotnetstack",
-      "target": "gate_check_phase",
-      "relation": "calls",
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "gate/check.ps1",
-      "source_location": "L988",
+      "source_location": "L2461",
       "weight": 1.0
     },
     {
@@ -10204,7 +10083,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "gate/check.ps1",
-      "source_location": "L995",
+      "source_location": "L1000",
       "weight": 1.0
     },
     {
@@ -10215,7 +10094,128 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "gate/check.ps1",
-      "source_location": "L999",
+      "source_location": "L1004",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_check_invoke_dotnetstack",
+      "target": "gate_check_get_changedpaths",
+      "relation": "calls",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "gate/check.ps1",
+      "source_location": "L1050",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_check_invoke_dotnetstack",
+      "target": "gate_check_get_dotnetchangedcs",
+      "relation": "calls",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "gate/check.ps1",
+      "source_location": "L1058",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_check_invoke_dotnetstack",
+      "target": "gate_check_get_dotnetsharedformat",
+      "relation": "calls",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "gate/check.ps1",
+      "source_location": "L1066",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_check_invoke_dotnetstack",
+      "target": "gate_check_get_qgatedotnetconfig",
+      "relation": "calls",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "gate/check.ps1",
+      "source_location": "L1197",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_check_invoke_dotnetstack",
+      "target": "gate_check_get_nugetcachedversion",
+      "relation": "calls",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "gate/check.ps1",
+      "source_location": "L1202",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_check_invoke_dotnetstack",
+      "target": "gate_check_test_vulnacks",
+      "relation": "calls",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "gate/check.ps1",
+      "source_location": "L1425",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_check_invoke_dotnetstack",
+      "target": "gate_check_get_unackedvulns",
+      "relation": "calls",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "gate/check.ps1",
+      "source_location": "L1427",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_check_invoke_dotnetstack",
+      "target": "gate_check_have",
+      "relation": "calls",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "gate/check.ps1",
+      "source_location": "L962",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_check_invoke_dotnetstack",
+      "target": "gate_check_fail",
+      "relation": "calls",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "gate/check.ps1",
+      "source_location": "L966",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_check_invoke_dotnetstack",
+      "target": "gate_check_get_dotneteval",
+      "relation": "calls",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "gate/check.ps1",
+      "source_location": "L991",
+      "weight": 1.0
+    },
+    {
+      "source": "gate_check_invoke_dotnetstack",
+      "target": "gate_check_phase",
+      "relation": "calls",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "gate/check.ps1",
+      "source_location": "L993",
       "weight": 1.0
     },
     {
@@ -10226,7 +10226,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "gate/check.ps1",
-      "source_location": "L1637",
+      "source_location": "L1642",
       "weight": 1.0
     },
     {
@@ -10237,7 +10237,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "gate/check.ps1",
-      "source_location": "L1643",
+      "source_location": "L1648",
       "weight": 1.0
     },
     {
@@ -10248,7 +10248,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "gate/check.ps1",
-      "source_location": "L1646",
+      "source_location": "L1651",
       "weight": 1.0
     },
     {
@@ -10259,7 +10259,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "gate/check.ps1",
-      "source_location": "L1657",
+      "source_location": "L1662",
       "weight": 1.0
     },
     {
@@ -10523,7 +10523,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "selftest.ps1",
-      "source_location": "L2951",
+      "source_location": "L2955",
       "weight": 1.0
     },
     {
@@ -10534,7 +10534,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "selftest.ps1",
-      "source_location": "L2737",
+      "source_location": "L2741",
       "weight": 1.0
     },
     {
@@ -10677,7 +10677,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "gate/check.ps1",
-      "source_location": "L1619",
+      "source_location": "L1624",
       "weight": 1.0
     },
     {
@@ -10688,7 +10688,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "gate/check.ps1",
-      "source_location": "L1770",
+      "source_location": "L1775",
       "weight": 1.0
     },
     {
@@ -10699,7 +10699,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "gate/check.ps1",
-      "source_location": "L1781",
+      "source_location": "L1786",
       "weight": 1.0
     },
     {
@@ -10710,7 +10710,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "gate/check.ps1",
-      "source_location": "L1931",
+      "source_location": "L1936",
       "weight": 1.0
     },
     {
@@ -10732,7 +10732,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "gate/check.ps1",
-      "source_location": "L2287",
+      "source_location": "L2292",
       "weight": 1.0
     },
     {
@@ -10743,7 +10743,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "gate/check.ps1",
-      "source_location": "L2306",
+      "source_location": "L2311",
       "weight": 1.0
     },
     {
@@ -10754,7 +10754,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "gate/check.ps1",
-      "source_location": "L2336",
+      "source_location": "L2341",
       "weight": 1.0
     },
     {
@@ -10765,7 +10765,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "gate/check.ps1",
-      "source_location": "L2413",
+      "source_location": "L2418",
       "weight": 1.0
     },
     {
@@ -10776,7 +10776,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "gate/check.ps1",
-      "source_location": "L2425",
+      "source_location": "L2430",
       "weight": 1.0
     },
     {
@@ -10908,7 +10908,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "gate/check.ps1",
-      "source_location": "L815",
+      "source_location": "L820",
       "weight": 1.0
     },
     {
@@ -10919,7 +10919,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "gate/check.ps1",
-      "source_location": "L828",
+      "source_location": "L833",
       "weight": 1.0
     },
     {
@@ -10930,7 +10930,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "gate/check.ps1",
-      "source_location": "L839",
+      "source_location": "L844",
       "weight": 1.0
     },
     {
@@ -10941,7 +10941,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "gate/check.ps1",
-      "source_location": "L851",
+      "source_location": "L856",
       "weight": 1.0
     },
     {
@@ -10952,7 +10952,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "gate/check.ps1",
-      "source_location": "L857",
+      "source_location": "L862",
       "weight": 1.0
     },
     {
@@ -10963,7 +10963,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "gate/check.ps1",
-      "source_location": "L863",
+      "source_location": "L868",
       "weight": 1.0
     },
     {
@@ -10974,7 +10974,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "gate/check.ps1",
-      "source_location": "L870",
+      "source_location": "L875",
       "weight": 1.0
     },
     {
@@ -10985,7 +10985,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "gate/check.ps1",
-      "source_location": "L948",
+      "source_location": "L953",
       "weight": 1.0
     },
     {
@@ -11700,7 +11700,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "selftest.ps1",
-      "source_location": "L1891",
+      "source_location": "L1895",
       "weight": 1.0
     },
     {
@@ -11711,7 +11711,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "selftest.ps1",
-      "source_location": "L2211",
+      "source_location": "L2215",
       "weight": 1.0
     },
     {
@@ -11722,7 +11722,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "selftest.ps1",
-      "source_location": "L2298",
+      "source_location": "L2302",
       "weight": 1.0
     },
     {
@@ -11733,7 +11733,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "selftest.ps1",
-      "source_location": "L2305",
+      "source_location": "L2309",
       "weight": 1.0
     },
     {
@@ -11744,7 +11744,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "selftest.ps1",
-      "source_location": "L2309",
+      "source_location": "L2313",
       "weight": 1.0
     },
     {
@@ -11755,7 +11755,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "selftest.ps1",
-      "source_location": "L2731",
+      "source_location": "L2735",
       "weight": 1.0
     },
     {
@@ -11766,7 +11766,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "selftest.ps1",
-      "source_location": "L2741",
+      "source_location": "L2745",
       "weight": 1.0
     },
     {
@@ -11777,7 +11777,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "selftest.ps1",
-      "source_location": "L2811",
+      "source_location": "L2815",
       "weight": 1.0
     },
     {
@@ -11788,7 +11788,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "selftest.ps1",
-      "source_location": "L2946",
+      "source_location": "L2950",
       "weight": 1.0
     },
     {
@@ -11799,7 +11799,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "selftest.ps1",
-      "source_location": "L3072",
+      "source_location": "L3076",
       "weight": 1.0
     },
     {
@@ -11810,7 +11810,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "selftest.ps1",
-      "source_location": "L3505",
+      "source_location": "L3509",
       "weight": 1.0
     },
     {
@@ -13380,7 +13380,7 @@
       "confidence_score": 0.85,
       "context": "call",
       "source_file": "gate/check.ps1",
-      "source_location": "L899",
+      "source_location": "L904",
       "weight": 1.0
     },
     {
@@ -13404,7 +13404,7 @@
       "confidence_score": 0.85,
       "context": "call",
       "source_file": "gate/check.ps1",
-      "source_location": "L1994",
+      "source_location": "L1999",
       "weight": 1.0
     },
     {
@@ -13416,7 +13416,7 @@
       "confidence_score": 0.85,
       "context": "call",
       "source_file": "gate/check.ps1",
-      "source_location": "L2000",
+      "source_location": "L2005",
       "weight": 1.0
     },
     {
@@ -13428,7 +13428,7 @@
       "confidence_score": 0.85,
       "context": "call",
       "source_file": "gate/check.ps1",
-      "source_location": "L2009",
+      "source_location": "L2014",
       "weight": 1.0
     },
     {
@@ -13440,7 +13440,7 @@
       "confidence_score": 0.85,
       "context": "call",
       "source_file": "gate/check.ps1",
-      "source_location": "L1875",
+      "source_location": "L1880",
       "weight": 1.0
     },
     {
@@ -13452,7 +13452,7 @@
       "confidence_score": 0.85,
       "context": "call",
       "source_file": "gate/check.ps1",
-      "source_location": "L2337",
+      "source_location": "L2342",
       "weight": 1.0
     },
     {
@@ -13464,7 +13464,7 @@
       "confidence_score": 0.85,
       "context": "call",
       "source_file": "gate/check.ps1",
-      "source_location": "L2340",
+      "source_location": "L2345",
       "weight": 1.0
     },
     {
@@ -13476,7 +13476,7 @@
       "confidence_score": 0.85,
       "context": "call",
       "source_file": "gate/check.ps1",
-      "source_location": "L2359",
+      "source_location": "L2364",
       "weight": 1.0
     },
     {
@@ -13488,7 +13488,7 @@
       "confidence_score": 0.85,
       "context": "call",
       "source_file": "gate/check.ps1",
-      "source_location": "L2364",
+      "source_location": "L2369",
       "weight": 1.0
     },
     {
@@ -13500,7 +13500,7 @@
       "confidence_score": 0.85,
       "context": "call",
       "source_file": "gate/check.ps1",
-      "source_location": "L2426",
+      "source_location": "L2431",
       "weight": 1.0
     },
     {
@@ -13512,7 +13512,7 @@
       "confidence_score": 0.85,
       "context": "call",
       "source_file": "gate/check.ps1",
-      "source_location": "L1301",
+      "source_location": "L1306",
       "weight": 1.0
     },
     {
@@ -13524,7 +13524,7 @@
       "confidence_score": 0.85,
       "context": "call",
       "source_file": "gate/check.ps1",
-      "source_location": "L1631",
+      "source_location": "L1636",
       "weight": 1.0
     },
     {
@@ -13536,7 +13536,7 @@
       "confidence_score": 0.85,
       "context": "call",
       "source_file": "gate/check.ps1",
-      "source_location": "L1718",
+      "source_location": "L1723",
       "weight": 1.0
     },
     {
@@ -13632,7 +13632,7 @@
       "confidence_score": 0.85,
       "context": "call",
       "source_file": "selftest.ps1",
-      "source_location": "L2307",
+      "source_location": "L2311",
       "weight": 1.0
     },
     {
@@ -14598,5 +14598,5 @@
       "source_file": "HANDOFF.md"
     }
   ],
-  "built_at_commit": "50cfdde34f5d064bce6cda56a987e6ea8fc8fb6f"
+  "built_at_commit": "b184e68ab81b44adb117c0db734440489eb1e89c"
 }
