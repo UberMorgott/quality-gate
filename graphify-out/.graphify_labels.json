@@ -1,7 +1,7 @@
 {
   "0": "Patches.cs",
   "1": "detect.ps1",
-  "2": "qgate wire (repo wiring, config only)",
+  "2": "GitHub Actions quality-gate workflow",
   "3": ".Scan",
   "4": "Lookups",
   "5": "selftest.ps1",
@@ -40,7 +40,7 @@
   "38": ".golangci.yml template",
   "39": ".Run",
   "40": "gopurity/main.go",
-  "41": "Claude Code Stop hook (exit code 2)",
+  "41": "quality_gate job anchor shared by both hooks",
   "43": "bepinex.ps1",
   "48": "Invoke-Child"
 }
