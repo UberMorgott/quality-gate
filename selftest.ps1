@@ -2818,7 +2818,7 @@ try {
     $doc = try { Get-Content $sarifFile -Raw | ConvertFrom-Json } catch { $null }
     $mutWarn = @($doc.runs[0].results | Where-Object { $_.level -eq 'warning' -and $_.message.text -match 'surviving mutant' })
     Check '-Sarif keeps stdout and exit code, writes valid 2.1.0 with [WARN] as warning' `
-        (($code -eq 0) -and ($out -eq $plain) -and $doc -and ($doc.version -eq '2.1.0') -and ($doc.'$schema' -match 'sarif-2\.1\.0') -and
+        (($code -eq 0) -and (($out -replace '\(\d+\.\d+s\)', '') -eq ($plain -replace '\(\d+\.\d+s\)', '')) -and $doc -and ($doc.version -eq '2.1.0') -and ($doc.'$schema' -match 'sarif-2\.1\.0') -and
          ($doc.runs[0].tool.driver.name -eq 'quality-gate') -and $mutWarn.Count -eq 1 -and -not @($doc.runs[0].results | Where-Object level -eq 'error')) "code=$code $out"
     Set-GoFile (Join-Path $mut 'main.go') "package main`n`nfunc main() { undefinedName() }"
     $out = (& pwsh -NoProfile -File $gate -Root $mut -All -Only go -Sarif $sarifFile 2>&1 | Out-String)
