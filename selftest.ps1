@@ -3949,6 +3949,32 @@ if (Get-Command npm -ErrorAction SilentlyContinue) {
     Write-Output '[skip] npm not on PATH -- the web test phase cannot be judged here'
 }
 
+# #96: the lint caches used to land in `<pkg>/.cache/`, which no scaffold gitignores,
+# so the first gate run left the tree dirty and `git add -A` committed them. They now
+# go under node_modules/.cache, ignored everywhere by construction.
+$wc = Join-Path $tmp 'webcache'
+New-Item -ItemType Directory -Path (Join-Path $wc 'node_modules\.bin') -Force | Out-Null
+[IO.File]::WriteAllText((Join-Path $wc 'package.json'), '{"name":"webcache","private":true,"type":"module"}')
+Set-Content (Join-Path $wc 'vite.config.js') 'export default {}'
+Set-Content (Join-Path $wc 'eslint.config.js') 'export default []'
+Set-Content (Join-Path $wc '.stylelintrc.json') '{}'
+# Stand-ins for the linters: they record the command line the gate handed them and
+# create the cache file at that location, exactly as the real tools do.
+foreach ($t in 'eslint', 'stylelint') {
+    Set-Content (Join-Path $wc "node_modules\.bin\$t.cmd") @"
+@echo off
+echo %* > "$wc\$t.args"
+exit /b 0
+"@
+}
+$out = (& pwsh -NoProfile -File $gate -Root $wc -Only 'web' -Fast 2>&1 | Out-String)
+$wcCode = $LASTEXITCODE
+$wcArgs = (Get-Content (Join-Path $wc 'eslint.args') -Raw) + (Get-Content (Join-Path $wc 'stylelint.args') -Raw)
+Check 'the lint caches are pointed under node_modules, not a bare .cache dir' `
+    (($wcCode -eq 0) -and -not (Test-Path (Join-Path $wc '.cache')) -and
+        (Test-Path (Join-Path $wc 'node_modules\.cache')) -and
+        (([regex]::Matches($wcArgs, 'node_modules/\.cache/(es|style)lintcache')).Count -eq 2)) "code=$wcCode $wcArgs $out"
+
 }
 
 if (Want 'bootstrap') {

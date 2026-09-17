@@ -1448,10 +1448,16 @@ function Invoke-WebStack($s) {
     $pkg = Get-Content (Join-Path $s.Dir 'package.json') -Raw | ConvertFrom-Json
     $scripts = if ($pkg.scripts) { $pkg.scripts.PSObject.Properties.Name } else { @() }
 
+    # Lint caches live under node_modules (#96): a bare `.cache/` at the package root is
+    # ignored by no scaffold, so the first gate run left the tree dirty and an agent's
+    # `git add -A` committed the caches. The directory is created here because neither
+    # linter is required to make the parent of its --cache-location.
+    New-Item -ItemType Directory -Force -Path (Join-Path $s.Dir 'node_modules\.cache') | Out-Null
+
     if (Test-AnyFile $s.Dir @('stylelint.config.*', '.stylelintrc*')) {
         Phase 'stylelint' {
             & "$bin\stylelint.cmd" "**/*.{vue,css,scss}" --no-color --max-warnings 0 --formatter compact `
-                --cache --cache-strategy content --cache-location '.cache/stylelintcache'
+                --cache --cache-strategy content --cache-location 'node_modules/.cache/stylelintcache'
         }
     }
     # eslint runs WITHOUT --fix on purpose: the gate must report problems, not
@@ -1459,7 +1465,7 @@ function Invoke-WebStack($s) {
     if (Test-AnyFile $s.Dir @('eslint.config.*', '.eslintrc*')) {
         Phase 'eslint' {
             & "$bin\eslint.cmd" . --no-color --max-warnings 0 --format stylish `
-                --cache --cache-strategy content --cache-location '.cache/eslintcache'
+                --cache --cache-strategy content --cache-location 'node_modules/.cache/eslintcache'
         }
     }
     if ($scripts -contains 'type-check') {
