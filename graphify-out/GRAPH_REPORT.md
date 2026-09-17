@@ -1,24 +1,24 @@
 # Graph Report - quality-gate  (2026-09-17)
 
 ## Corpus Check
-- 49 files · ~119,895 words
+- 49 files · ~120,913 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 17 file(s) not represented in the graph (top: (none) 5, .toml 3, .gd 2)
 
 ## Summary
-- 458 nodes · 679 edges · 50 communities (22 shown, 28 thin omitted)
+- 459 nodes · 681 edges · 49 communities (21 shown, 28 thin omitted)
 - Extraction: 93% EXTRACTED · 7% INFERRED · 0% AMBIGUOUS · INFERRED: 47 edges (avg confidence: 0.85)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `7789b95d`
+- Built from commit: `4a955929`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
 ## Community Hubs (Navigation)
 - harmony.cs
 - detect.ps1
-- Coverage measures happy paths; a green suite proves nothing
+- GitHub Actions quality-gate workflow
 - .Scan
 - Lookups
 - selftest.ps1
@@ -47,12 +47,11 @@
 - Mod.csproj
 - MetadataReader
 - .Resolve
-- .golangci.yml template
 - .Run
 - gopurity/main.go
 - Hud
 - .Callee
-- qgate wire (repo wiring, config only)
+- .golangci.yml template
 - hooks/pre-commit
 - pre-merge-commit
 
@@ -62,8 +61,8 @@
 3. `Lookups` - 15 edges
 4. `Invoke-SmokeCheck()` - 12 edges
 5. `Invoke-BaseStack()` - 11 edges
-6. `Phase()` - 8 edges
-7. `Invoke-CppStack()` - 8 edges
+6. `Invoke-CppStack()` - 9 edges
+7. `Phase()` - 8 edges
 8. `Invoke-CustomStack()` - 8 edges
 9. `Get-PathKey()` - 8 edges
 10. `.golangci.yml template` - 8 edges
@@ -71,14 +70,14 @@
 ## Surprising Connections (you probably didn't know these)
 - `Set-OutdatedCache()` --calls--> `Get-PathKey()`  [INFERRED]
   selftest.ps1 → gate/detect.ps1
-- `Cancellability findings (context propagation)` --conceptually_related_to--> `.golangci.yml template`  [INFERRED]
-  PLAYBOOK.md → templates/.golangci.yml
 - `Incoming agent reports: symptom right, cause wrong half the time` --semantically_similar_to--> `Second-engine review`  [INFERRED] [semantically similar]
   HANDOFF.md → PLAYBOOK.md
 - `detect stacks step (monorepo-aware marker search)` --semantically_similar_to--> `Marker-file stack detection`  [INFERRED] [semantically similar]
   templates/ci.yml → README.md
 - `QG_REF tag pin (v1), never main` --semantically_similar_to--> `qgate.json toolchain pinning`  [INFERRED] [semantically similar]
   templates/ci.yml → README.md
+- `Unchecked errors: propagate, log-and-degrade, or join` --conceptually_related_to--> `.golangci.yml template`  [INFERRED]
+  PLAYBOOK.md → templates/.golangci.yml
 
 ## Import Cycles
 - None detected.
@@ -88,7 +87,7 @@
 - **Measured lefthook-on-Windows traps behind one run: line** — templates_lefthook_exit_code_trap, templates_lefthook_cmd_shim, templates_lefthook_command_v_trap, templates_lefthook_quote_stripping_trap, templates_lefthook_quality_gate_job [EXTRACTED 1.00]
 - **Commit-path coverage and the staged-index guard** — handoff_hook_coverage_matrix, handoff_cherry_pick_revert_uncovered, handoff_parallel_commit_race, handoff_git_index_file_marker, readme_staged_index_guard, templates_lefthook_quality_gate_job [INFERRED 0.95]
 
-## Communities (50 total, 28 thin omitted)
+## Communities (49 total, 28 thin omitted)
 
 ### Community 0 - "harmony.cs"
 Cohesion: 0.05
@@ -98,9 +97,9 @@ Nodes (29): Attribute, Fixture, HarmonyLib, system, system_collections_generic, 
 Cohesion: 0.07
 Nodes (24): Find-Marker(), Get-ChecksHash(), Get-CustomChecks(), Get-DefaultTrustStore(), Get-DeployEntries(), Get-GitIgnoredSet(), Get-GoBuiltWith(), Get-GodotBin() (+16 more)
 
-### Community 2 - "Coverage measures happy paths; a green suite proves nothing"
-Cohesion: 0.17
-Nodes (13): git check-ignore exit codes; --stdin batch unusable on Windows, Selftest counts 121 online / 115 offline, Coverage measures happy paths; a green suite proves nothing, Mutation check of existing tests, PowerShell reads an empty value as absence, Red-then-green verification, A right outcome does not prove the right cause (§0.1), Negative check asserts outcome + applied cause + absent cause (+5 more)
+### Community 2 - "GitHub Actions quality-gate workflow"
+Cohesion: 0.08
+Nodes (28): git check-ignore exit codes; --stdin batch unusable on Windows, GOTOOLCHAIN=auto unpacking races produce 'missing std package', Selftest counts 121 online / 115 offline, Coverage measures happy paths; a green suite proves nothing, Mutation check of existing tests, PowerShell reads an empty value as absence, Red-then-green verification, A right outcome does not prove the right cause (§0.1) (+20 more)
 
 ### Community 3 - ".Scan"
 Cohesion: 0.17
@@ -128,7 +127,7 @@ Nodes (6): name, private, scripts, build-only, type-check, type
 
 ### Community 9 - "check.ps1"
 Cohesion: 0.12
-Nodes (35): Fail(), Get-ChangedPaths(), Get-CppCompileDb(), Get-Descendants(), Get-DotnetChangedCs(), Get-DotnetEval(), Get-DotnetSharedFormat(), Get-DotnetTfms() (+27 more)
+Nodes (36): Fail(), Get-ChangedPaths(), Get-CppCompileDb(), Get-CppGeneratedIncludes(), Get-Descendants(), Get-DotnetChangedCs(), Get-DotnetEval(), Get-DotnetSharedFormat() (+28 more)
 
 ### Community 10 - ".Get"
 Cohesion: 0.35
@@ -158,10 +157,6 @@ Nodes (4): MetadataReader, TypeDefinitionHandle, TypeReferenceHandle, TypeSpecif
 Cohesion: 0.20
 Nodes (5): CustomAttribute, CustomAttributeHandleCollection, Target, MethodDefinition, Target
 
-### Community 38 - ".golangci.yml template"
-Cohesion: 0.10
-Nodes (20): git add --renormalize + checkout is a no-op for CRLF, Three rules for a machine-readable deferral file, Suppression needs a named reason; stale suppressions flagged, Taint rules report one finding at a time and are inter-package, Unchecked errors: propagate, log-and-degrade, or join, qgate.deferrals.json (dated deferrals), Go stack phases, qgate outdated (+12 more)
-
 ### Community 40 - "gopurity/main.go"
 Cohesion: 0.18
 Nodes (9): go_pkg_fmt, go_pkg_go_ast, go_pkg_go_build, go_pkg_go_importer, go_pkg_go_parser, go_pkg_go_token, go_pkg_go_types, go_pkg_os (+1 more)
@@ -174,12 +169,12 @@ Nodes (7): Hud, Health, IDamageable, Player, Unit, AssignablePatch, HealthPatch
 Cohesion: 0.17
 Nodes (7): Gen, IEnumerable, ImmutableArray, MethodSignature, Name, Parent, Sig
 
-### Community 44 - "qgate wire (repo wiring, config only)"
-Cohesion: 0.06
-Nodes (37): "Gate is wrong" issue template, cherry-pick and revert cannot be covered cheaply, Deliberately chosen boundaries (not TODOs), GIT_INDEX_FILE marks that we are inside a commit, GOTOOLCHAIN=auto unpacking races produce 'missing std package', Measured git hook coverage matrix (git 2.53), Incoming agent reports: symptom right, cause wrong half the time, Parallel commits in one worktree swallow each other's staged files (+29 more)
+### Community 44 - ".golangci.yml template"
+Cohesion: 0.05
+Nodes (42): "Gate is wrong" issue template, cherry-pick and revert cannot be covered cheaply, Deliberately chosen boundaries (not TODOs), GIT_INDEX_FILE marks that we are inside a commit, Measured git hook coverage matrix (git 2.53), Incoming agent reports: symptom right, cause wrong half the time, Parallel commits in one worktree swallow each other's staged files, git add --renormalize + checkout is a no-op for CRLF (+34 more)
 
 ## Knowledge Gaps
-- **38 isolated node(s):** `stylelint-config-standard-scss`, `stylelint-config-recommended-vue/scss`, `ignoreFiles`, `net8.0`, `Microsoft.NET.Sdk` (+33 more)
+- **38 isolated node(s):** `Constructor`, `Enumerator`, `Getter`, `Normal`, `Setter` (+33 more)
   These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 192 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
 - **28 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
@@ -191,10 +186,10 @@ _Questions this graph is uniquely positioned to answer:_
 - **Why does `Lookups` connect `Lookups` to `harmony.cs`?**
   _High betweenness centrality (0.023) - this node is a cross-community bridge._
 - **Why does `Get-PathKey()` connect `check.ps1` to `detect.ps1`, `selftest.ps1`?**
-  _High betweenness centrality (0.021) - this node is a cross-community bridge._
+  _High betweenness centrality (0.022) - this node is a cross-community bridge._
 - **Are the 5 inferred relationships involving `Invoke-SmokeCheck()` (e.g. with `Invoke-CustomStack()` and `Fail()`) actually correct?**
   _`Invoke-SmokeCheck()` has 5 INFERRED edges - model-reasoned connections that need verification._
-- **What connects `stylelint-config-standard-scss`, `stylelint-config-recommended-vue/scss`, `ignoreFiles` to the rest of the system?**
+- **What connects `Constructor`, `Enumerator`, `Getter` to the rest of the system?**
   _38 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `harmony.cs` be split into smaller, more focused modules?**
   _Cohesion score 0.05398110661268556 - nodes in this community are weakly interconnected._
