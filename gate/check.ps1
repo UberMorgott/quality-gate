@@ -597,6 +597,21 @@ function Invoke-GoStack($s) {
         # untouched package. --whole-files, not just changed lines, so a touched
         # file is judged as a whole.
         $newFrom = if ($Baseline) { @('--new-from-rev', $Baseline, '--whole-files') } else { @() }
+        # quality-gate#83: `run` loads configs its own JSON schema rejects (measured on
+        # 2.13.2: an unknown top-level key, `rules:` left null), while golangci-lint-action
+        # runs `config verify` first by default -- local gate green, CI red. A FAIL, not a
+        # WARN: the verdict is the tool's own schema, and it is the verdict CI already gives.
+        # Exit 6 = no config file (the action skips verify then too); a golangci-lint too old
+        # to have `config verify` is not a finding about the repo.
+        $vSw = [Diagnostics.Stopwatch]::StartNew()
+        $vOut = (& golangci-lint config verify 2>&1 | Out-String).TrimEnd()
+        $vCode = $LASTEXITCODE
+        $vSw.Stop()
+        if ($vOut -match 'unknown command') {
+            $script:Lines += '[WARN] golangci-lint has no `config verify` -- config schema check skipped (update golangci-lint)'
+        } elseif ($vCode -ne 6) {
+            Phase 'golangci-lint config verify' { $vOut; $global:LASTEXITCODE = $vCode } -Elapsed $vSw.Elapsed.TotalSeconds
+        }
         Phase 'golangci-lint' {
             golangci-lint run --output.text.print-issued-lines=false --output.text.colors=false `
                 --max-issues-per-linter=0 --max-same-issues=0 @newFrom ./...

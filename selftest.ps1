@@ -210,12 +210,14 @@ Copy-Item (Join-Path $PSScriptRoot 'testdata\go-fixture') $go -Recurse
 $r = Invoke-Gate $go
 Check 'clean go fixture passes without config' ($r.Code -eq 0) $r.Out
 Check 'missing .golangci.yml warned once' (([regex]::Matches($r.Out, 'no \.golangci\.yml')).Count -eq 1) $r.Out
+$script:noCfgOut = $r.Out
 
 # 3. Same fixture with the template config -> still green, no warning.
 Copy-Item (Join-Path $PSScriptRoot 'templates\.golangci.yml') $go
 $r = Invoke-Gate $go
 Check 'template .golangci.yml passes' ($r.Code -eq 0) $r.Out
 Check 'no warning once config present' ($r.Out -notmatch 'WARN') $r.Out
+$script:tplOut = $r.Out
 # #52: the template must satisfy golangci-lint's own schema (embedded, offline), and so
 # must its commented-out formatters block once a repo uncomments it. The negative half:
 # a bare `rules:` (YAML null) is what the schema rejected before, so it must still fail.
@@ -233,6 +235,15 @@ if (Get-Command golangci-lint -ErrorAction SilentlyContinue) {
     $vOut = (& golangci-lint config verify -c $nullCfg 2>&1 | Out-String)
     Check 'a bare rules: still fails config verify' (($LASTEXITCODE -ne 0) -and ($vOut -match 'rules')) $vOut
     $global:LASTEXITCODE = 0
+    # #83: the gate itself runs `config verify` (golangci-lint-action does): no config is not
+    # a finding, the valid template passes it, a schema-invalid config fails before `run`.
+    Check 'no config: config verify phase not reported' ($script:noCfgOut -notmatch 'config verify') $script:noCfgOut
+    Check 'template config passes the config verify phase' ($script:tplOut -match '\[PASS\] golangci-lint config verify') $script:tplOut
+    [IO.File]::WriteAllText((Join-Path $go '.golangci.yml'), $tplText + "`nbogus-key: 1`n")
+    $r = Invoke-Gate $go
+    Check 'schema-invalid .golangci.yml fails config verify' `
+        (($r.Code -ne 0) -and ($r.Out -match '\[FAIL\] golangci-lint config verify') -and ($r.Out -match 'bogus-key')) $r.Out
+    Copy-Item (Join-Path $PSScriptRoot 'templates\.golangci.yml') $go -Force
     # #43: a repo config below the template floor is named, a deliberate omission written
     # down in the config is not, and the template itself has no gap.
     $floor = Join-Path $tmp 'floor'
