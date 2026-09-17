@@ -2134,6 +2134,11 @@ function Invoke-BaseStack($s) {
             '--config'; (Join-Path $tpl '.markdownlint.jsonc') })
     $yCfg = @(if (-not (Get-ChildItem -LiteralPath $Root -Force -Filter '.yamllint*' -ErrorAction SilentlyContinue)) {
             '-c'; (Join-Path $tpl '.yamllint.yml') })
+    # #91: SpacesAfterTabs. dotnet format aligns a comment under the previous line's trailing
+    # comment with tabs + 1-3 spaces, and the default checker called that spaces-for-tabs, so
+    # applying the format phase's own fix raised this warning. Space-only indentation still fails.
+    $ecCfg = @(if (-not (Get-ChildItem -LiteralPath $Root -Force -ErrorAction SilentlyContinue | Where-Object Name -In '.editorconfig-checker.json', '.ecrc')) {
+            '-config'; (Join-Path $tpl '.editorconfig-checker.json') })
     $linters = @(
         @{ Name = 'shellcheck'; Exe = 'shellcheck'; Match = '\.(sh|bash)$'; Args = @('-f', 'gcc'); Url = 'https://www.shellcheck.net' }
         @{ Name = 'actionlint'; Exe = 'actionlint'; Match = '^\.github/workflows/[^/]+\.ya?ml$'; Args = @('-no-color'); Url = 'https://github.com/rhysd/actionlint' }
@@ -2141,7 +2146,7 @@ function Invoke-BaseStack($s) {
         @{ Name = 'markdownlint'; Exe = 'markdownlint-cli2'; Match = '\.md$'; Args = $mdCfg; Url = 'https://github.com/DavidAnson/markdownlint-cli2' }
         @{ Name = 'yamllint'; Exe = 'yamllint'; Match = '\.ya?ml$'; Args = @('-f', 'parsable') + $yCfg; Url = 'https://github.com/adrienverge/yamllint' }
         # Only what the repository declared: no .editorconfig, nothing to check against.
-        @{ Name = 'editorconfig'; Exe = 'editorconfig-checker'; Match = $(if (Test-Path -LiteralPath (Join-Path $Root '.editorconfig')) { '.' } else { '^$' }); Args = @('-no-color'); Url = 'https://github.com/editorconfig-checker/editorconfig-checker' }
+        @{ Name = 'editorconfig'; Exe = 'editorconfig-checker'; Match = $(if (Test-Path -LiteralPath (Join-Path $Root '.editorconfig')) { '.' } else { '^$' }); Args = @('-no-color') + $ecCfg; Url = 'https://github.com/editorconfig-checker/editorconfig-checker' }
     )
     foreach ($l in $linters) {
         $files = @($lintPool | Where-Object { $_ -match $l.Match })
