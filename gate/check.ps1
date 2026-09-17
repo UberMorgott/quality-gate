@@ -589,7 +589,7 @@ function Invoke-GoStack($s) {
     if ($Fix) {
         $fmt = @(gofmt -l . | Where-Object { -not (Test-GitIgnored $s.Dir (Join-Path $s.Dir $_)) })
         if ($fmt) { gofmt -w @fmt }
-        $lint = if (Have 'golangci-lint') { golangci-lint run --fix ./... *> $null; 'golangci-lint --fix applied' } else { 'golangci-lint not on PATH' }
+        $lint = if (Have 'golangci-lint') { golangci-lint run --allow-serial-runners --fix ./... *> $null; 'golangci-lint --fix applied' } else { 'golangci-lint not on PATH' }
         $global:LASTEXITCODE = 0
         $script:Lines += "[INFO] fix: gofmt rewrote $($fmt.Count) file(s), $lint -- the gate below judges the result"
     }
@@ -656,8 +656,13 @@ function Invoke-GoStack($s) {
         } elseif ($vCode -ne 6) {
             Phase 'golangci-lint config verify' { $vOut; $global:LASTEXITCODE = $vCode } -Elapsed $vSw.Elapsed.TotalSeconds
         }
+        # quality-gate#93: golangci-lint holds a machine-wide lock in TEMP, and a second
+        # run without a runners flag exits 3 "parallel golangci-lint is running" -- two
+        # repos or a hook beside a manual run turned clean code red (measured). Serial,
+        # not parallel: waiting keeps two heavy analyses from competing for the machine.
+        # Every `golangci-lint run` the gate issues carries it (selftest asserts).
         Phase 'golangci-lint' {
-            golangci-lint run --output.text.print-issued-lines=false --output.text.colors=false `
+            golangci-lint run --allow-serial-runners --output.text.print-issued-lines=false --output.text.colors=false `
                 --max-issues-per-linter=0 --max-same-issues=0 @newFrom ./...
         }
         # Advisory, full level only: a note about the config, not about this change.
@@ -681,7 +686,7 @@ function Invoke-GoStack($s) {
             if (Have 'golangci-lint') {
                 Phase "golangci-lint GOOS=$os" {
                     Invoke-WithGoos $os {
-                        golangci-lint run --output.text.print-issued-lines=false --output.text.colors=false `
+                        golangci-lint run --allow-serial-runners --output.text.print-issued-lines=false --output.text.colors=false `
                             --max-issues-per-linter=0 --max-same-issues=0 @newFrom ./...
                     }
                 }

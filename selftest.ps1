@@ -613,6 +613,10 @@ func main() {
 } else {
     Write-Output '[skip] golangci-lint not on PATH'
 }
+# #93: an overlapping gate run must wait on golangci-lint's lock, not fail on it.
+$runs = @(Get-ChildItem (Join-Path $PSScriptRoot 'gate') -Filter *.ps1 | Select-String -Pattern '^[^#]*golangci-lint run\b')
+$bare = @($runs | Where-Object { $_.Line -notmatch '--allow-serial-runners' })
+Check 'every golangci-lint run waits on the parallel-runner lock' (($runs.Count -ge 4) -and (-not $bare)) ($bare -join "`n")
 
 # 7. Provenance: every phase names the marker that created it.
 $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $go -All -Why 2>&1 | Out-String)

@@ -620,7 +620,7 @@ linters:
         $rel = @($Pkgs | ForEach-Object { './' + [IO.Path]::GetRelativePath($Dir, $_).Replace('\', '/') })
         $hits = @()
         if (Get-Command golangci-lint -ErrorAction SilentlyContinue) {
-            $hits += @(& golangci-lint run -c $cfg --output.text.print-issued-lines=false --output.text.colors=false `
+            $hits += @(& golangci-lint run --allow-serial-runners -c $cfg --output.text.print-issued-lines=false --output.text.colors=false `
                     --max-issues-per-linter=0 --max-same-issues=0 @rel 2>&1 | ForEach-Object { "$_" } | Where-Object { $_ -match '\((forbidigo|depguard)\)$' })
         }
         $hits += @(& go run (Join-Path $PSScriptRoot 'gopurity\main.go') @Pkgs 2>$null | ForEach-Object {
