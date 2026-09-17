@@ -12,15 +12,15 @@
     "semantic_hash": ""
   },
   "gate/check.ps1": {
-    "mtime": 1789630872.5366395,
-    "seen": 1789631406.5378563,
-    "ast_hash": "48dc5c778828e9b477021b4831204d71",
+    "mtime": 1789634016.8051217,
+    "seen": 1789634648.1611512,
+    "ast_hash": "a1ce2dd13c18f2cd493076b77f02101e",
     "semantic_hash": ""
   },
   "gate/detect.ps1": {
-    "mtime": 1789596956.8363566,
-    "seen": 1789597423.7167385,
-    "ast_hash": "3fc142e0287b7decb14cd5fd72430032",
+    "mtime": 1789634062.3823082,
+    "seen": 1789634648.1611526,
+    "ast_hash": "21af3fa1f7d0bd68bf3baf028a554c4d",
     "semantic_hash": ""
   },
   "gate/outdated.ps1": {
@@ -36,15 +36,15 @@
     "semantic_hash": "e724ea899447135164037779e7eb5931"
   },
   "install.ps1": {
-    "mtime": 1788769493.9353,
-    "seen": 1788781201.4389381,
-    "ast_hash": "c8a6ec547c3f09de42100bf7e0f91392",
+    "mtime": 1789633009.324339,
+    "seen": 1789634648.1611578,
+    "ast_hash": "39926137deee96cfce38a6b7890b4d4a",
     "semantic_hash": ""
   },
   "selftest.ps1": {
-    "mtime": 1789632197.9426043,
-    "seen": 1789632693.1341443,
-    "ast_hash": "6ec420913a8f869ba73034c4ec26c6c5",
+    "mtime": 1789633947.3083243,
+    "seen": 1789634648.1611583,
+    "ast_hash": "1b529c530b99bc1fcc121018eb56588b",
     "semantic_hash": ""
   },
   "templates/.stylelintrc.json": {

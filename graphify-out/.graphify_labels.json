@@ -1,5 +1,5 @@
 {
-  "0": "Hud",
+  "0": "Patches.cs",
   "1": "detect.ps1",
   "2": "qgate wire (repo wiring, config only)",
   "3": ".Scan",
@@ -40,12 +40,7 @@
   "38": ".golangci.yml template",
   "39": ".Run",
   "40": "gopurity/main.go",
-  "41": "HarmonyStub.cs",
-  "42": "Coverage measures happy paths; a green suite proves nothing",
+  "41": "Claude Code Stop hook (exit code 2)",
   "43": "bepinex.ps1",
-  "44": "Patches.cs",
-  "45": "MethodType",
-  "46": "ComputedPatch",
-  "47": "Fixture",
   "48": "Invoke-Child"
 }
