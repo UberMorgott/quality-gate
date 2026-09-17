@@ -1262,6 +1262,29 @@ internal class Sealable
             (($out -match 'MA0084') -and ($out -match 'CA1001') -and ($out -notmatch '\bUNT\d')) $out
     }
 
+    # #87: a net8.0 test project `<Compile Include="..\X.cs" Link=...>`-links a file that
+    # really belongs to a net472 project. CA1512 there asks for a throw helper that does not
+    # exist where the file lives -- unfixable, so info. The identical code in the project's
+    # own directory is still a finding: the true positive stays a [WARN].
+    $dnLink = Join-Path $tmp 'dotnet-linked'
+    New-Item -ItemType Directory -Path (Join-Path $dnLink 'Lib'), (Join-Path $dnLink 'Tests') -Force | Out-Null
+    $throwBody = 'public static int Check(int n) { if (n <= 0) throw new System.ArgumentOutOfRangeException(nameof(n)); return n; }'
+    [IO.File]::WriteAllText((Join-Path $dnLink 'Lib\Linked.cs'), "namespace L; public static class Linked { $throwBody }`n")
+    [IO.File]::WriteAllText((Join-Path $dnLink 'Tests\Own.cs'), "namespace T; public static class Own { $throwBody }`n")
+    [IO.File]::WriteAllText((Join-Path $dnLink 'Tests\Program.cs'), "System.Console.WriteLine(L.Linked.Check(1) + T.Own.Check(1));`n")
+    [IO.File]::WriteAllText((Join-Path $dnLink 'Tests\X.Tests.csproj'), '<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net8.0</TargetFramework><OutputType>Exe</OutputType></PropertyGroup><ItemGroup><Compile Include="..\Lib\Linked.cs" Link="Linked.cs" /></ItemGroup></Project>')
+    & git -C $dnLink init -q 2>$null
+    $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $dnLink -All -Full 2>&1 | Out-String)
+    if ($out -match 'injection failed[^\r\n]*\bNU\d') {
+        Write-Output '[skip] analyzer packages could not be restored -- the linked-file checks cannot run'
+    }
+    else {
+        Check 'a newer-API rule in a file linked from outside the project is info, not counted (#87)' `
+            ($out -match '\[INFO\] X\.Tests\.csproj: 1 newer-API analyzer diagnostic\(s\) in files linked from outside the project dir, not counted -- CA1512 x1') $out
+        Check 'the same newer-API rule in the project''s own file still warns (#87)' `
+            ($out -match '\[WARN\] X\.Tests\.csproj: \d+ analyzer diagnostic\(s\)[^\r\n]*CA1512 x1') $out
+    }
+
     # And the failure this feature must survive. Injecting PackageReferences forces a
     # restore, and a repository that pins its packages with a lock file answers NU1004 --
     # the same shape as an offline machine or a private feed. Reported as a warning, and

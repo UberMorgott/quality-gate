@@ -1229,7 +1229,27 @@ function Invoke-DotnetStack($s) {
         # as though csc suddenly disliked 300 things. No -warnaserror on either -- the owner
         # asked to see the volume first, and a rule that goes red before anyone has read it
         # is a rule people route around. Top offenders by rule id, capped like `format` above.
-        $codes = @([regex]::Matches($o, '(?m):\s+warning\s+([A-Z]+\d+)') | ForEach-Object { $_.Groups[1].Value })
+        # Rules whose only fix is an API added after .NET Framework (throw helpers, char
+        # overloads, string.Contains(char)). Reported from the field (#87): a file that a
+        # net8.0 test project `<Compile Include="..\X.cs" Link=...>`-links from a net472
+        # project gets CA1512, and the suggested ThrowIfLessThanOrEqual does not exist where
+        # that file really lives. Such a diagnostic in a file OUTSIDE this project's directory
+        # is shown as info, not counted; the same rule on the project's own files still WARNs.
+        $newApiRules = 'CA1510', 'CA1511', 'CA1512', 'CA1513', 'CA1847', 'CA1865', 'CA1866', 'CA1867', 'CA2249'
+        $projDir = [IO.Path]::GetFullPath($s.Dir).TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar
+        $diags = @([regex]::Matches($o, '(?m)^\s*(?:(.+?)\(\d+[\d,]*\))?[^\r\n]*?:\s+warning\s+([A-Z]+\d+)') | ForEach-Object {
+                $file = $_.Groups[1].Value
+                [pscustomobject]@{
+                    Code   = $_.Groups[2].Value
+                    Linked = [bool]$file -and ($newApiRules -contains $_.Groups[2].Value) -and
+                    -not ([IO.Path]::GetFullPath($file, $projDir).StartsWith($projDir, [StringComparison]::OrdinalIgnoreCase))
+                }
+            })
+        $linked = @($diags | Where-Object Linked | ForEach-Object Code)
+        $codes = @($diags | Where-Object { -not $_.Linked } | ForEach-Object Code)
+        if ($linked) {
+            $script:Lines += "[INFO] ${proj}: $($linked.Count) newer-API analyzer diagnostic(s) in files linked from outside the project dir, not counted -- $((@($linked | Group-Object | Sort-Object Count, Name -Descending | ForEach-Object { "$($_.Name) x$($_.Count)" })) -join ', ')"
+        }
         # RS0030/RS0031 = BannedApiAnalyzers, S1234 = SonarAnalyzer: injected opt-in above or
         # referenced by the repository itself.
         $ana = @($codes | Where-Object { $_ -match '^(CA|MA|IDE|UNT|RS|S)\d+$' })
@@ -2502,7 +2522,7 @@ foreach ($s in $stacks) {
         # never do. One filter, so every stack that ever emits one is covered.
         # One phase per line, as a failing stack prints them (#75): joined with spaces, a
         # passing stack after a red one read as a single run-on line of [PASS]/[WARN] tags.
-        $timings = @($script:Lines | Where-Object { $_ -match '^\[(PASS|WARN|SKIP|UNKNOWN)\]' }) | ForEach-Object { "`n$_" }
+        $timings = @($script:Lines | Where-Object { $_ -match '^\[(PASS|WARN|SKIP|UNKNOWN|INFO)\]' }) | ForEach-Object { "`n$_" }
         $timings = $timings -join ''
         # Same rule one level down from the invariant below. Every web phase is
         # conditional on a config file or a package script, so a project with none of
