@@ -1,8 +1,8 @@
 {
   "bin/qgate.ps1": {
-    "mtime": 1789649330.4415987,
-    "seen": 1789649423.975546,
-    "ast_hash": "87d7c88eabd04b5b55e75fd6c18de6d4",
+    "mtime": 1789655715.4372306,
+    "seen": 1789655716.091012,
+    "ast_hash": "f6c1fb6ef6dfa9679819386f50d3c03b",
     "semantic_hash": ""
   },
   "bootstrap.ps1": {
@@ -12,9 +12,9 @@
     "semantic_hash": ""
   },
   "gate/check.ps1": {
-    "mtime": 1789655057.9631376,
-    "seen": 1789655277.090764,
-    "ast_hash": "9923f35c30e6872d5901bcf4ea26e61a",
+    "mtime": 1789655587.5376115,
+    "seen": 1789655716.0910156,
+    "ast_hash": "6565a812a72a893ab4b08192adbb4415",
     "semantic_hash": ""
   },
   "gate/detect.ps1": {
@@ -42,9 +42,9 @@
     "semantic_hash": ""
   },
   "selftest.ps1": {
-    "mtime": 1789655268.560557,
-    "seen": 1789655277.0907714,
-    "ast_hash": "c5a25fd4932d390c5b01e28f96fa6b88",
+    "mtime": 1789655715.4392464,
+    "seen": 1789655716.0910249,
+    "ast_hash": "e4616662d06a17bd02db8eec57f7900a",
     "semantic_hash": ""
   },
   "templates/.stylelintrc.json": {
@@ -126,9 +126,9 @@
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1789655071.3468766,
-    "seen": 1789655277.0907896,
-    "ast_hash": "55dbd504d258d3b172a7a0aae928e0bb",
+    "mtime": 1789655918.903907,
+    "seen": 1789655925.6957648,
+    "ast_hash": "b520bb7405f8f590355bd66c7552970d",
     "semantic_hash": ""
   },
   "templates/.golangci.yml": {
@@ -297,6 +297,24 @@
     "mtime": 1789632184.225214,
     "seen": 1789632693.1341312,
     "ast_hash": "15e9db86c2bd61856ed853c0f0836912",
+    "semantic_hash": ""
+  },
+  "gate/global.ps1": {
+    "mtime": 1789655715.4372306,
+    "seen": 1789655716.0910175,
+    "ast_hash": "a79ba6578011bb6a8b07307ad1e94ea6",
+    "semantic_hash": ""
+  },
+  "hooks/pre-commit": {
+    "mtime": 1789655715.4382355,
+    "seen": 1789655716.0910227,
+    "ast_hash": "b7aec6cc3c1efe27f4a2770211fd2b27",
+    "semantic_hash": ""
+  },
+  "hooks/pre-merge-commit": {
+    "mtime": 1789655715.4392464,
+    "seen": 1789655716.0910237,
+    "ast_hash": "b7aec6cc3c1efe27f4a2770211fd2b27",
     "semantic_hash": ""
   }
 }

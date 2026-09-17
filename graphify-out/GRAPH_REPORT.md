@@ -1,24 +1,24 @@
 # Graph Report - quality-gate  (2026-09-17)
 
 ## Corpus Check
-- 44 files · ~111,620 words
+- 47 files · ~113,763 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 17 file(s) not represented in the graph (top: (none) 5, .toml 3, .gd 2)
 
 ## Summary
-- 443 nodes · 663 edges · 46 communities (22 shown, 24 thin omitted)
+- 452 nodes · 670 edges · 49 communities (22 shown, 27 thin omitted)
 - Extraction: 93% EXTRACTED · 7% INFERRED · 0% AMBIGUOUS · INFERRED: 46 edges (avg confidence: 0.85)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `4d633376`
+- Built from commit: `80717427`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
 ## Community Hubs (Navigation)
 - harmony.cs
 - detect.ps1
-- qgate wire (repo wiring, config only)
+- quality_gate job anchor shared by both hooks
 - .Scan
 - Lookups
 - selftest.ps1
@@ -47,12 +47,14 @@
 - Mod.csproj
 - MetadataReader
 - .Resolve
-- .golangci.yml template
+- Coverage measures happy paths; a green suite proves nothing
 - .Run
 - gopurity/main.go
 - Hud
 - .Callee
-- Coverage measures happy paths; a green suite proves nothing
+- .golangci.yml template
+- hooks/pre-commit
+- pre-merge-commit
 
 ## God Nodes (most connected - your core abstractions)
 1. `QGateHarmony` - 78 edges
@@ -75,8 +77,8 @@
   templates/ci.yml → README.md
 - `QG_REF tag pin (v1), never main` --semantically_similar_to--> `qgate.json toolchain pinning`  [INFERRED] [semantically similar]
   templates/ci.yml → README.md
-- `Cancellability findings (context propagation)` --conceptually_related_to--> `.golangci.yml template`  [INFERRED]
-  PLAYBOOK.md → templates/.golangci.yml
+- `.golangci.yml template` --references--> `Vulnerability phase (govulncheck / npm audit)`  [EXTRACTED]
+  templates/.golangci.yml → README.md
 
 ## Import Cycles
 - None detected.
@@ -86,7 +88,7 @@
 - **Measured lefthook-on-Windows traps behind one run: line** — templates_lefthook_exit_code_trap, templates_lefthook_cmd_shim, templates_lefthook_command_v_trap, templates_lefthook_quote_stripping_trap, templates_lefthook_quality_gate_job [EXTRACTED 1.00]
 - **Commit-path coverage and the staged-index guard** — handoff_hook_coverage_matrix, handoff_cherry_pick_revert_uncovered, handoff_parallel_commit_race, handoff_git_index_file_marker, readme_staged_index_guard, templates_lefthook_quality_gate_job [INFERRED 0.95]
 
-## Communities (46 total, 24 thin omitted)
+## Communities (49 total, 27 thin omitted)
 
 ### Community 0 - "harmony.cs"
 Cohesion: 0.05
@@ -96,9 +98,9 @@ Nodes (29): Attribute, Fixture, HarmonyLib, system, system_collections_generic, 
 Cohesion: 0.07
 Nodes (21): Find-Marker(), Get-ChecksHash(), Get-CustomChecks(), Get-DefaultTrustStore(), Get-DeployEntries(), Get-GitIgnoredSet(), Get-GoBuiltWith(), Get-GodotBin() (+13 more)
 
-### Community 2 - "qgate wire (repo wiring, config only)"
-Cohesion: 0.07
-Nodes (32): "Gate is wrong" issue template, cherry-pick and revert cannot be covered cheaply, Deliberately chosen boundaries (not TODOs), GIT_INDEX_FILE marks that we are inside a commit, Measured git hook coverage matrix (git 2.53), Incoming agent reports: symptom right, cause wrong half the time, Parallel commits in one worktree swallow each other's staged files, git add --renormalize + checkout is a no-op for CRLF (+24 more)
+### Community 2 - "quality_gate job anchor shared by both hooks"
+Cohesion: 0.17
+Nodes (12): Three rules for a machine-readable deferral file, Suppression needs a named reason; stale suppressions flagged, qgate.deferrals.json (dated deferrals), qgate outdated, -Quiet (silent only on green), Vulnerability phase (govulncheck / npm audit), exhaustive with default-signifies-exhaustive, nolintlint: no bare or dead suppressions (+4 more)
 
 ### Community 3 - ".Scan"
 Cohesion: 0.17
@@ -109,8 +111,8 @@ Cohesion: 0.11
 Nodes (8): FieldInfo, MethodBase, MethodInfo, AccessTools, MethodInfo, ComputedPatch, Lookups, Type
 
 ### Community 5 - "selftest.ps1"
-Cohesion: 0.13
-Nodes (3): Invoke-Smoke(), Invoke-Trust(), Set-OutdatedCache()
+Cohesion: 0.12
+Nodes (5): Invoke-Smoke(), Invoke-Trust(), New-GlobalRepo(), Set-GoFile(), Set-OutdatedCache()
 
 ### Community 6 - "QGateHarmony"
 Cohesion: 0.09
@@ -156,9 +158,9 @@ Nodes (4): MetadataReader, TypeDefinitionHandle, TypeReferenceHandle, TypeSpecif
 Cohesion: 0.20
 Nodes (5): CustomAttribute, CustomAttributeHandleCollection, Target, MethodDefinition, Target
 
-### Community 38 - ".golangci.yml template"
-Cohesion: 0.20
-Nodes (10): Three rules for a machine-readable deferral file, Suppression needs a named reason; stale suppressions flagged, qgate.deferrals.json (dated deferrals), -Quiet (silent only on green), exhaustive with default-signifies-exhaustive, nolintlint: no bare or dead suppressions, qgate.cmd is load-bearing under the Git shell, command -v probe is false under sh.exe (+2 more)
+### Community 38 - "Coverage measures happy paths; a green suite proves nothing"
+Cohesion: 0.17
+Nodes (13): git check-ignore exit codes; --stdin batch unusable on Windows, Selftest counts 121 online / 115 offline, Coverage measures happy paths; a green suite proves nothing, Mutation check of existing tests, PowerShell reads an empty value as absence, Red-then-green verification, A right outcome does not prove the right cause (§0.1), Negative check asserts outcome + applied cause + absent cause (+5 more)
 
 ### Community 40 - "gopurity/main.go"
 Cohesion: 0.18
@@ -172,22 +174,22 @@ Nodes (7): Hud, Health, IDamageable, Player, Unit, AssignablePatch, HealthPatch
 Cohesion: 0.17
 Nodes (7): Gen, IEnumerable, ImmutableArray, MethodSignature, Name, Parent, Sig
 
-### Community 44 - "Coverage measures happy paths; a green suite proves nothing"
-Cohesion: 0.08
-Nodes (28): git check-ignore exit codes; --stdin batch unusable on Windows, GOTOOLCHAIN=auto unpacking races produce 'missing std package', Selftest counts 121 online / 115 offline, Coverage measures happy paths; a green suite proves nothing, Mutation check of existing tests, PowerShell reads an empty value as absence, Red-then-green verification, A right outcome does not prove the right cause (§0.1) (+20 more)
+### Community 44 - ".golangci.yml template"
+Cohesion: 0.05
+Nodes (45): "Gate is wrong" issue template, cherry-pick and revert cannot be covered cheaply, Deliberately chosen boundaries (not TODOs), GIT_INDEX_FILE marks that we are inside a commit, GOTOOLCHAIN=auto unpacking races produce 'missing std package', Measured git hook coverage matrix (git 2.53), Incoming agent reports: symptom right, cause wrong half the time, Parallel commits in one worktree swallow each other's staged files (+37 more)
 
 ## Knowledge Gaps
 - **38 isolated node(s):** `stylelint-config-standard-scss`, `stylelint-config-recommended-vue/scss`, `ignoreFiles`, `net8.0`, `Microsoft.NET.Sdk` (+33 more)
-  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 183 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
-- **24 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 189 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
+- **27 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `QGateHarmony` connect `QGateHarmony` to `harmony.cs`, `.Scan`, `MetadataReader`, `.Resolve`, `.Run`, `.Get`, `.Callee`?**
-  _High betweenness centrality (0.127) - this node is a cross-community bridge._
+  _High betweenness centrality (0.122) - this node is a cross-community bridge._
 - **Why does `Lookups` connect `Lookups` to `harmony.cs`?**
-  _High betweenness centrality (0.025) - this node is a cross-community bridge._
+  _High betweenness centrality (0.024) - this node is a cross-community bridge._
 - **Why does `Get-PathKey()` connect `check.ps1` to `detect.ps1`, `selftest.ps1`?**
   _High betweenness centrality (0.020) - this node is a cross-community bridge._
 - **Are the 5 inferred relationships involving `Invoke-SmokeCheck()` (e.g. with `Invoke-CustomStack()` and `Fail()`) actually correct?**
