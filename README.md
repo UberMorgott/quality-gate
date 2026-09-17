@@ -1685,6 +1685,7 @@ CI должен пинить **тег**, не main — один и тот же �
 bootstrap.ps1            установка гейта на машину (клон + PATH)
 bin/qgate.ps1            единственная точка входа
 bin/qgate.cmd            shim для вызова без pwsh-префикса
+bin/qgate                sh-shim: `qgate` из Git Bash (Stop-хук Claude Code), Linux, macOS
 gate/check.ps1           выбор стеков, фазы, отчёт
 gate/qgate.analyzers.props анализаторы Roslyn, которые dotnet-фаза build вносит в чужую сборку
 gate/qgate.globalconfig  правила анализаторов с severity error по умолчанию, понижены до warning
