@@ -7,6 +7,7 @@
 #   qgate trust           allow this repo's own qgate.json checks to run here
 #   qgate outdated        dependencies and toolchains with a newer release
 #   qgate stop-hook       Claude Code `Stop` hook entry (reads stdin JSON)
+#   qgate hold/release    background writer active: pause the Stop hook (#98)
 #   qgate global on|off   opt-in: gate every repo via global core.hooksPath (#86)
 #   qgate update          git pull in the install directory
 #   qgate selftest        run the gate's own red-then-green self-test
@@ -31,6 +32,10 @@ qgate -- one quality gate for every stack in the repository
                         (-Root <path> for another repo, -Remove to forget them)
   qgate outdated        dependencies and toolchains with a newer release
   qgate stop-hook       Claude Code `Stop` hook entry (reads stdin JSON)
+  qgate hold            a background subagent is still writing: Stop hook off for 15 min
+                        (-Minutes 1..120, `hold status`; `qgate release` ends it early)
+                        commits stay gated -- this only affects the per-turn Stop hook
+  qgate release         end the hold
   qgate global on       every git repo gets the gate (global core.hooksPath; off, status)
                         unwired repos without qgate.json: advisory; opt out: .qgate-off
   qgate update          git pull in the install directory
@@ -62,6 +67,10 @@ switch ($cmd) {
     'run'       { Invoke-Child 'gate\check.ps1'     $rest }
     'outdated'  { Invoke-Child 'gate\outdated.ps1'  $rest }
     'stop-hook' { Invoke-Child 'gate\stop-hook.ps1' $rest }
+    'hold'      { Invoke-Child 'gate\hold.ps1'      $rest }
+    # `release` is the same script: two verbs read better at a call site than `hold off`,
+    # and an agent that has to remember one spelling remembers the wrong one.
+    'release'   { Invoke-Child 'gate\hold.ps1'      (@('off') + $rest) }
     'wire'      { Invoke-Child 'install.ps1'        $rest }
     'trust'     { Invoke-Child 'gate\trust.ps1'     $rest }
     'selftest'  { Invoke-Child 'selftest.ps1'       $rest }
@@ -161,7 +170,7 @@ switch ($cmd) {
         exit 0
     }
     default {
-        [Console]::Error.WriteLine("qgate: unknown command '$cmd'. Try: run, wire, trust, global, outdated, stop-hook, update, selftest, where")
+        [Console]::Error.WriteLine("qgate: unknown command '$cmd'. Try: run, wire, trust, global, outdated, stop-hook, hold, release, update, selftest, where")
         exit 64
     }
 }

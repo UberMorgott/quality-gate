@@ -64,6 +64,22 @@ if ($LASTEXITCODE -ne 0) { $head = $null }
 # swept mark, or a first run. Unknown is treated as moved, on purpose.
 $lastGreen = if (Test-Path $greenFile) { (Get-Content $greenFile -Raw).Trim() } else { '' }
 
+# A background subagent editing this same checkout is a writer the hook must not judge
+# (#98): its half-written tree fails on purpose -- a red TDD phase does not compile -- and
+# the FAIL lands on the LEAD agent, which must not touch those files at all. `qgate hold`
+# says so out loud; see gate/hold.ps1 for why an explicit marker and not a heuristic.
+# QGATE_HOLD covers the harness-configured case, where the env var is all there is.
+$hold = if ($env:QGATE_HOLD -in '1', 'true', 'yes') { 'QGATE_HOLD' } else {
+    $u = Get-QGateHoldUntil $root
+    if ($u) { "until $($u.ToString('HH:mm:ss'))" }
+}
+if ($hold) {
+    # Exit 0 and no gate run at all: the green mark is left alone, because no green run
+    # happened and the next unheld turn still owes the check.
+    [Console]::Error.WriteLine("Quality gate skipped: qgate hold is active ($hold) -- a background writer owns this tree. Commits are still gated; qgate release ends the hold.")
+    exit 0
+}
+
 $argv = @('-Root', $root, '-Fast', '-Quiet')
 if ($head -and $head -ne $lastGreen) { $argv += '-All' }
 
@@ -87,5 +103,23 @@ if ($blocks -gt $MaxBlocks) {
     exit 0
 }
 
-[Console]::Error.WriteLine("Quality gate failed. Fix these before finishing:`n$out")
+# Whose failure is this? A file written seconds ago can still be mid-edit by a background
+# subagent, and then the fix is NOT for this agent to make: two writers on one file lose
+# edits. Freshness alone is no excuse -- an agent that edits and ends its turn at once is
+# the normal case, so the gate still blocks -- but it is worth naming, with the way out.
+$fresh = @(& git -C $root status --porcelain 2>$null | ForEach-Object {
+        if ($_.Length -lt 4) { return }
+        # Rename entries read `R  old -> new`, and any path with a space comes quoted.
+        $p = (($_.Substring(3) -split ' -> ')[-1]).Trim('"')
+        $f = Get-Item -LiteralPath (Join-Path $root $p) -ErrorAction SilentlyContinue
+        if ($f -and -not $f.PSIsContainer) { $f }
+    } | Sort-Object LastWriteTime -Descending | Select-Object -First 1)
+$hint = ''
+if ($fresh) {
+    $age = ((Get-Date) - $fresh[0].LastWriteTime).TotalSeconds
+    if ($age -ge 0 -and $age -lt 20) {
+        $hint = "`n[NOTE] $($fresh[0].Name) was written $([int]$age)s ago. If a background subagent is still editing this tree, do not edit these files -- run ``qgate hold`` before ending the turn and ``qgate release`` when it finishes."
+    }
+}
+[Console]::Error.WriteLine("Quality gate failed. Fix these before finishing:`n$out$hint")
 exit 2

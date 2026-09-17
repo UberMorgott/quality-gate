@@ -1,8 +1,8 @@
 {
   "bin/qgate.ps1": {
-    "mtime": 1789659590.0546508,
-    "seen": 1789662416.1471303,
-    "ast_hash": "74763dec686d2af59c9f0a646aca69e3",
+    "mtime": 1789668702.564645,
+    "seen": 1789670231.7318752,
+    "ast_hash": "183b8c705bc2fe9e7295ca76b9149dab",
     "semantic_hash": ""
   },
   "bootstrap.ps1": {
@@ -12,15 +12,15 @@
     "semantic_hash": ""
   },
   "gate/check.ps1": {
-    "mtime": 1789667215.8842509,
-    "seen": 1789667348.665478,
-    "ast_hash": "7e4e7d70c7a03b3e4a064ecd481c77a9",
+    "mtime": 1789669750.2423375,
+    "seen": 1789670231.7318797,
+    "ast_hash": "09fe24fbe1c263d49c084f44774fc3d0",
     "semantic_hash": ""
   },
   "gate/detect.ps1": {
-    "mtime": 1789667191.3010724,
-    "seen": 1789667348.6654792,
-    "ast_hash": "7764437282f25bd884d8283071304152",
+    "mtime": 1789669087.470578,
+    "seen": 1789670231.7318807,
+    "ast_hash": "4fcc9fa636f5019f9fb7171e5c8c384c",
     "semantic_hash": ""
   },
   "gate/outdated.ps1": {
@@ -30,10 +30,10 @@
     "semantic_hash": ""
   },
   "gate/stop-hook.ps1": {
-    "mtime": 1788334396.817514,
-    "seen": 1788781201.438937,
-    "ast_hash": "e724ea899447135164037779e7eb5931",
-    "semantic_hash": "e724ea899447135164037779e7eb5931"
+    "mtime": 1789668686.252327,
+    "seen": 1789670231.7318892,
+    "ast_hash": "b66a862b27a13e982d87925f47667105",
+    "semantic_hash": ""
   },
   "install.ps1": {
     "mtime": 1789666192.1519427,
@@ -42,8 +42,8 @@
     "semantic_hash": ""
   },
   "selftest.ps1": {
-    "mtime": 1789667261.3592873,
-    "seen": 1789667348.6654875,
+    "mtime": 1789670228.1966321,
+    "seen": 1789670231.7318938,
     "ast_hash": "3206d8cc1062dbd357f40ff841dc4b49",
     "semantic_hash": ""
   },
@@ -126,8 +126,8 @@
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1789667340.2557583,
-    "seen": 1789667348.6655064,
+    "mtime": 1789670228.198001,
+    "seen": 1789670231.7319183,
     "ast_hash": "1f0177ccf8d833dda54e54bee5feeb64",
     "semantic_hash": ""
   },
@@ -321,6 +321,12 @@
     "mtime": 1789661239.790755,
     "seen": 1789662416.1471455,
     "ast_hash": "2ac8437b53cf8db9e606659e710118aa",
+    "semantic_hash": ""
+  },
+  "gate/hold.ps1": {
+    "mtime": 1789668648.07928,
+    "seen": 1789670231.7318861,
+    "ast_hash": "29d602a485955e3ea1d5fd1cb968fb61",
     "semantic_hash": ""
   }
 }

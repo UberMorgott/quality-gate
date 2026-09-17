@@ -221,6 +221,27 @@ function Get-PathKey([string]$Text) {
             [Text.Encoding]::UTF8.GetBytes($Text.ToLowerInvariant()))).Replace('-', '')
 }
 
+# The `qgate hold` marker for a repo: the expiry it was set with, or $null when no hold
+# is active. Shared by gate/hold.ps1 and the Stop hook so both agree on the file name and
+# on what an unreadable or expired marker means -- nothing held. An expired marker is
+# deleted here: a hold nobody released must not sit in TEMP looking active to `status`.
+function Get-QGateHoldUntil([string]$Root) {
+    $file = Join-Path ([IO.Path]::GetTempPath()) "quality-gate-stop-hold-$(Get-PathKey $Root).txt"
+    if (-not (Test-Path $file)) { return $null }
+    # Typed, not $null: the 4-argument TryParse takes an `out DateTime`, and an untyped
+    # [ref] made PowerShell report "Cannot find an overload for TryParse".
+    $until = [datetime]::MinValue
+    # Round-trip format and InvariantCulture: the marker is written by one process and read
+    # by another, and ru-RU here parses `2026-09-17T14:03:11` differently than en-US.
+    if (-not [datetime]::TryParse((Get-Content $file -Raw).Trim(), [Globalization.CultureInfo]::InvariantCulture,
+            [Globalization.DateTimeStyles]::RoundtripKind, [ref]$until)) {
+        Remove-Item $file -ErrorAction SilentlyContinue
+        return $null
+    }
+    if ($until -lt (Get-Date)) { Remove-Item $file -ErrorAction SilentlyContinue; return $null }
+    $until
+}
+
 # The Godot editor binary is almost never on PATH on Windows (no installer, no
 # stable name), so GODOT_BIN is the primary answer and PATH the fallback.
 # A tool binary built by an older Go than the module targets fails, but never with
