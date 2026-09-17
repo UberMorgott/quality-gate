@@ -1,17 +1,17 @@
 # Graph Report - quality-gate  (2026-09-17)
 
 ## Corpus Check
-- 47 files · ~113,763 words
+- 48 files · ~115,184 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 17 file(s) not represented in the graph (top: (none) 5, .toml 3, .gd 2)
 
 ## Summary
-- 452 nodes · 670 edges · 49 communities (22 shown, 27 thin omitted)
+- 451 nodes · 669 edges · 49 communities (22 shown, 27 thin omitted)
 - Extraction: 93% EXTRACTED · 7% INFERRED · 0% AMBIGUOUS · INFERRED: 46 edges (avg confidence: 0.85)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `80717427`
+- Built from commit: `50cfdde3`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -111,7 +111,7 @@ Cohesion: 0.11
 Nodes (8): FieldInfo, MethodBase, MethodInfo, AccessTools, MethodInfo, ComputedPatch, Lookups, Type
 
 ### Community 5 - "selftest.ps1"
-Cohesion: 0.12
+Cohesion: 0.13
 Nodes (5): Invoke-Smoke(), Invoke-Trust(), New-GlobalRepo(), Set-GoFile(), Set-OutdatedCache()
 
 ### Community 6 - "QGateHarmony"
@@ -180,14 +180,14 @@ Nodes (45): "Gate is wrong" issue template, cherry-pick and revert cannot be cov
 
 ## Knowledge Gaps
 - **38 isolated node(s):** `stylelint-config-standard-scss`, `stylelint-config-recommended-vue/scss`, `ignoreFiles`, `net8.0`, `Microsoft.NET.Sdk` (+33 more)
-  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 189 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
+  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 188 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
 - **27 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `QGateHarmony` connect `QGateHarmony` to `harmony.cs`, `.Scan`, `MetadataReader`, `.Resolve`, `.Run`, `.Get`, `.Callee`?**
-  _High betweenness centrality (0.122) - this node is a cross-community bridge._
+  _High betweenness centrality (0.123) - this node is a cross-community bridge._
 - **Why does `Lookups` connect `Lookups` to `harmony.cs`?**
   _High betweenness centrality (0.024) - this node is a cross-community bridge._
 - **Why does `Get-PathKey()` connect `check.ps1` to `detect.ps1`, `selftest.ps1`?**

@@ -1,8 +1,8 @@
 {
   "bin/qgate.ps1": {
-    "mtime": 1789655715.4372306,
-    "seen": 1789655716.091012,
-    "ast_hash": "f6c1fb6ef6dfa9679819386f50d3c03b",
+    "mtime": 1789659590.0546508,
+    "seen": 1789662416.1471303,
+    "ast_hash": "74763dec686d2af59c9f0a646aca69e3",
     "semantic_hash": ""
   },
   "bootstrap.ps1": {
@@ -12,9 +12,9 @@
     "semantic_hash": ""
   },
   "gate/check.ps1": {
-    "mtime": 1789655587.5376115,
-    "seen": 1789655716.0910156,
-    "ast_hash": "6565a812a72a893ab4b08192adbb4415",
+    "mtime": 1789661239.7443216,
+    "seen": 1789662416.1471343,
+    "ast_hash": "7563e1032e71462aaab7c2eb8eca1028",
     "semantic_hash": ""
   },
   "gate/detect.ps1": {
@@ -42,9 +42,9 @@
     "semantic_hash": ""
   },
   "selftest.ps1": {
-    "mtime": 1789655715.4392464,
-    "seen": 1789655716.0910249,
-    "ast_hash": "e4616662d06a17bd02db8eec57f7900a",
+    "mtime": 1789659634.2469711,
+    "seen": 1789662416.1471446,
+    "ast_hash": "1d7b2310f14032062588a9e9ca968aac",
     "semantic_hash": ""
   },
   "templates/.stylelintrc.json": {
@@ -126,9 +126,9 @@
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1789655918.903907,
-    "seen": 1789655925.6957648,
-    "ast_hash": "b520bb7405f8f590355bd66c7552970d",
+    "mtime": 1789658831.5733485,
+    "seen": 1789662416.1471672,
+    "ast_hash": "184d84922a93b921e88f6631c4e69cf2",
     "semantic_hash": ""
   },
   "templates/.golangci.yml": {
@@ -306,15 +306,21 @@
     "semantic_hash": ""
   },
   "hooks/pre-commit": {
-    "mtime": 1789655715.4382355,
-    "seen": 1789655716.0910227,
-    "ast_hash": "b7aec6cc3c1efe27f4a2770211fd2b27",
+    "mtime": 1789657390.0671527,
+    "seen": 1789662416.1471424,
+    "ast_hash": "c9725d3e93819b9cf547e0f0b4084a91",
     "semantic_hash": ""
   },
   "hooks/pre-merge-commit": {
-    "mtime": 1789655715.4392464,
-    "seen": 1789655716.0910237,
-    "ast_hash": "b7aec6cc3c1efe27f4a2770211fd2b27",
+    "mtime": 1789657390.0671527,
+    "seen": 1789662416.147143,
+    "ast_hash": "c9725d3e93819b9cf547e0f0b4084a91",
+    "semantic_hash": ""
+  },
+  "templates/.editorconfig-checker.json": {
+    "mtime": 1789661239.790755,
+    "seen": 1789662416.1471455,
+    "ast_hash": "2ac8437b53cf8db9e606659e710118aa",
     "semantic_hash": ""
   }
 }
