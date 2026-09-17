@@ -16,7 +16,11 @@
 #
 # -Only runs just the named sections, for iterating on one stack (#81). The full run
 # with no -Only stays the push gate.
-param([string[]]$Only)
+#
+# Sections run as parallel child processes (#84): the run is waiting on processes, not
+# CPU, so one section at a time left the cores idle. -Sequential runs everything in this
+# process, as before. -SectionTimeoutSec bounds each child.
+param([string[]]$Only, [switch]$Sequential, [int]$SectionTimeoutSec = 1500)
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'gate\detect.ps1')
 
@@ -25,6 +29,63 @@ $sections = 'detect', 'go', 'core', 'wiring', 'rust', 'dotnet', 'proto', 'godot'
 $Only = @($Only -split ',' | ForEach-Object Trim | Where-Object { $_ })
 $bad = @($Only | Where-Object { $_ -notin $sections })
 if ($bad) { Write-Output "unknown section(s): $($bad -join ', '); valid: $($sections -join ', ')"; exit 2 }
+
+if (-not $Sequential -and $Only.Count -ne 1) {
+    $run = @(if ($Only) { $sections | Where-Object { $_ -in $Only } } else { $sections })
+    # base runs the cpp section itself (it reuses that fixture); a separate cpp job would
+    # count those checks twice.
+    if ('base' -in $run) { $run = @($run | Where-Object { $_ -ne 'cpp' }) }
+    $ptmp = Join-Path ([IO.Path]::GetTempPath()) "quality-gate-selftest-par-$([guid]::NewGuid())"
+    New-Item -ItemType Directory -Path $ptmp | Out-Null
+    $self = $PSCommandPath
+    $jobs = foreach ($s in $run) {
+        $dir = Join-Path $ptmp $s
+        New-Item -ItemType Directory -Path $dir | Out-Null
+        [pscustomobject]@{ Name = $s; Dir = $dir; Out = Join-Path $ptmp "$s.out"; Proc = $null; Watch = $null; TimedOut = $false }
+    }
+    $sw = [Diagnostics.Stopwatch]::StartNew()
+    $throttle = [Math]::Max(2, [Environment]::ProcessorCount)
+    while ($jobs | Where-Object { -not $_.Proc -or -not $_.Proc.HasExited }) {
+        $jobs | Where-Object { $_.Proc -and $_.Proc.HasExited } | ForEach-Object { $_.Watch.Stop() }
+        foreach ($j in @($jobs | Where-Object { $_.Proc -and -not $_.Proc.HasExited -and $_.Watch.Elapsed.TotalSeconds -gt $SectionTimeoutSec })) {
+            $j.TimedOut = $true
+            try { $j.Proc.Kill($true) } catch { Write-Verbose "kill $($j.Name): $_" }
+        }
+        $busy = @($jobs | Where-Object { $_.Proc -and -not $_.Proc.HasExited }).Count
+        foreach ($j in @($jobs | Where-Object { -not $_.Proc } | Select-Object -First ($throttle - $busy))) {
+            # Own TEMP per child: the gate keys temp files and tools keep lock files there
+            # (golangci-lint's parallel-runner lock), which concurrent sections must not share.
+            $cmd = "`$env:TMP = `$env:TEMP = '$($j.Dir)'; & '$self' -Only $($j.Name) -Sequential *> '$($j.Out)'; exit `$LASTEXITCODE"
+            $j.Proc = Start-Process pwsh -ArgumentList '-NoProfile', '-Command', $cmd -PassThru -WindowStyle Hidden
+            $j.Watch = [Diagnostics.Stopwatch]::StartNew()
+        }
+        Start-Sleep -Milliseconds 500
+    }
+    $jobs | ForEach-Object { $_.Watch.Stop() }
+    $total = 0; $fails = 0
+    foreach ($j in $jobs) {
+        $text = if (Test-Path $j.Out) { Get-Content $j.Out -Raw } else { '' }
+        $secs = [int]$j.Watch.Elapsed.TotalSeconds
+        Write-Output "===== section $($j.Name) ($secs s, exit $($j.Proc.ExitCode))"
+        Write-Output $text.TrimEnd()
+        # Every job must end in the summary line; a crash, hang or kill without one is a
+        # failed section, never a silently missing one.
+        if ($text -match '(?m)^all checks passed \((\d+)/\d+\)') { $total += [int]$Matches[1] }
+        elseif ($text -match '(?m)^(\d+) of (\d+) check\(s\) failed') { $total += [int]$Matches[2]; $fails += [int]$Matches[1] }
+        # Every check of the section skipped for a missing tool: nothing counted, as in a sequential run.
+        elseif ($text -match '(?m)^no checks ran') { Write-Verbose "section $($j.Name): no checks ran" }
+        else {
+            $why = if ($j.TimedOut) { "timed out after $SectionTimeoutSec s" } else { "exited $($j.Proc.ExitCode) without a summary" }
+            Write-Output "[FAIL] section $($j.Name) $why"; $total++; $fails++
+        }
+    }
+    Remove-Item $ptmp -Recurse -Force -ErrorAction SilentlyContinue
+    Write-Output "`nwall time $([int]$sw.Elapsed.TotalSeconds) s, $($jobs.Count) section job(s)"
+    if ($total -eq 0) { Write-Output "`nno checks ran"; exit 1 }
+    if ($fails) { Write-Output "`n$fails of $total check(s) failed"; exit 1 }
+    Write-Output "`nall checks passed ($total/$total)"
+    exit 0
+}
 # base reuses the cpp fixture section 36 builds.
 $want = @($Only) + @(if ('base' -in $Only) { 'cpp' })
 function Want([string]$Name) { (-not $Only) -or ($Name -in $want) }
@@ -2063,19 +2124,33 @@ git -C $cc -c user.email=selftest@local -c user.name=selftest commit -qm base --
 Set-Content (Join-Path $cc 'a.txt') 'a'
 git -C $cc add a.txt 2>$null
 $ccBefore = (git -C $cc rev-parse HEAD)
-$ccJob = Start-Job -ScriptBlock { param($r)
-    git -C $r -c user.email=a@local -c user.name=a commit -m 'A' 2>&1 | Out-String
-} -ArgumentList $cc
-Start-Sleep -Milliseconds 1500
+$ccLog = Join-Path $tmp 'concurrent-commit.out'
+$ccProc = Start-Process git -ArgumentList '-C', $cc, '-c', 'user.email=a@local', '-c', 'user.name=a', 'commit', '-m', 'A' `
+    -RedirectStandardOutput $ccLog -RedirectStandardError "$ccLog.err" -PassThru -NoNewWindow
+# Stage b.txt only once the hook is really running -- a fixed sleep lost the race under
+# load (#84: sections in parallel), staging before A's commit had even read the index.
+# The hook is a descendant of that git process that is not git itself.
+function Test-HookRunning([int]$RootPid) {
+    $all = @(Get-Process)
+    $ids = @{ $RootPid = $true }
+    do {
+        $n = $ids.Count
+        foreach ($p in $all) { if ($p.Parent -and $ids[$p.Parent.Id]) { $ids[$p.Id] = $true } }
+    } while ($ids.Count -ne $n)
+    [bool]($all | Where-Object { $ids[$_.Id] -and $_.Id -ne $RootPid -and $_.ProcessName -ne 'git' })
+}
+$ccWatch = [Diagnostics.Stopwatch]::StartNew()
+while (-not $ccProc.HasExited -and -not (Test-HookRunning $ccProc.Id) -and $ccWatch.Elapsed.TotalSeconds -lt 120) { Start-Sleep -Milliseconds 200 }
+Start-Sleep -Milliseconds 500
 # If the gate already finished there was no race to observe, and asserting anything
 # about one would be asserting nothing. Skipped out loud rather than counted.
-$ccRacing = ($ccJob.State -eq 'Running')
+$ccRacing = -not $ccProc.HasExited
 if ($ccRacing) {
     Set-Content (Join-Path $cc 'b.txt') 'b'
     git -C $cc add b.txt 2>$null
 }
-$ccOut = (Receive-Job -Job $ccJob -Wait | Out-String)
-Remove-Job $ccJob
+$ccProc.WaitForExit()
+$ccOut = (Get-Content $ccLog, "$ccLog.err" -Raw -ErrorAction SilentlyContinue) -join ''
 if ($ccRacing) {
     Check 'a commit whose staged files changed under it is refused' `
         (((git -C $cc rev-parse HEAD) -eq $ccBefore) -and ($ccOut -match 'staged files changed while the gate was running')) $ccOut
@@ -3674,3 +3749,4 @@ Remove-Item $tmp -Recurse -Force
 if ($script:Total -eq 0) { Write-Output "`nno checks ran"; exit 1 }
 if ($script:Fails) { Write-Output "`n$($script:Fails) of $($script:Total) check(s) failed"; exit 1 }
 Write-Output "`nall checks passed ($($script:Total)/$($script:Total))"
+exit 0
