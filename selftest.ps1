@@ -3443,6 +3443,23 @@ const raw = "" +
     $out = (& pwsh -NoProfile -File $gate -Root $tl -Only base -Full -Baseline HEAD 2>&1 | Out-String)
     Check '-Baseline still fails a typo on a changed line' `
         (($LASTEXITCODE -ne 0) -and ($out -match '\[FAIL\] typos') -and ($out -match 'notes\.txt:3:') -and ($out -notmatch 'notes\.txt:1:')) "code=$LASTEXITCODE $out"
+    # #80: the same baseline committed in qgate.json, so the hook's fixed command line uses it.
+    $tlJson = Join-Path $tl 'qgate.json'
+    $tlHead = (git -C $tl rev-parse HEAD)
+    [IO.File]::WriteAllText($tlJson, "{`"baseline`": `"$tlHead`"}")
+    try {
+        $out = (& pwsh -NoProfile -File $gate -Root $tl -Only base -Full 2>&1 | Out-String)
+        Check 'qgate.json baseline still fails a typo on a changed line' `
+            (($LASTEXITCODE -ne 0) -and ($out -match 'notes\.txt:3:') -and ($out -notmatch 'notes\.txt:1:') -and
+                ($out -match "\[NOTE\] baseline $tlHead from qgate\.json")) "code=$LASTEXITCODE $out"
+        [IO.File]::WriteAllText($tlFile, "you will $typo this`nclean line`nanother clean line`n")
+        $out = (& pwsh -NoProfile -File $gate -Root $tl -Only base -Full -Quiet 2>&1 | Out-String)
+        Check 'qgate.json baseline hides a typo on an untouched line (hook run)' (($LASTEXITCODE -eq 0) -and ($out -notmatch $typo)) "code=$LASTEXITCODE $out"
+        [IO.File]::WriteAllText($tlJson, '{"baseline": "no-such-rev"}')
+        $out = (& pwsh -NoProfile -File $gate -Root $tl -Only base -Full -Quiet 2>&1 | Out-String)
+        Check 'an unresolvable qgate.json baseline fails and names its source' `
+            (($LASTEXITCODE -ne 0) -and ($out -match 'baseline revision not found: no-such-rev \(qgate\.json "baseline"\)')) "code=$LASTEXITCODE $out"
+    } finally { Remove-Item $tlJson -Force }
     # A tool that fails with nothing attributable is never filtered to green.
     $tyShim = Join-Path $tmp 'typos-crash-shim'
     New-Item -ItemType Directory -Path $tyShim -Force | Out-Null

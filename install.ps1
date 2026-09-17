@@ -388,7 +388,10 @@ Write-Output "gate      -- RED (exit $runCode): the pre-commit hook will refuse 
 $runLines | Where-Object { $_ -match '^\[(FAIL|WARN)\]' } | ForEach-Object { Write-Output "            $_" }
 Write-Output '  adopt:  full report: qgate -All -Full. Existing debt, not a reason for --no-verify'
 Write-Output "          (README `"Внедрение на существующей базе`", $(Join-Path $PSScriptRoot 'README.md')):"
-Write-Output '          - only findings newer than a revision: qgate -All -Baseline <rev> (a CLI flag; the hooks do not use it)'
+$head = (& git -C $root rev-parse --verify --quiet HEAD 2>$null)
+$rev = if ($head) { "$head" } else { '<commit sha>' }
+Write-Output "          - only findings newer than a revision, hooks and CI included: qgate.json `"baseline`": `"$rev`""
+Write-Output '            (a commit sha, not a branch; one run: qgate -All -Baseline <rev>)'
 if ($failed -contains 'typos') {
     Write-Output '          - typos false positives: your own _typos.toml at the repo root ([default.extend-words])'
 }

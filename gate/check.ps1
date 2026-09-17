@@ -401,11 +401,24 @@ if ($ParallelStacks) {
     }
 }
 
+# #80: a committed baseline. -Baseline is a CLI flag, so the hooks -- which run a fixed
+# command line -- could not use it, and wire on a legacy repository left the first
+# commit refused. qgate.json "baseline": "<rev>" is the opt-in the hooks and CI read;
+# an explicit -Baseline still wins. Said on every run: it hides findings.
+$baselineFrom = ''
+if (-not $Baseline -and (Test-Path $pinFile)) {
+    try { $jsonBaseline = (Get-Content $pinFile -Raw | ConvertFrom-Json).baseline } catch { $jsonBaseline = $null }
+    if ($jsonBaseline -is [string] -and $jsonBaseline.Trim()) {
+        $Baseline = $jsonBaseline.Trim()
+        $baselineFrom = ' (qgate.json "baseline")'
+        if (-not $Quiet) { Write-Output "[NOTE] baseline $Baseline from qgate.json -- findings on lines unchanged since it are hidden" }
+    }
+}
 # A baseline that does not resolve would surface as a confusing linter error deep
 # in the run; say so here instead.
 if ($Baseline) {
     & git -C $Root rev-parse --verify --quiet "$Baseline^{commit}" *> $null
-    if ($LASTEXITCODE -ne 0) { Write-Output "[FAIL] baseline revision not found: $Baseline"; exit 1 }
+    if ($LASTEXITCODE -ne 0) { Write-Output "[FAIL] baseline revision not found: $Baseline$baselineFrom"; exit 1 }
     $script:BaselineLines = Get-BaselineLines $Root $Baseline
 }
 
