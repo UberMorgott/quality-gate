@@ -1613,6 +1613,24 @@ Check 'the wired doc ends with exactly one newline' `
     (($agentsAfter[-1] -eq 10) -and ($agentsAfter[-2] -ne 10)) `
     ("tail=" + [BitConverter]::ToString($agentsAfter[-4..-1]))
 
+# #85: AGENTS.md tracked as a git symlink to CLAUDE.md, checked out with
+# core.symlinks=false as a plain file holding the target path. Wire must leave it alone
+# (writing the block broke the link on every other platform) and still wire CLAUDE.md.
+$linkRepo = Join-Path $tmp 'wire-symlink'
+New-Item -ItemType Directory -Path $linkRepo | Out-Null
+git -C $linkRepo init -q 2>$null
+git -C $linkRepo config core.symlinks false
+Set-Content (Join-Path $linkRepo 'CLAUDE.md') '# project'
+$blob = ('CLAUDE.md' | git -C $linkRepo hash-object -w --stdin)
+git -C $linkRepo update-index --add --cacheinfo "120000,$blob,AGENTS.md"
+git -C $linkRepo checkout -- AGENTS.md 2>$null
+$linkOut = (& pwsh -NoProfile -File $installer -Target $linkRepo -NoRun -NoHook 2>&1 | Out-String)
+Check 'wire leaves a symlinked AGENTS.md untouched' `
+    (([IO.File]::ReadAllText((Join-Path $linkRepo 'AGENTS.md')).Trim() -eq 'CLAUDE.md') -and
+     ($linkOut -match 'AGENTS\.md\s+-- symlink to CLAUDE\.md')) $linkOut
+Check 'wire still writes the block into the symlink target' `
+    ((Get-Content (Join-Path $linkRepo 'CLAUDE.md') -Raw) -match '<!-- quality-gate -->') $linkOut
+
 # A lefthook.yml this installer wrote at an OLDER version is not a foreign file, but
 # "kept existing lefthook.yml" said the same thing about both. When pre-merge-commit
 # was added to the template, every already-wired repo kept its pre-commit-only config

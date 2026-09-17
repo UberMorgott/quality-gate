@@ -227,6 +227,17 @@ gh issue create --repo UberMorgott/quality-gate --title "<what broke>" --body "<
 # long project guidance below must not bury it.
 function Set-AgentDoc([string]$name) {
     $file = Join-Path $root $name
+    # A doc git tracks as a symlink (mode 120000, AGENTS.md -> CLAUDE.md) is a plain file
+    # holding the target path on Windows with core.symlinks=false. Writing the block into
+    # it turned the link into a regular file for every other platform (#85); the target
+    # gets the block on its own.
+    $item = Get-Item -LiteralPath $file -Force -ErrorAction SilentlyContinue
+    $staged = git -C $root ls-files -s -- $name 2>$null
+    if (($item -and $item.LinkType) -or ("$staged" -match '^120000 ')) {
+        $target = if ($item.LinkTarget) { $item.LinkTarget } elseif ($item) { "$(Get-Content -LiteralPath $file -Raw)".Trim() } else { '?' }
+        Write-Output "$($name.PadRight(9)) -- symlink to $target, left as is"
+        return
+    }
     # Compared with CRLF folded away. The block this writes is LF, so a file that git
     # checked out as CRLF -- which `* text=auto` plus core.autocrlf=true does to every
     # doc in the repo -- never equalled it, and wire rewrote a file it had nothing to
