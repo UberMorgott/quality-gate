@@ -1,7 +1,7 @@
 {
   "0": "harmony.cs",
   "1": "detect.ps1",
-  "2": "GitHub Actions quality-gate workflow",
+  "2": "qgate wire (repo wiring, config only)",
   "3": ".Scan",
   "4": "Lookups",
   "5": "selftest.ps1",
@@ -37,6 +37,7 @@
   "35": "app.ps1",
   "36": "MetadataReader",
   "37": ".Resolve",
+  "38": "Coverage measures happy paths; a green suite proves nothing",
   "39": ".Run",
   "40": "gopurity/main.go",
   "41": "Hud",
