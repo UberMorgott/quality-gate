@@ -2133,19 +2133,20 @@ $ccProc = Start-Process git -ArgumentList '-C', $cc, '-c', 'user.email=a@local',
     -RedirectStandardOutput $ccLog -RedirectStandardError "$ccLog.err" -PassThru -NoNewWindow
 # Stage b.txt only once the hook is really running -- a fixed sleep lost the race under
 # load (#84: sections in parallel), staging before A's commit had even read the index.
-# The hook is a descendant of that git process that is not git itself.
+# "Really running" is past the gate's `git write-tree` snapshot: the gate (check.ps1) has
+# started a tool that is not git. A non-git descendant of the commit alone was lefthook,
+# and under load b.txt still went in before the snapshot (measured: A committed both files).
 function Test-HookRunning([int]$RootPid) {
-    $all = @(Get-Process)
-    $ids = @{ $RootPid = $true }
-    do {
-        $n = $ids.Count
-        foreach ($p in $all) { if ($p.Parent -and $ids[$p.Parent.Id]) { $ids[$p.Id] = $true } }
-    } while ($ids.Count -ne $n)
-    [bool]($all | Where-Object { $ids[$_.Id] -and $_.Id -ne $RootPid -and $_.ProcessName -ne 'git' })
+    $all = @(Get-CimInstance Win32_Process -Property ProcessId, ParentProcessId, Name, CommandLine)
+    $kids = @{}
+    foreach ($p in $all) { if ($p.ProcessId -ne $p.ParentProcessId) { $kids[[int]$p.ParentProcessId] += @($p) } }
+    $below = { param($Id) $q = [Collections.Generic.Queue[int]]::new(); $q.Enqueue($Id)
+        while ($q.Count) { foreach ($k in @($kids[$q.Dequeue()] | Where-Object { $_ })) { $k; $q.Enqueue([int]$k.ProcessId) } } }
+    $gatePs = @(& $below $RootPid | Where-Object { "$($_.CommandLine)" -match 'check\.ps1' })
+    [bool]($gatePs | ForEach-Object { & $below $_.ProcessId } | Where-Object { $_.Name -ne 'git.exe' -and $_.Name -ne 'conhost.exe' })
 }
 $ccWatch = [Diagnostics.Stopwatch]::StartNew()
 while (-not $ccProc.HasExited -and -not (Test-HookRunning $ccProc.Id) -and $ccWatch.Elapsed.TotalSeconds -lt 120) { Start-Sleep -Milliseconds 200 }
-Start-Sleep -Milliseconds 500
 # If the gate already finished there was no race to observe, and asserting anything
 # about one would be asserting nothing. Skipped out loud rather than counted.
 $ccRacing = -not $ccProc.HasExited
