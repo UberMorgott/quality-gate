@@ -19,6 +19,7 @@ param(
     [switch]$Why,         # provenance: which marker file created (or did not create) each phase
     [string]$Baseline,    # git rev: report only issues newer than it (adoption on a dirty codebase)
     [switch]$Mutate,      # on demand only: Go mutation testing (gremlins), advisory; scoped by -Baseline
+    [switch]$Fix,         # explicit only, never from a hook: gofmt -w + golangci-lint --fix on Go stacks, then the normal gate
     [string]$Root,        # repo root; defaults to the git root of the cwd
     [string]$Sarif,       # opt-in: also write the report as SARIF 2.1.0 to this file; stdout unchanged
     [switch]$Parallel,    # opt-in: run independent stacks (go web rust dotnet cpp godot) as concurrent child processes
@@ -569,6 +570,16 @@ function Test-VulnAcks { [bool]@(Read-Deferrals $Root 'vulnerabilities' 'id').Co
 # --- stack runners ---------------------------------------------------------
 function Invoke-GoStack($s) {
     Set-Location $s.Dir
+    # quality-gate#44: -Fix rewrites first, then the unchanged phases below judge the
+    # result. Only an explicit `qgate -Fix` does this -- hooks and CI never pass it, so
+    # the gate itself still reports rather than rewrites (linters run without --fix).
+    if ($Fix) {
+        $fmt = @(gofmt -l . | Where-Object { -not (Test-GitIgnored $s.Dir (Join-Path $s.Dir $_)) })
+        if ($fmt) { gofmt -w @fmt }
+        $lint = if (Have 'golangci-lint') { golangci-lint run --fix ./... *> $null; 'golangci-lint --fix applied' } else { 'golangci-lint not on PATH' }
+        $global:LASTEXITCODE = 0
+        $script:Lines += "[INFO] fix: gofmt rewrote $($fmt.Count) file(s), $lint -- the gate below judges the result"
+    }
     # gofmt exits 0 even when it lists unformatted files -> failure is "any output".
     # It is also the one Go phase with no notion of modules or ignore rules: `.` means
     # the whole subtree. Claude Code checks agent worktrees out under

@@ -918,6 +918,11 @@ git-worktree, `base` не получает вовсе и по-прежнему �
 (и на Linux тоже). Падение выглядит так: `[FAIL] go-386` и
 `cannot use 1 << 31 (untyped int constant 2147483648) as int value in assignment (overflows)`.
 
+**`qgate -Fix` (только явный вызов).** Перед фазами Go-стека `gofmt -w` по файлам, которые назвал
+бы `gofmt -l` (gitignored — мимо), и `golangci-lint run --fix ./...`; строка
+`[INFO] fix: gofmt rewrote N file(s), ...` (видна в отчёте красного стека), дальше обычный гейт судит результат — неисправимое
+по-прежнему `[FAIL]`. Хуки и CI `-Fix` не передают: сам гейт не переписывает файлы.
+
 **Другая ОС (opt-in, `go.lintGoos`).** Файлы `_linux.go`/`_windows.go` и `//go:build` под чужую ОС
 хост не компилирует, и их дефекты впервые видит CI. `{"go": {"lintGoos": ["linux"]}}` в
 `qgate.json` — на `-Full` после обычного golangci-lint идут `go vet GOOS=linux` и

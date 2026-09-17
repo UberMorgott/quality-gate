@@ -34,10 +34,12 @@ qgate -- one quality gate for every stack in the repository
   qgate selftest        the gate's own red-then-green self-test
   qgate where           install path, commit and the tool versions in use
 
-Gate flags: -All  -Fast  -Full  -Only <stack[,stack]>  -Quiet  -Why  -Baseline <rev>  -Mutate  -Root <path>  -Sarif <file>  -Parallel
+Gate flags: -All  -Fast  -Full  -Only <stack[,stack]>  -Quiet  -Why  -Baseline <rev>  -Mutate  -Fix  -Root <path>  -Sarif <file>  -Parallel
   -Quiet prints nothing on a green run and the whole report on a red one
        (what the generated pre-commit hook uses; CI wants the [PASS] lines).
        A [WARN] about the gate's own unreadable config is not silenced.
+  -Fix  rewrites first (Go: gofmt -w, golangci-lint run --fix), then runs the normal gate.
+       Explicit only: hooks and CI never pass it, the gate itself never rewrites.
   -Only takes base go web rust proto godot dotnet cpp custom: -Only go,web ("go,web" and `go web` are the same)
        base has no marker file -- it is every git work tree, and -Only base runs it alone
        python is detected but not checked, so a run that names it alone checks

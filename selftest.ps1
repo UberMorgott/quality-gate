@@ -381,6 +381,18 @@ $xOut = (Invoke-WithGoos $otherOs { go vet ./... 2>&1 } | Out-String); $xVet = $
 Pop-Location
 Check 'a clean other-GOOS file passes cross vet' ($xVet -eq 0) $xOut
 
+# #44: -Fix rewrites what is fixable and the same run's gate passes; an unfixable defect
+# still fails it.
+$fx = Join-Path $tmp 'fix'
+Copy-Item (Join-Path $PSScriptRoot 'testdata\go-fixture') $fx -Recurse
+[IO.File]::WriteAllText((Join-Path $fx 'ugly.go'), "package main`n`n// Ugly is misformatted.`nfunc  Ugly()  int {`nreturn 1`n}`n")
+$r = (& pwsh -NoProfile -File $gate -Root $fx -All -Fix 2>&1 | Out-String)
+Check '-Fix formats a gofmt violation and the gate passes' `
+    (($LASTEXITCODE -eq 0) -and -not (& gofmt -l (Join-Path $fx 'ugly.go'))) $r
+Set-GoFile (Join-Path $fx 'ugly.go') "package main`n`nimport `"fmt`"`n`n// Ugly is unfixable.`nfunc Ugly() {`n`tfmt.Printf(`"%d`", `"not an int`")`n}"
+$r = (& pwsh -NoProfile -File $gate -Root $fx -All -Fix 2>&1 | Out-String)
+Check '-Fix leaves an unfixable defect failing the gate' (($LASTEXITCODE -ne 0) -and ($r -match '\[FAIL\] go vet') -and ($r -match '\[INFO\] fix: gofmt rewrote 0 file')) $r
+
 $tplFmt = @(& gofmt -l (Join-Path $PSScriptRoot 'templates\go-determinism_test.go') 2>&1)
 Check 'the property-test template parses and is gofmt-clean' ($LASTEXITCODE -eq 0 -and -not $tplFmt) ($tplFmt -join "`n")
 
