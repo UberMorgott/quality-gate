@@ -1,17 +1,17 @@
 # Graph Report - quality-gate  (2026-09-17)
 
 ## Corpus Check
-- 44 files · ~105,539 words
+- 44 files · ~107,245 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 17 file(s) not represented in the graph (top: (none) 5, .toml 3, .gd 2)
 
 ## Summary
-- 436 nodes · 650 edges · 46 communities (22 shown, 24 thin omitted)
-- Extraction: 93% EXTRACTED · 7% INFERRED · 0% AMBIGUOUS · INFERRED: 44 edges (avg confidence: 0.85)
+- 440 nodes · 660 edges · 46 communities (22 shown, 24 thin omitted)
+- Extraction: 93% EXTRACTED · 7% INFERRED · 0% AMBIGUOUS · INFERRED: 46 edges (avg confidence: 0.85)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `d7f959de`
+- Built from commit: `42ad16c3`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -56,12 +56,12 @@
 
 ## God Nodes (most connected - your core abstractions)
 1. `QGateHarmony` - 78 edges
-2. `Lookups` - 15 edges
-3. `Invoke-DotnetStack()` - 13 edges
+2. `Invoke-DotnetStack()` - 15 edges
+3. `Lookups` - 15 edges
 4. `Invoke-SmokeCheck()` - 12 edges
-5. `Phase()` - 8 edges
-6. `Invoke-CppStack()` - 8 edges
-7. `Invoke-BaseStack()` - 8 edges
+5. `Invoke-BaseStack()` - 10 edges
+6. `Phase()` - 8 edges
+7. `Invoke-CppStack()` - 8 edges
 8. `Invoke-CustomStack()` - 8 edges
 9. `.golangci.yml template` - 8 edges
 10. `Fail()` - 7 edges
@@ -73,10 +73,10 @@
   templates/ci.yml → README.md
 - `QG_REF tag pin (v1), never main` --semantically_similar_to--> `qgate.json toolchain pinning`  [INFERRED] [semantically similar]
   templates/ci.yml → README.md
+- `Cancellability findings (context propagation)` --conceptually_related_to--> `.golangci.yml template`  [INFERRED]
+  PLAYBOOK.md → templates/.golangci.yml
 - `Incoming agent reports: symptom right, cause wrong half the time` --semantically_similar_to--> `Second-engine review`  [INFERRED] [semantically similar]
   HANDOFF.md → PLAYBOOK.md
-- `"Gate is wrong" issue template` --conceptually_related_to--> `Incoming agent reports: symptom right, cause wrong half the time`  [INFERRED]
-  .github/ISSUE_TEMPLATE/gate-bug.md → HANDOFF.md
 
 ## Import Cycles
 - None detected.
@@ -97,8 +97,8 @@ Cohesion: 0.08
 Nodes (21): Find-Marker(), Get-ChecksHash(), Get-CustomChecks(), Get-DefaultTrustStore(), Get-DeployEntries(), Get-GitIgnoredSet(), Get-GoBuiltWith(), Get-GodotBin() (+13 more)
 
 ### Community 2 - "qgate wire (repo wiring, config only)"
-Cohesion: 0.07
-Nodes (33): "Gate is wrong" issue template, cherry-pick and revert cannot be covered cheaply, Deliberately chosen boundaries (not TODOs), GIT_INDEX_FILE marks that we are inside a commit, GOTOOLCHAIN=auto unpacking races produce 'missing std package', Measured git hook coverage matrix (git 2.53), Parallel commits in one worktree swallow each other's staged files, A signature-changing commit must carry its callers (+25 more)
+Cohesion: 0.06
+Nodes (40): "Gate is wrong" issue template, cherry-pick and revert cannot be covered cheaply, Deliberately chosen boundaries (not TODOs), GIT_INDEX_FILE marks that we are inside a commit, GOTOOLCHAIN=auto unpacking races produce 'missing std package', Measured git hook coverage matrix (git 2.53), Incoming agent reports: symptom right, cause wrong half the time, Parallel commits in one worktree swallow each other's staged files (+32 more)
 
 ### Community 3 - ".Scan"
 Cohesion: 0.17
@@ -109,7 +109,7 @@ Cohesion: 0.11
 Nodes (8): FieldInfo, MethodBase, MethodInfo, AccessTools, MethodInfo, ComputedPatch, Lookups, Type
 
 ### Community 5 - "selftest.ps1"
-Cohesion: 0.15
+Cohesion: 0.14
 Nodes (3): Invoke-Smoke(), Invoke-Trust(), Set-OutdatedCache()
 
 ### Community 6 - "QGateHarmony"
@@ -125,8 +125,8 @@ Cohesion: 0.29
 Nodes (6): name, private, scripts, build-only, type-check, type
 
 ### Community 9 - "check.ps1"
-Cohesion: 0.13
-Nodes (32): Fail(), Get-ChangedPaths(), Get-CppCompileDb(), Get-Descendants(), Get-DotnetChangedCs(), Get-DotnetEval(), Get-DotnetSharedFormat(), Get-DotnetTfms() (+24 more)
+Cohesion: 0.12
+Nodes (35): Fail(), Get-ChangedPaths(), Get-CppCompileDb(), Get-Descendants(), Get-DotnetChangedCs(), Get-DotnetEval(), Get-DotnetSharedFormat(), Get-DotnetTfms() (+27 more)
 
 ### Community 10 - ".Get"
 Cohesion: 0.35
@@ -157,8 +157,8 @@ Cohesion: 0.20
 Nodes (5): CustomAttribute, CustomAttributeHandleCollection, Target, MethodDefinition, Target
 
 ### Community 38 - ".golangci.yml template"
-Cohesion: 0.08
-Nodes (26): Incoming agent reports: symptom right, cause wrong half the time, git add --renormalize + checkout is a no-op for CRLF, Cancellability findings (context propagation), Three rules for a machine-readable deferral file, Final-write timeout created too early, Second-engine review, Security findings (path traversal, middleware order, body limits), Suppression needs a named reason; stale suppressions flagged (+18 more)
+Cohesion: 0.10
+Nodes (20): git add --renormalize + checkout is a no-op for CRLF, Three rules for a machine-readable deferral file, Suppression needs a named reason; stale suppressions flagged, Taint rules report one finding at a time and are inter-package, Unchecked errors: propagate, log-and-degrade, or join, qgate.deferrals.json (dated deferrals), Go stack phases, qgate outdated (+12 more)
 
 ### Community 40 - "gopurity/main.go"
 Cohesion: 0.18
@@ -173,23 +173,23 @@ Cohesion: 0.17
 Nodes (7): Gen, IEnumerable, ImmutableArray, MethodSignature, Name, Parent, Sig
 
 ### Community 44 - "A right outcome does not prove the right cause (§0.1)"
-Cohesion: 0.20
-Nodes (11): git check-ignore exit codes; --stdin batch unusable on Windows, Selftest counts 121 online / 115 offline, PowerShell reads an empty value as absence, Red-then-green verification, A right outcome does not prove the right cause (§0.1), Negative check asserts outcome + applied cause + absent cause, Fail closed invariant (no check phase ran), Godot stack phases (+3 more)
+Cohesion: 0.22
+Nodes (10): git check-ignore exit codes; --stdin batch unusable on Windows, Selftest counts 121 online / 115 offline, PowerShell reads an empty value as absence, A right outcome does not prove the right cause (§0.1), Negative check asserts outcome + applied cause + absent cause, Fail closed invariant (no check phase ran), Godot stack phases, Godot writes errors to stdout and exits 0 (+2 more)
 
 ## Knowledge Gaps
 - **38 isolated node(s):** `stylelint-config-standard-scss`, `stylelint-config-recommended-vue/scss`, `ignoreFiles`, `net8.0`, `Microsoft.NET.Sdk` (+33 more)
-  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 179 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
+  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 180 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
 - **24 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `QGateHarmony` connect `QGateHarmony` to `harmony.cs`, `.Scan`, `MetadataReader`, `.Resolve`, `.Run`, `.Get`, `.Callee`?**
-  _High betweenness centrality (0.131) - this node is a cross-community bridge._
+  _High betweenness centrality (0.129) - this node is a cross-community bridge._
 - **Why does `Lookups` connect `Lookups` to `harmony.cs`?**
-  _High betweenness centrality (0.026) - this node is a cross-community bridge._
+  _High betweenness centrality (0.025) - this node is a cross-community bridge._
 - **Why does `Get-PathKey()` connect `check.ps1` to `detect.ps1`, `selftest.ps1`?**
-  _High betweenness centrality (0.017) - this node is a cross-community bridge._
+  _High betweenness centrality (0.018) - this node is a cross-community bridge._
 - **Are the 5 inferred relationships involving `Invoke-SmokeCheck()` (e.g. with `Invoke-CustomStack()` and `Fail()`) actually correct?**
   _`Invoke-SmokeCheck()` has 5 INFERRED edges - model-reasoned connections that need verification._
 - **What connects `stylelint-config-standard-scss`, `stylelint-config-recommended-vue/scss`, `ignoreFiles` to the rest of the system?**
