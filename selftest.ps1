@@ -2746,7 +2746,7 @@ try {
     Check 'a missing file-kind linter is a named skip, not a failed run' `
         (($LASTEXITCODE -eq 0) -and ($out -notmatch '\[FAIL\]') -and
         -not ($lintExes | Where-Object { $out -notmatch "\[SKIP\] .* -- $([regex]::Escape($_)) not on PATH" })) $out
-    foreach ($exit in 1, 0) {
+    foreach ($exit in 1, 0, 2) {
         $shim = Join-Path $tmp "lint-shim-$exit"
         New-Item -ItemType Directory -Path $shim -Force | Out-Null
         foreach ($e in $lintExes) {
@@ -2757,10 +2757,13 @@ try {
                 chmod +x $p
             }
         }
+        # #73: npm installs markdownlint-cli2 as a .ps1 shim too, and PowerShell prefers it. That
+        # shim joined array arguments into one string; counting args proves each path arrives alone.
+        if ($IsWindows) { [IO.File]::WriteAllText((Join-Path $shim 'markdownlint-cli2.ps1'), "`"shimfinding args=`$(`$args.Count)`"; exit $exit`n") }
         $env:PATH = "$shim$sep$strippedPath"
         $out = (& pwsh -NoProfile -File $gate -Root $lint -Only base -Full 2>&1 | Out-String)
         $code = $LASTEXITCODE
-        if ($exit) {
+        if ($exit -eq 1) {
             Check 'file-kind linter findings are [WARN], never [FAIL]' `
                 (($code -eq 0) -and ($out -notmatch '\[FAIL\]') -and
                 ([regex]::Matches($out, '\[WARN\] (shellcheck|actionlint|hadolint|markdownlint|yamllint|editorconfig):').Count -eq 6)) "code=$code $out"
@@ -2768,9 +2771,15 @@ try {
             Check 'file-kind linter findings are printed, not just counted' ($out -match 'shimfinding') $out
             # An LF script in the index is not a literal-CR defect, whatever the checkout wrote.
             Check 'shellcheck skips SC1017 for a script the index holds LF' ($out -match 'shimfinding -f gcc -e SC1017') $out
+            if ($IsWindows) { Check 'markdownlint gets each argument separately through a .ps1 shim (#73)' ($out -match 'shimfinding args=3') $out }
             $fastOut = (& pwsh -NoProfile -File $gate -Root $lint -Only base 2>&1 | Out-String)
             Check 'the fast lane lints the changed files' `
                 ([regex]::Matches($fastOut, '\[WARN\] (shellcheck|actionlint|hadolint|markdownlint|yamllint|editorconfig):').Count -eq 6) $fastOut
+        } elseif ($exit -eq 2) {
+            # #73: a linter that crashed checked nothing -- [UNKNOWN], never advisory findings.
+            Check 'a crashed file-kind linter is [UNKNOWN], not [WARN] findings' `
+                (($code -eq 0) -and ($out -notmatch '\[WARN\] (shellcheck|actionlint|hadolint|markdownlint|yamllint|editorconfig):') -and
+                ([regex]::Matches($out, '\[UNKNOWN\] (shellcheck|actionlint|hadolint|markdownlint|yamllint|editorconfig): could not lint').Count -eq 6)) "code=$code $out"
         } else {
             Check 'a clean file-kind linter prints nothing' (($code -eq 0) -and ($out -notmatch 'shimfinding')) "code=$code $out"
         }

@@ -1946,13 +1946,27 @@ function Invoke-BaseStack($s) {
             $crIdx = @(& git -C $Root ls-files --eol 2>$null | Where-Object { $_ -match '^i/crlf' -and ($_ -split "`t", 2)[1] -in $files })
             if (-not $crIdx) { $lArgs = @($l.Args) + @('-e', 'SC1017') }
         }
-        $lOut = ''; $lBad = $false
+        $lOut = ''; $lBad = $false; $lCrash = $null
         # ponytail: 100 paths per call keeps a big -Full tree under the Windows command-line limit.
         for ($i = 0; $i -lt $files.Count; $i += 100) {
-            $lOut += (& $l.Exe @($lArgs) @($files[$i..([Math]::Min($i + 99, $files.Count - 1))]) 2>&1 | Out-String)
-            if ($LASTEXITCODE -ne 0) { $lBad = $true }
+            # One splatted array, never `@(a) @(b)`: those are array ARGUMENTS, and npm's
+            # .ps1 shim (markdownlint-cli2) handed each to node as one space-joined string --
+            # measured: every path became a single ENOENT, and no Markdown was ever linted.
+            $callArgs = @($lArgs) + @($files[$i..([Math]::Min($i + 99, $files.Count - 1))])
+            $chunkOut = (& $l.Exe @callArgs 2>&1 | Out-String)
+            $lOut += $chunkOut
+            # Exit 1 is "findings" for every one of these; anything else is the tool failing
+            # (measured on a missing file: markdownlint/shellcheck/editorconfig 2, actionlint 3,
+            # yamllint -1). ponytail: hadolint exits 1 for both, so its crash still reads as findings.
+            if ($LASTEXITCODE -eq 1) { $lBad = $true }
+            elseif ($LASTEXITCODE -ne 0 -and $null -eq $lCrash) { $lCrash = "exit $LASTEXITCODE$(@($chunkOut -split "`r?`n" | Where-Object { $_ -match 'error|ENOENT|not found|cannot' } | Select-Object -First 1) | ForEach-Object { ": $($_.Trim())" })" }
         }
         $global:LASTEXITCODE = 0
+        if ($lCrash) {
+            # A crashed linter checked nothing: never dress that up as advisory findings.
+            $script:Lines += "[UNKNOWN] $($l.Name): could not lint $($files.Count) file(s) -- $($l.Exe) failed ($lCrash)"
+            continue
+        }
         if ($Baseline -and $lBad) {
             $bf = Select-BaselineFindings $lOut $Root
             $lOut = $bf.Text
