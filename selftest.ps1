@@ -3002,6 +3002,18 @@ if (Get-Command typos -ErrorAction SilentlyContinue) {
     Check "the repository's own _typos.toml still applies with the gate's config passed" `
         (($LASTEXITCODE -eq 0) -and ($thOut -notmatch 'plan\.md')) "code=$LASTEXITCODE $thOut"
 
+    # #76: LOD (level of detail, Unity LODGroup) is a term of art, not a typo of `load`.
+    # Both sides: the acronym passes, a real typo beside it is still red.
+    $tlod = Join-Path $tmp 'typos-lod'
+    New-Item -ItemType Directory -Path $tlod | Out-Null
+    git -C $tlod init -q 2>$null
+    [IO.File]::WriteAllText((Join-Path $tlod 'Mesh.cs'), "// LOD levels`nvar g = GetComponent<LODGroup>(); var lod = g.GetLODs();`n")
+    $out = (& pwsh -NoProfile -File $gate -Root $tlod -Only base -Full 2>&1 | Out-String)
+    Check 'LOD / LODGroup is not a typo' (($LASTEXITCODE -eq 0) -and ($out -notmatch 'Mesh\.cs')) "code=$LASTEXITCODE $out"
+    [IO.File]::WriteAllText((Join-Path $tlod 'Mesh.cs'), "// LOD levels, $typo`nvar g = GetComponent<LODGroup>();`n")
+    $out = (& pwsh -NoProfile -File $gate -Root $tlod -Only base -Full 2>&1 | Out-String)
+    Check 'a real typo beside LODGroup is still caught' (($LASTEXITCODE -ne 0) -and ($out -match '\[FAIL\] typos') -and ($out -match 'Mesh\.cs')) "code=$LASTEXITCODE $out"
+
     # Encoded bytes are not prose. A vendored mail test fixture reported the same two-letter
     # fragment five times (spelled out here it would redden THIS file, exactly as the gate's
     # own config comment says), every hit a hex pair of a quoted-printable body. All three

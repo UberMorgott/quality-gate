@@ -1139,6 +1139,22 @@ does not; declare it as a qgate.json check`. Видно и под `-Quiet`, ве
    файлах — берётся последняя. Сверки GUID зависимостей со списком известных плагинов нет.
    Откалибровано только чтением: MorgottTweaks, SmoothRegen, Auga-Fork — ноль находок.
 
+   **`typos` в моде.** `LOD` (level of detail, `LODGroup`) объявлен верным в наборе гейта
+   (`gate/qgate.typos.toml`). Имена игры, написанные с ошибкой **в самой игре** (ванильный класс,
+   который мод переименовать не может), и короткие локальные имена гейт глобально не глушит —
+   base-фаза упадёт `[FAIL] typos` и fail-fast пропустит dotnet-стеки. Гасит их `_typos.toml` в
+   корне репозитория мода: имя целиком — `[default.extend-identifiers]` (оно спрашивается до
+   разбиения на слова, поэтому гасит только это имя), отдельное слово — `[default.extend-words]`
+   (гасит его и в прозе):
+
+   ```toml
+   [default.extend-identifiers]
+   <ИмяКлассаИгры> = "<ИмяКлассаИгры>"
+
+   [default.extend-words]
+   <слово> = "<слово>"
+   ```
+
    **`harmony`** (только `-Full`, только если среди `Reference`/`PackageReference` есть
    `0Harmony`/`Lib.Harmony`/`HarmonyX`) — цели Harmony-патчей, которые пропали после обновления
    игры: `[HarmonyPatch(typeof(Hud), "UpdateStatusEffects")]` — строка, компилятор её не видит.

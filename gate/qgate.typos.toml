@@ -63,3 +63,13 @@ extend-ignore-re = [
     "=\\?[-A-Za-z0-9_*]+\\?[BbQq]\\?[^?]*\\?=",
     "\\b[A-Za-z0-9+/]{48,}={0,2}",
 ]
+
+# Standard technical acronyms that typos "corrects" to an English word. Not dictionary
+# words -- a term of art every repository of the kind uses under the same spelling.
+# `LOD` = level of detail (Unity `LODGroup`, `QualitySettings.lodBias`, Godot, Unreal):
+# a Unity/BepInEx mod repository reported it 212 times as a misspelling of `load` (#76).
+# Cost: `lod` typed for `load` in prose is no longer caught.
+# Third-party names misspelled upstream (a vanilla class the mod cannot rename) do NOT go
+# here: those are one repository's call, in its own `_typos.toml`.
+[default.extend-words]
+lod = "lod"
