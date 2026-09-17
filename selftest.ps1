@@ -3332,6 +3332,38 @@ if (Get-Command npm -ErrorAction SilentlyContinue) {
     Write-Output '[skip] npm not on PATH -- the web test phase cannot be judged here'
 }
 
+# #79: re-running bootstrap updates the install `qgate` already resolves to instead of
+# cloning a new copy; a qgate on PATH that is not a clone of this repo is not adopted.
+# No network: url.insteadOf redirects the origin URL to a local bare repo, and
+# GITHUB_PATH keeps the child off the registry PATH.
+$bs = Join-Path $tmp 'bootstrap79'
+$bsSrc = Join-Path $bs 'src'
+New-Item -ItemType Directory -Force (Join-Path $bsSrc 'bin') | Out-Null
+Set-Content (Join-Path $bsSrc 'bin\qgate.ps1') 'exit 0'
+git -C $bsSrc init -q -b main 2>&1 | Out-Null
+git -C $bsSrc add -A 2>&1 | Out-Null
+git -C $bsSrc -c user.name=t -c user.email=t@t commit -qm init 2>&1 | Out-Null
+git clone -q --bare $bsSrc (Join-Path $bs 'bare.git') 2>&1 | Out-Null
+$bsOrigin = 'https://github.com/UberMorgott/quality-gate.git'
+$bsUrl = 'file:///' + ((Join-Path $bs 'bare.git') -replace '\\', '/')
+function Invoke-Bootstrap79([string]$Inst, [string]$Name) {
+    $qh = Join-Path $bs "qh-$Name"
+    $cmd = "`$env:QUALITY_GATE_HOME=`$null; `$env:QGATE_HOME='$qh'; `$env:GITHUB_PATH='$bs\gp-$Name.txt'; " +
+        "`$env:GIT_CONFIG_COUNT='1'; `$env:GIT_CONFIG_KEY_0='url.$bsUrl.insteadOf'; `$env:GIT_CONFIG_VALUE_0='$bsOrigin'; " +
+        "`$env:Path='$Inst\bin;' + `$env:Path; & '$(Join-Path $PSScriptRoot 'bootstrap.ps1')'"
+    [pscustomobject]@{ Out = (& pwsh -NoProfile -Command $cmd 2>&1 | Out-String); Cloned = (Test-Path (Join-Path $qh 'quality-gate')) }
+}
+$bsInst = Join-Path $bs 'inst'
+git clone -q $bsUrl $bsInst 2>&1 | Out-Null
+git -C $bsInst remote set-url origin $bsOrigin 2>&1 | Out-Null
+$r = Invoke-Bootstrap79 $bsInst 'own'
+Check 'bootstrap updates the qgate install already on PATH' ((-not $r.Cloned) -and ($r.Out -match [regex]::Escape("installed $bsInst"))) $r.Out
+$bsOther = Join-Path $bs 'other'
+git clone -q $bsUrl $bsOther 2>&1 | Out-Null
+git -C $bsOther remote set-url origin 'https://example.invalid/other.git' 2>&1 | Out-Null
+$r = Invoke-Bootstrap79 $bsOther 'foreign'
+Check 'bootstrap does not adopt a qgate on PATH from another repository' $r.Cloned $r.Out
+
 Remove-Item $tmp -Recurse -Force
 if ($script:Fails) { Write-Output "`n$($script:Fails) of $($script:Total) check(s) failed"; exit 1 }
 Write-Output "`nall checks passed ($($script:Total)/$($script:Total))"

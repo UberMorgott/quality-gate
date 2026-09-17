@@ -3,16 +3,14 @@
 #
 #   irm https://raw.githubusercontent.com/UberMorgott/quality-gate/main/bootstrap.ps1 | iex
 #
-# Override the install directory by setting $env:QUALITY_GATE_HOME first. With only
+# Override the install directory by setting $env:QUALITY_GATE_HOME first. Otherwise a
+# `qgate` already on PATH that is a clone of this repository is updated in place. With only
 # $env:QGATE_HOME set -- the state directory the trust store also lives in -- the
 # install lands under it rather than on the system drive, which is the whole point of
 # setting it. The documented variable still wins.
 $ErrorActionPreference = 'Stop'
 
 $repo = 'https://github.com/UberMorgott/quality-gate.git'
-$dir = if ($env:QUALITY_GATE_HOME) { $env:QUALITY_GATE_HOME }
-elseif ($env:QGATE_HOME) { Join-Path $env:QGATE_HOME 'quality-gate' }
-else { Join-Path $env:LOCALAPPDATA 'quality-gate' }
 
 if ($PSVersionTable.PSVersion.Major -lt 7) { throw 'PowerShell 7+ required: winget install Microsoft.PowerShell' }
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) { throw 'git required and not on PATH' }
@@ -24,6 +22,18 @@ if (-not (Get-Command git -ErrorAction SilentlyContinue)) { throw 'git required 
 # pair in gate/detect.ps1; this script runs before there is anything to dot-source.
 $env:GIT_DIR = $null
 $env:GIT_WORK_TREE = $null
+
+# Re-running the one-liner must update the install `qgate` already resolves to (#79):
+# picking a default directory instead cloned a second copy that the old PATH entry
+# shadowed. Only a clone of this repository is adopted -- the raw origin URL, not
+# `remote get-url`, which applies url.insteadOf rewrites.
+$onPath = (Get-Command qgate -ErrorAction SilentlyContinue).Source
+$current = if ($onPath) { Split-Path -Parent (Split-Path -Parent $onPath) }
+$dir = if ($env:QUALITY_GATE_HOME) { $env:QUALITY_GATE_HOME }
+elseif ($current -and (Test-Path (Join-Path $current '.git')) -and
+    ((git -C $current config --get remote.origin.url) -match 'github\.com[/:]UberMorgott/quality-gate(\.git)?/?$')) { $current }
+elseif ($env:QGATE_HOME) { Join-Path $env:QGATE_HOME 'quality-gate' }
+else { Join-Path $env:LOCALAPPDATA 'quality-gate' }
 
 if (Test-Path (Join-Path $dir '.git')) {
     git -C $dir pull --ff-only

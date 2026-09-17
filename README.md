@@ -17,12 +17,15 @@ Windows, без WSL). Наше — детект стеков и раннер. Po
 
 Одна команда на машину. Требует pwsh 7+ и git.
 
+Агенту: `qgate` уже резолвится (`Get-Command qgate`)? — `qgate update`. Иначе — команда ниже.
+
 ```powershell
 irm https://raw.githubusercontent.com/UberMorgott/quality-gate/main/bootstrap.ps1 | iex
 ```
 
 `bootstrap.ps1` клонирует (или обновляет) репозиторий в `%LOCALAPPDATA%\quality-gate`
-(переопределяется через `$env:QUALITY_GATE_HOME` перед запуском; если задан только
+(переопределяется через `$env:QUALITY_GATE_HOME` перед запуском; иначе, если `qgate` уже на PATH
+и его каталог — клон этого репозитория, обновляется он, а не ставится вторая копия; если задан только
 `$env:QGATE_HOME` — каталог состояния, см. ниже — установка ложится в `<QGATE_HOME>\quality-gate`,
 чтобы по умолчанию ничего не оседало на системном диске), добавляет `<install>\bin` в
 пользовательский PATH через реестр (исходный тип значения `REG_SZ`/`REG_EXPAND_SZ` сохраняется;
