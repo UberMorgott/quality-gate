@@ -1296,6 +1296,13 @@ function Invoke-DotnetStack($s) {
     # exited 3 with "No files to inspect". Roslyn-shaped rule ids are dropped (the build
     # line already counted them), and so is InconsistentNaming on `_`-prefixed names:
     # Harmony reads __instance / ___field by name.
+    # Stays opt-in (#97): a full ReSharper pass costs minutes on a cold cache, and a check
+    # nobody asked for that slows every commit is how a gate gets bypassed. What was missing
+    # was that nobody knew it existed -- so a repo with jb installed and the switch off is
+    # told once, on the full lane, how to turn it on.
+    if ((Get-QGateDotnetConfig $Root).inspectcode -ne $true -and ($Full -or $All) -and (Have 'jb')) {
+        $script:Warnings += '[NOTE] inspectcode (dead code, redundancies) is available: jb is on PATH -- enable with qgate.json {"dotnet": {"inspectcode": true}}'
+    }
     if ((Get-QGateDotnetConfig $Root).inspectcode -eq $true -and -not $script:Failed) {
         if (-not (Have 'jb')) { $script:Lines += '[SKIP] inspectcode -- jb not on PATH (dotnet tool install -g JetBrains.ReSharper.GlobalTools)' }
         else {
@@ -1467,6 +1474,25 @@ function Invoke-WebStack($s) {
             & "$bin\eslint.cmd" . --no-color --max-warnings 0 --format stylish `
                 --cache --cache-strategy content --cache-location 'node_modules/.cache/eslintcache'
         }
+    }
+    # knip: unused files, exports and dependencies (#97). The JS half of dead-code analysis,
+    # advisory like `deadcode` is for Go. Runs only when the package installed knip AND
+    # configured it: knip with no config reports against its own guesses about entry points,
+    # which on a repo that never opted in is noise, not findings. Full lane only (it walks
+    # the whole dependency graph). --no-exit-code, so a finding is a warning, not a verdict.
+    $knipCfg = (Test-AnyFile $s.Dir @('knip.json', 'knip.jsonc', 'knip.config.*', 'knip.ts', 'knip.js')) -or $pkg.knip
+    if (($Full -or $All) -and $knipCfg -and (Test-Path "$bin\knip.cmd")) {
+        $kSw = [Diagnostics.Stopwatch]::StartNew()
+        $kOut = (& "$bin\knip.cmd" --no-exit-code --reporter compact --no-progress 2>&1 | Out-String)
+        $kSw.Stop()
+        # The compact reporter prints a `Unused files (3)` style header per issue type; the
+        # counts in those headers are the finding, the file lists under them the detail.
+        $kHits = @([regex]::Matches($kOut, '(?m)^(?<t>[A-Za-z][^(\r\n]*?)\s*\((?<n>\d+)\)\s*$') |
+                ForEach-Object { "$($_.Groups['t'].Value.Trim()): $($_.Groups['n'].Value)" })
+        if ($kHits) {
+            $script:Warnings += @("[WARN] knip: $($kHits -join ', ') ($([math]::Round($kSw.Elapsed.TotalSeconds, 1))s) -- advisory, not a failure",
+                '       run `npx knip` in ' + ($(if ($s.Rel) { $s.Rel } else { '.' })) + ' for the list')
+        } else { $script:Lines += "[PASS] knip ($([math]::Round($kSw.Elapsed.TotalSeconds, 1))s)" }
     }
     if ($scripts -contains 'type-check') {
         Phase 'type-check' { npm run type-check -- --pretty false }
@@ -1941,6 +1967,9 @@ function Invoke-CppStack($s) {
 # because a phase that did not run must never read like a phase that passed.
 function Invoke-BaseStack($s) {
     Set-Location $Root
+    # #97: dead PROJECTS, the thing no per-language check was looking at. Full lane only --
+    # it reads every .csproj and .sln in the tree, and the fast lane runs on every agent turn.
+    if ($Full -or $All) { $script:Warnings += @(Get-OrphanProjects $Root) }
     # The gate's own rule set: gitleaks' default, minus three rules that were 51 of 51
     # false positives across nine repositories (the reasoning is in the .toml itself).
     # NOT applied over a repository that ships a gitleaks config of its own -- `-c`

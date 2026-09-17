@@ -292,6 +292,25 @@ if ((Get-Command gdformat -ErrorAction SilentlyContinue) -and (Get-Command gdlin
     Write-Output '[skip] gdformat/gdlint not on PATH -- the Godot ignore filter cannot run'
 }
 
+# #97: a project nothing builds. The solution's own projects and a ProjectReference target
+# are not orphans; a project in the tree that neither names is. Both sides in one fixture,
+# because a check that only ever fires is as useless as one that never does.
+$orp = Join-Path $tmp 'orphan97'
+New-Item -ItemType Directory -Force -Path (Join-Path $orp 'src\App'), (Join-Path $orp 'src\Lib'), (Join-Path $orp 'examples\Dead') | Out-Null
+git -C $orp init -q 2>&1 | Out-Null
+Set-Content (Join-Path $orp 'App.sln') "Project(`"{X}`") = `"App`", `"src\App\App.csproj`", `"{1}`""
+Set-Content (Join-Path $orp 'src\App\App.csproj') '<Project><ItemGroup><ProjectReference Include="..\Lib\Lib.csproj" /></ItemGroup></Project>'
+Set-Content (Join-Path $orp 'src\Lib\Lib.csproj') '<Project />'
+Set-Content (Join-Path $orp 'examples\Dead\Dead.csproj') '<Project />'
+$orpW = (Get-OrphanProjects $orp) -join "`n"
+Check 'a project no solution and no project references is reported as an orphan' `
+    (($orpW -match '^\[WARN\] orphan projects: 1 project') -and ($orpW -match 'examples/Dead/Dead\.csproj')) $orpW
+Check 'a project the solution lists and one it references are not orphans' `
+    (($orpW -notmatch 'App\.csproj') -and ($orpW -notmatch 'Lib\.csproj')) $orpW
+# No solution in the tree: standalone projects side by side is a layout, not a finding.
+Remove-Item (Join-Path $orp 'App.sln')
+Check 'a repository with no solution is not a wall of orphan warnings' (-not (Get-OrphanProjects $orp)) "$(Get-OrphanProjects $orp)"
+
 }
 
 if (Want 'go') {
@@ -3974,6 +3993,27 @@ Check 'the lint caches are pointed under node_modules, not a bare .cache dir' `
     (($wcCode -eq 0) -and -not (Test-Path (Join-Path $wc '.cache')) -and
         (Test-Path (Join-Path $wc 'node_modules\.cache')) -and
         (([regex]::Matches($wcArgs, 'node_modules/\.cache/(es|style)lintcache')).Count -eq 2)) "code=$wcCode $wcArgs $out"
+
+# #97: knip, the JS half of dead-code analysis. Advisory, and only for a package that
+# installed AND configured it -- knip on its own guesses is noise, not findings. A stand-in
+# prints the compact reporter's headers; without a config the same binary is never called.
+Set-Content (Join-Path $wc 'node_modules\.bin\knip.cmd') @"
+@echo off
+echo Unused files (2^)
+echo src/dead.ts
+echo Unused exports (1^)
+exit /b 0
+"@
+$out = (& pwsh -NoProfile -File $gate -Root $wc -Only 'web' -Full 2>&1 | Out-String)
+Check 'knip does not run for a package that never configured it' ($out -notmatch '(?m)knip') $out
+Set-Content (Join-Path $wc 'knip.json') '{"entry":["src/main.ts"]}'
+$out = (& pwsh -NoProfile -File $gate -Root $wc -Only 'web' -Full 2>&1 | Out-String)
+$wkCode = $LASTEXITCODE
+Check 'knip findings are an advisory warning, not a failure' `
+    (($wkCode -eq 0) -and ($out -match '\[WARN\] knip: .*Unused files: 2') -and ($out -match 'Unused exports: 1')) "code=$wkCode $out"
+# The fast lane runs on every agent turn and never walks a dependency graph.
+$out = (& pwsh -NoProfile -File $gate -Root $wc -Only 'web' -Fast 2>&1 | Out-String)
+Check 'the fast lane does not run knip' ($out -notmatch 'knip:') $out
 
 }
 

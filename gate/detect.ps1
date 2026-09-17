@@ -494,6 +494,43 @@ function Get-GoDeadcode([string]$Dir) {
     if ($hits.Count -gt 20) { "       ... $($hits.Count - 20) more: run deadcode -test ./..." }
 }
 
+# quality-gate#97: a .csproj that no solution lists and no other project references is a
+# project nothing builds -- the case that prompted this was a forked example project for an
+# abandoned API, kept in the tree, broken, and flagged by nothing.
+# Only asked of a repository that HAS a solution: without one, several standalone projects
+# side by side is a normal layout, not an orphan each. Advisory, never a failure -- an
+# unreferenced project can be a deliberate scratch target, and this gate does not delete code.
+function Get-OrphanProjects([string]$Root, [int]$Depth = 3) {
+    $projs = @(Find-Marker $Root @('*.csproj') $Depth)
+    $slns = @(Find-Marker $Root @('*.sln', '*.slnx') $Depth)
+    if (-not $slns -or -not $projs) { return }
+    # The referenced set is collected as FULL PATHS: a solution and a ProjectReference both
+    # spell the path relative to the file holding them, so each is resolved against its own
+    # directory before the two can be compared.
+    $ref = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    $add = {
+        param($BaseDir, $Rel)
+        $p = try { [IO.Path]::GetFullPath((Join-Path $BaseDir ($Rel -replace '/', '\'))) } catch { $null }
+        if ($p) { [void]$ref.Add($p) }
+    }
+    foreach ($s in $slns) {
+        $txt = Get-Content -LiteralPath $s.FullName -Raw -ErrorAction SilentlyContinue
+        foreach ($m in [regex]::Matches("$txt", '"([^"]+\.csproj)"')) { & $add $s.DirectoryName $m.Groups[1].Value }
+        # .slnx spells it as an attribute: <Project Path="src/App/App.csproj" />
+        foreach ($m in [regex]::Matches("$txt", 'Path\s*=\s*"([^"]+\.csproj)"')) { & $add $s.DirectoryName $m.Groups[1].Value }
+    }
+    foreach ($p in $projs) {
+        $txt = Get-Content -LiteralPath $p.FullName -Raw -ErrorAction SilentlyContinue
+        foreach ($m in [regex]::Matches("$txt", '(?i)<ProjectReference\s+Include\s*=\s*"([^"]+)"')) { & $add $p.DirectoryName $m.Groups[1].Value }
+    }
+    $orphans = @($projs | Where-Object { -not $ref.Contains($_.FullName) } |
+            ForEach-Object { ($_.FullName.Substring($Root.Length).TrimStart('\', '/')) -replace '\\', '/' })
+    if (-not $orphans) { return }
+    "[WARN] orphan projects: $($orphans.Count) project(s) no solution or project references -- advisory, not a failure"
+    $orphans | Select-Object -First 20 | ForEach-Object { "       $_" }
+    if ($orphans.Count -gt 20) { "       ... $($orphans.Count - 20) more" }
+}
+
 # quality-gate#50: on-demand mutation testing (qgate -Mutate), never part of a hook run.
 # `gremlins unleash` mutates covered code and reruns the tests; a mutant the tests still
 # pass on (LIVED) is an assertion gap. -Baseline scopes it to files changed since that rev
