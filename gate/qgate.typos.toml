@@ -73,3 +73,19 @@ extend-ignore-re = [
 # here: those are one repository's call, in its own `_typos.toml`.
 [default.extend-words]
 lod = "lod"
+
+# Unity engine serialization keys, misspelled by Unity itself and rewritten by the editor on
+# every save, so no repository can rename them: AnimatorController transitions (`*.controller`),
+# ProjectSettings/DynamicsManager.asset, ProjectSettings.asset (PS4 PlayStation Network
+# flags) and LightmapSettings in `*.unity` scenes. A Unity/BepInEx mod repository reported all
+# of them (#92). Whole identifiers, not words: `treshold` or `angluar` in prose and in any
+# other name is still a finding. Applied everywhere rather than on Unity detection -- these
+# exact identifiers exist nowhere else, so the global entry costs nothing.
+[default.extend-identifiers]
+m_EventTreshold = "m_EventTreshold"
+m_DefaultMaxAngluarSpeed = "m_DefaultMaxAngluarSpeed"
+ps4pnSessions = "ps4pnSessions"
+ps4pnPresence = "ps4pnPresence"
+ps4pnFriends = "ps4pnFriends"
+ps4pnGameCustomData = "ps4pnGameCustomData"
+m_PVREnvironmentMIS = "m_PVREnvironmentMIS"

@@ -3627,6 +3627,19 @@ if (Get-Command typos -ErrorAction SilentlyContinue) {
     $out = (& pwsh -NoProfile -File $gate -Root $tlod -Only base -Full 2>&1 | Out-String)
     Check 'a real typo beside LODGroup is still caught' (($LASTEXITCODE -ne 0) -and ($out -match '\[FAIL\] typos') -and ($out -match 'Mesh\.cs')) "code=$LASTEXITCODE $out"
 
+    # #92: Unity-written serialization keys pass as whole identifiers; the same misspelled
+    # word in prose stays red. Split literals so this file does not carry the bare word.
+    $tun = Join-Path $tmp 'typos-unity'
+    New-Item -ItemType Directory -Path $tun | Out-Null
+    git -C $tun init -q 2>$null
+    $unityYaml = "  m_EventTreshold: 0`n  m_DefaultMaxAngluarSpeed: 7`n  ps4pnSessions: 1`n  ps4pnPresence: 1`n  ps4pnFriends: 1`n  ps4pnGameCustomData: 1`n  m_PVREnvironmentMIS: 1`n"
+    [IO.File]::WriteAllText((Join-Path $tun 'Base.controller'), $unityYaml)
+    $out = (& pwsh -NoProfile -File $gate -Root $tun -Only base -Full 2>&1 | Out-String)
+    Check 'Unity serialization keys are not typos' (($LASTEXITCODE -eq 0) -and ($out -notmatch 'Base\.controller')) "code=$LASTEXITCODE $out"
+    [IO.File]::WriteAllText((Join-Path $tun 'Base.controller'), $unityYaml + "# event $('tres' + 'hold') reached`n")
+    $out = (& pwsh -NoProfile -File $gate -Root $tun -Only base -Full 2>&1 | Out-String)
+    Check 'the Unity misspelling in prose is still caught' (($LASTEXITCODE -ne 0) -and ($out -match '\[FAIL\] typos') -and ($out -match 'Base\.controller')) "code=$LASTEXITCODE $out"
+
     # Encoded bytes are not prose. A vendored mail test fixture reported the same two-letter
     # fragment five times (spelled out here it would redden THIS file, exactly as the gate's
     # own config comment says), every hit a hex pair of a quoted-printable body. All three
