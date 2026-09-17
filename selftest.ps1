@@ -3836,6 +3836,13 @@ if (Get-Command gitleaks -ErrorAction SilentlyContinue) {
     $out = (& pwsh -NoProfile -File $gate -Root $sec -Only base -Full 2>&1 | Out-String)
     Check 'that fingerprint in .gitleaksignore suppresses the finding' `
         (($LASTEXITCODE -eq 0) -and ($out -notmatch 'app\.env')) "code=$LASTEXITCODE $out"
+    # #89: binary media is skipped unread, text assets are not. The .tga holds the token as
+    # text only so a read would be visible; the .asset beside it must still fail.
+    [IO.File]::WriteAllText((Join-Path $sec 'Texture.TGA'), "GITHUB_TOKEN=$pat`n")
+    [IO.File]::WriteAllText((Join-Path $sec 'Level.asset'), "GITHUB_TOKEN=$pat`n")
+    $out = (& pwsh -NoProfile -File $gate -Root $sec -Only base -Full 2>&1 | Out-String)
+    Check 'binary media is not scanned for secrets, a text asset still is' `
+        (($LASTEXITCODE -ne 0) -and ($out -match 'Level\.asset') -and ($out -notmatch 'Texture\.TGA')) "code=$LASTEXITCODE $out"
 } else {
     Write-Output '[skip] gitleaks not on PATH -- the secrets filter cannot be judged here'
 }

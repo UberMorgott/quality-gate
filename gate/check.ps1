@@ -1981,15 +1981,25 @@ function Invoke-BaseStack($s) {
         # 662 s of secrets scan over repos that were not the commit's content.
         # ponytail: gitleaks caps [extend] depth at 2, so a repo config that itself
         # extends a file (not useDefault) loses that base here.
-        $glDirCfg = $glCfg
-        $nested = @(Get-NestedRepos $Root)
-        if ($nested) {
-            $base = if ($glCfg) { $glCfg[1] } else { @('.gitleaks.toml', 'gitleaks.toml') | ForEach-Object { Join-Path $Root $_ } | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1 }
-            $re = ($nested | ForEach-Object { ($_ -replace '([.\\+*?()\[\]{}|^$])', '\$1') }) -join '|'
-            $glTmp = Join-Path ([IO.Path]::GetTempPath()) "qgate-gitleaks-$(Get-PathKey $Root).toml"
-            Set-Content -LiteralPath $glTmp -Value "[extend]`npath = '''$base'''`n[[allowlists]]`npaths = ['''^($re)/''']"
-            $glDirCfg = @('-c', $glTmp)
-        }
+        #
+        # The same allowlist skips what was costing the read without being able to hold a
+        # finding (#89). Ignored paths: their findings are dropped below anyway, but gitleaks
+        # still read them first. Binary media: no rule matches pixels, and measured on a
+        # repo with a tracked Unity project, 2.43 GB walked in 68 s, 7.8 s once the asset
+        # tree was skipped (.tga 2.1 GB, .png 321 MB). Text assets (.asset/.prefab/.json)
+        # stay scanned. `--ignored` in its default (traditional) mode names a wholly
+        # ignored directory once, with its trailing slash; -z keeps paths unquoted.
+        $base = if ($glCfg) { $glCfg[1] } else { @('.gitleaks.toml', 'gitleaks.toml') | ForEach-Object { Join-Path $Root $_ } | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1 }
+        $esc = { param($p) $p -replace '([.\\+*?()\[\]{}|^$])', '\$1' }
+        $skip = @(@(Get-NestedRepos $Root) | ForEach-Object { "$(& $esc $_)/" })
+        $skip += @(((& git -C $Root status --ignored --porcelain -z 2>$null) -join '') -split "`0" |
+                Where-Object { $_ -like '!! *' } | ForEach-Object { & $esc $_.Substring(3) } |
+                ForEach-Object { if ($_.EndsWith('/')) { $_ } else { "$_$" } })
+        $media = '(?i)\.(tga|png|jpe?g|gif|bmp|tiff?|psd|exr|hdr|dds|ktx2?|fbx|blend1?|wav|ogg|flac|mp[34]|mov|avi|webm)$'
+        $paths = @("'''$media'''") + @(if ($skip) { "'''^($($skip -join '|'))'''" })
+        $glTmp = Join-Path ([IO.Path]::GetTempPath()) "qgate-gitleaks-$(Get-PathKey $Root).toml"
+        Set-Content -LiteralPath $glTmp -Value "[extend]`npath = '''$base'''`n[[allowlists]]`npaths = [$($paths -join ', ')]"
+        $glDirCfg = @('-c', $glTmp)
         $raw = (& gitleaks dir @glDirCfg --redact --no-banner --no-color -f json -r - . 2>$null | Out-String)
         $glCode = $LASTEXITCODE
         $sw.Stop()
