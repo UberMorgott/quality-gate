@@ -11,8 +11,27 @@
 # that the reason which did NOT apply is absent (-notmatch). The third is the cheap
 # one and the one that was missing. Assert absence too: "narrowed to the right
 # stack" is proved by the other stacks NOT running. See PLAYBOOK.md 0.1.
+#
+#   pwsh -NoProfile -File selftest.ps1 -Only go,base
+#
+# -Only runs just the named sections, for iterating on one stack (#81). The full run
+# with no -Only stays the push gate.
+param([string[]]$Only)
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'gate\detect.ps1')
+
+$sections = 'detect', 'go', 'core', 'wiring', 'rust', 'dotnet', 'proto', 'godot', 'hooks', 'custom', 'cpp', 'base', 'web', 'bootstrap'
+# `pwsh -File` hands "go,base" over as one string.
+$Only = @($Only -split ',' | ForEach-Object Trim | Where-Object { $_ })
+$bad = @($Only | Where-Object { $_ -notin $sections })
+if ($bad) { Write-Output "unknown section(s): $($bad -join ', '); valid: $($sections -join ', ')"; exit 2 }
+# base reuses the cpp fixture section 36 builds.
+$want = @($Only) + @(if ('base' -in $Only) { 'cpp' })
+function Want([string]$Name) { (-not $Only) -or ($Name -in $want) }
+# Paths several sections share, so a filtered run does not depend on the section
+# that first named them.
+$installer = Join-Path $PSScriptRoot 'install.ps1'
+$gate = Join-Path $PSScriptRoot 'gate\check.ps1'
 
 # Unique per run: a fixed directory made two concurrent self-tests delete each
 # other's fixtures mid-check.
@@ -41,6 +60,7 @@ function Invoke-Gate([string]$Root) {
     [pscustomobject]@{ Code = $LASTEXITCODE; Out = $out }
 }
 
+if (Want 'detect') {
 # 1. Detection by file presence.
 $stacks = @(Get-Stacks (Join-Path $PSScriptRoot 'testdata'))
 # ...except the one whose marker is the repository itself. testdata/ is inside this
@@ -181,6 +201,9 @@ if ((Get-Command gdformat -ErrorAction SilentlyContinue) -and (Get-Command gdlin
     Write-Output '[skip] gdformat/gdlint not on PATH -- the Godot ignore filter cannot run'
 }
 
+}
+
+if (Want 'go') {
 # 2. Clean Go fixture, no linter config -> passes, warns exactly once.
 $go = Join-Path $tmp 'go'
 Copy-Item (Join-Path $PSScriptRoot 'testdata\go-fixture') $go -Recurse
@@ -451,6 +474,9 @@ $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root
 Check 'provenance names the found marker' ($out -match '\[WHY\] go .*found go\.mod') $out
 Check 'provenance names an absent stack' ($out -match '\[WHY\] python -- absent') $out
 
+}
+
+if (Want 'core') {
 # 8. Fail closed: an unusable root is a failure, never "nothing to check".
 $r = Invoke-Gate (Join-Path $tmp 'does-not-exist')
 Check 'unusable root fails closed' ($r.Code -ne 0) $r.Out
@@ -461,6 +487,9 @@ Copy-Item (Join-Path $PSScriptRoot 'testdata\web-fixture') $web -Recurse
 $r = Invoke-Gate $web
 Check 'web without node_modules fails loudly' (($r.Code -ne 0) -and ($r.Out -match 'node_modules missing')) $r.Out
 
+}
+
+if (Want 'wiring') {
 # 10. Wiring fills the frontend gap: a phase whose config is absent is skipped, so
 # before this a web repo with no eslint/stylelint config passed in silence. A config
 # the project already has must survive a re-run untouched.
@@ -476,6 +505,9 @@ Set-Content $eslintCfg 'mine' -NoNewline
 & pwsh -NoProfile -File $installer -Target $wire -NoHook *> $null
 Check 'wire keeps a config the project already had' ((Get-Content $eslintCfg -Raw) -eq 'mine')
 
+}
+
+if (Want 'rust') {
 # 11. Rust is checked for real now, red then green like Go.
 $rust = Join-Path $tmp 'rust'
 Copy-Item (Join-Path $PSScriptRoot 'testdata\rust-fixture') $rust -Recurse
@@ -492,6 +524,9 @@ Check 'rust violation fails the gate' ($r.Code -ne 0) $r.Out
 $r = Invoke-Gate $rust
 Check 'rust green again after the fix' ($r.Code -eq 0) $r.Out
 
+}
+
+if (Want 'dotnet') {
 # 11b. .NET, red then green -- and then the two verdicts that are NOT red: a project
 # whose references live in a game install this machine does not have, and one targeting
 # an SDK major nobody here has. Both are gaps in the machine, and reporting them as a
@@ -1326,6 +1361,9 @@ public sealed class Bad
     Write-Output '[skip] no .NET SDK on this machine -- the dotnet stack cannot be exercised'
 }
 
+}
+
+if (Want 'proto') {
 # 16. Proto, red then green. buf ships with nothing else, so its absence is a
 # skip -- same rule as golangci-lint above.
 if (Get-Command buf -ErrorAction SilentlyContinue) {
@@ -1345,6 +1383,9 @@ if (Get-Command buf -ErrorAction SilentlyContinue) {
     Write-Output '[skip] buf not on PATH'
 }
 
+}
+
+if (Want 'godot') {
 # 17. Godot. The binary is usually absent on Windows, which is exactly when a
 # naive gate goes quiet -- so the phases that need no binary are checked for real
 # here, and the missing binary itself has to be a loud failure.
@@ -1404,6 +1445,9 @@ if (-not (Get-Command godot -ErrorAction SilentlyContinue)) {
     Write-Output '[skip] godot is on PATH -- the missing-binary levels cannot be exercised'
 }
 
+}
+
+if (Want 'core') {
 # 12. A directory that is not a git repository must not pass by way of "no
 # changes": the default run has nothing to narrow by and has to check everything.
 $nogit = Join-Path $tmp 'nogit'
@@ -1412,6 +1456,9 @@ Set-GoFile (Join-Path $nogit 'broken.go') "package main`nfunc  Broken() {}"
 $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $nogit 2>&1 | Out-String)
 Check 'non-git directory is checked, not skipped' (($LASTEXITCODE -ne 0) -and ($out -notmatch 'no changes')) $out
 
+}
+
+if (Want 'wiring') {
 # 13. The wiring templates must call the entry point that actually exists. The
 # lefthook job pointed at a path `wire` no longer creates, which broke every
 # commit in a repo that had lefthook.
@@ -1497,11 +1544,17 @@ if (Get-Command lefthook -ErrorAction SilentlyContinue) {
     Write-Output '[skip] lefthook not on PATH -- the stale-config path cannot run'
 }
 
+}
+
+if (Want 'go') {
 # 15. The version report is advisory. It must never fail a run -- offline, rate
 # limited or with a registry that answers garbage, the exit code stays 0.
 $outdated = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\outdated.ps1') -Root $go 2>&1 | Out-String)
 Check 'outdated never fails the run' ($LASTEXITCODE -eq 0) $outdated
 
+}
+
+if (Want 'hooks') {
 # 12. The agent contract: `qgate stop-hook` must reach Claude Code as exit code 2
 # with the reason on stderr, through the .cmd shim it is actually invoked by.
 # Anything less and a failing gate silently lets the agent declare victory.
@@ -1596,6 +1649,9 @@ git -C $hook2 -c user.email=selftest@local -c user.name=selftest commit -qm viol
 $h = Invoke-StopHook $hook2 $sid
 Check 'stop-hook blocks a violation that was committed on a clean tree' ($h.Code -eq 2) "code=$($h.Code) $($h.Err)"
 
+}
+
+if (Want 'godot') {
 # 18. `-All` is documented as "every detected stack, ignore git status", but the
 # .gd list was still narrowed by git status under it: a tree whose dirty files are
 # not .gd dropped gdformat and gdlint from the run and still printed [PASS] godot,
@@ -1615,6 +1671,9 @@ if ((Get-Command gdformat -ErrorAction SilentlyContinue) -and (Get-Command gdlin
     Write-Output '[skip] gdtoolkit not on PATH'
 }
 
+}
+
+if (Want 'go') {
 # 19. Discoverability: a flag value nobody validates and a config key nobody reads
 # are both silent no-ops that look exactly like enforcement.
 $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $go -Only 'nonsense' 2>&1 | Out-String)
@@ -1635,6 +1694,9 @@ if (Get-Command gdformat -ErrorAction SilentlyContinue) {
 }
 Remove-Item (Join-Path $go 'qgate.json')
 
+}
+
+if (Want 'core') {
 # 20. Which stacks were selected, and the reason the gate gives for it. Both bugs
 # here were invisible to a suite that asserts on stacks and phases: the run still
 # checked something and still exited 0, it just said something untrue about why.
@@ -1684,6 +1746,9 @@ Set-GoFile (Join-Path $track 'server\main.go') ((Get-Content (Join-Path $track '
 $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $track 2>&1 | Out-String)
 Check 'a tracked edit narrows to its own stack' (($out -match '\[PASS\] go server/') -and ($out -notmatch 'proto')) $out
 
+}
+
+if (Want 'hooks') {
 # 23. The generated pre-commit hook, executed the way git executes it. Nothing in
 # this suite had ever run one: the checks above assert on the TEXT of the template,
 # and the shipped hook was text that read correctly and failed. It probed with
@@ -1899,6 +1964,9 @@ if ($ccRacing) {
 $r = Invoke-Gate $cc
 Check 'the concurrency guard is silent outside a commit' ($r.Out -notmatch 'staged files changed') $r.Out
 
+}
+
+if (Want 'go') {
 # 24. A pin exists to make a run reproducible, so at the full level a mismatch is
 # a failure, not a note: a green -Full run on a different compiler than the repo
 # declared says nothing about the pinned version. Fast lane still only warns.
@@ -1921,6 +1989,9 @@ if ($goVer) {
     }
 }
 
+}
+
+if (Want 'core') {
 # 25. Deferred updates. Without them the only way to stop an accepted-and-known
 # update being reported every session is to stop reading the report -- and a
 # deferral with no expiry is just a silence, so `until` is mandatory and an
@@ -2049,6 +2120,9 @@ Check 'an unreadable deferrals file is reported, and the run still passes' `
 Check 'an unreadable deferrals file is not also blamed on a missing name/reason' `
     ($out -notmatch "needs both 'name' and 'reason'") $out
 
+}
+
+if (Want 'go') {
 # 27. The same warning has to reach the -Full gate run. It was emitted only after
 # the -Summary early return, and -Summary is the path -Full calls -- so a malformed
 # qgate.deferrals.json was silently ignored exactly where it guards a commit, while
@@ -2087,6 +2161,9 @@ Check '-Quiet prints nothing at all on a clean pass' `
     Write-Output '[skip] no green -Full run here -- checks asserting one cannot be judged'
 }
 
+}
+
+if (Want 'core') {
 # 28. Issue #3 again, through a different door: `-Only <stack the gate does not
 # implement>` printed [SKIP] not implemented and exited 0 -- a green pipeline over
 # zero checks, which is the exact thing `-Only nonsense` was made fatal for. It has
@@ -2232,6 +2309,9 @@ $out = (& pwsh -NoProfile -File $gate -Root $bare -All -Full 2>&1 | Out-String)
 Check 'a repo with no marker file gets base, not "no known stack"' `
     (($LASTEXITCODE -eq 0) -and ($out -match 'base \(git work tree\)') -and ($out -notmatch 'no known stack found')) $out
 
+}
+
+if (Want 'go') {
 # 32. A tool binary older than the module's go directive. Both failures are opaque:
 # golangci-lint refuses to load its config, govulncheck names every file in the repo
 # and four more inside the standard library. The verdict has to name the binary and
@@ -2308,6 +2388,9 @@ $wireRoot = (& pwsh -NoProfile -File $installer -Root $nm -NoHook 2>&1 | Out-Str
 Check 'wire accepts -Root as the repository to wire' `
     (($LASTEXITCODE -eq 0) -and ($wireRoot -match [regex]::Escape($nm))) "code=$LASTEXITCODE $wireRoot"
 
+}
+
+if (Want 'custom') {
 # 35. Custom checks the repository declares in its own qgate.json. They are arbitrary
 # command lines out of a file in the working tree, so the whole feature stands on the
 # trust gate: nothing runs until somebody on this machine has read the commands. The
@@ -2628,6 +2711,9 @@ $r = Invoke-DeployGate
 Check 'deploy: a malformed entry fails with the reason' `
     (($r.Code -ne 0) -and ($r.Out -match '\[FAIL\] deploy') -and ($r.Out -match 'needs non-empty "built" and "deployed"')) $r.Out
 
+}
+
+if (Want 'cpp') {
 # 36. The C/C++ CMake stack. Its two halves ask different tools -- clang-format for the
 # format phase, cmake for configure and build -- and neither is on every machine, so
 # every check here either asserts what the gate does WITHOUT the tool, or is guarded
@@ -2787,6 +2873,9 @@ if ((Get-Command clang-tidy -ErrorAction SilentlyContinue) -and ($cdbOk -or -not
         ($out -notmatch 'bugprone-branch-clone') $out
 }
 
+}
+
+if (Want 'base') {
 # 37. The base stack: the one with no marker file. Every git work tree has it, all
 # three of its tools are optional external binaries, and none of them is on every
 # machine -- so every check here either strips the tools from PATH itself or asserts
@@ -3295,6 +3384,9 @@ if (Get-Command gitleaks -ErrorAction SilentlyContinue) {
     Write-Output '[skip] gitleaks not on PATH -- the secrets filter cannot be judged here'
 }
 
+}
+
+if (Want 'web') {
 # 39. The web stack linted, type-checked, built and audited -- and never ran the
 # test script the repository itself declares, so a project whose suite was red went
 # through the gate green. The two halves: a declared `test` that exits non-zero must
@@ -3332,6 +3424,9 @@ if (Get-Command npm -ErrorAction SilentlyContinue) {
     Write-Output '[skip] npm not on PATH -- the web test phase cannot be judged here'
 }
 
+}
+
+if (Want 'bootstrap') {
 # #79: re-running bootstrap updates the install `qgate` already resolves to instead of
 # cloning a new copy; a qgate on PATH that is not a clone of this repo is not adopted.
 # No network: url.insteadOf redirects the origin URL to a local bare repo, and
@@ -3364,6 +3459,8 @@ git -C $bsOther remote set-url origin 'https://example.invalid/other.git' 2>&1 |
 $r = Invoke-Bootstrap79 $bsOther 'foreign'
 Check 'bootstrap does not adopt a qgate on PATH from another repository' $r.Cloned $r.Out
 
+}
 Remove-Item $tmp -Recurse -Force
+if ($script:Total -eq 0) { Write-Output "`nno checks ran"; exit 1 }
 if ($script:Fails) { Write-Output "`n$($script:Fails) of $($script:Total) check(s) failed"; exit 1 }
 Write-Output "`nall checks passed ($($script:Total)/$($script:Total))"
