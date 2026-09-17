@@ -31,6 +31,19 @@ if (-not (Get-Command qgate -ErrorAction SilentlyContinue)) {
     Write-Output "  warn:   'qgate' is not on PATH. Run bootstrap.ps1, then restart this terminal."
 }
 
+# Tailwind CSS directives, v4 (https://tailwindcss.com/docs/functions-and-directives)
+# plus the v3 `@tailwind` / `@screen`.
+$TailwindAtRules = @('theme', 'source', 'utility', 'variant', 'custom-variant', 'apply',
+    'reference', 'config', 'plugin', 'tailwind', 'screen')
+
+function Test-UsesTailwind([string]$dir) {
+    $pkg = Get-Content (Join-Path $dir 'package.json') -Raw | ConvertFrom-Json
+    foreach ($deps in @($pkg.dependencies, $pkg.devDependencies)) {
+        if ($deps -and $deps.PSObject.Properties.Name -contains 'tailwindcss') { return $true }
+    }
+    return $false
+}
+
 function Install-WebConfigs([string]$dir, [string]$where) {
     $need = @()
     if (Test-AnyFile $dir @('eslint.config.*', '.eslintrc*')) {
@@ -43,8 +56,18 @@ function Install-WebConfigs([string]$dir, [string]$where) {
     if (Test-AnyFile $dir @('stylelint.config.*', '.stylelintrc*')) {
         Write-Output "web       $where -- kept existing stylelint config"
     } else {
-        Copy-Item (Join-Path $PSScriptRoot 'templates\.stylelintrc.json') $dir
-        Write-Output "web       $where -- installed .stylelintrc.json"
+        $cfg = Get-Content (Join-Path $PSScriptRoot 'templates\.stylelintrc.json') -Raw | ConvertFrom-Json
+        $note = ''
+        if (Test-UsesTailwind $dir) {
+            # Tailwind's directives are not CSS; allow exactly those names, so any
+            # other unknown at-rule still fails. JSON carries no comment -- README does.
+            $cfg | Add-Member rules ([ordered]@{
+                'scss/at-rule-no-unknown' = @($true, [ordered]@{ ignoreAtRules = $TailwindAtRules })
+            })
+            $note = ' (Tailwind at-rules allowed)'
+        }
+        $cfg | ConvertTo-Json -Depth 10 | Set-Content (Join-Path $dir '.stylelintrc.json')
+        Write-Output "web       $where -- installed .stylelintrc.json$note"
         $need += 'stylelint stylelint-config-standard-scss stylelint-config-recommended-vue'
     }
     # Config without packages fails the phase loudly, which is the point: before

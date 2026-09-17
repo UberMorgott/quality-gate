@@ -230,7 +230,12 @@ Stop-хук агента (`qgate stop-hook` в `.claude/settings.json`) став
   нет (существующий не трогает — `kept existing eslint config`). Печатает строку установки:
   `npm i -D eslint @eslint/js typescript-eslint eslint-plugin-vue globals stylelint stylelint-config-standard-scss stylelint-config-recommended-vue`.
   В `.vue` шаблон eslint объявляет браузерные глобалы (`globals.browser`) вместо `no-undef: off`:
-  `navigator`/`setTimeout` проходят, реально неопределённое имя падает и в `<script>` без TS;
+  `navigator`/`setTimeout` проходят, реально неопределённое имя падает и в `<script>` без TS.
+  Если в `package.json` есть `tailwindcss`, в `.stylelintrc.json` дописывается
+  `scss/at-rule-no-unknown` с `ignoreAtRules` ровно для директив Tailwind (`@theme`, `@source`,
+  `@utility`, `@variant`, `@custom-variant`, `@apply`, `@reference`, `@config`, `@plugin`,
+  v3 `@tailwind`/`@screen`) — в JSON комментарий не положить, поэтому объяснение здесь;
+  любой другой неизвестный at-rule по-прежнему падает;
   Пакеты не поставлены — бинарь линтера отсутствует — фаза падает громко, молчаливого пропуска нет;
 - `lefthook.yml` + `lefthook install`, если lefthook в PATH;
   иначе git-хуки `pre-commit` **и `pre-merge-commit`** из `templates/pre-commit` — тело одно

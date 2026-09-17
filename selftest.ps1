@@ -664,6 +664,22 @@ $eslintTpl = Get-Content (Join-Path $PSScriptRoot 'templates\eslint.config.js') 
 Check 'eslint template declares browser globals for .vue' `
     (($eslintTpl -match "import globals from 'globals'") -and ($eslintTpl -match 'globals: globals\.browser') -and
     ($eslintTpl -notmatch "'no-undef'") -and ((Get-Content $installer -Raw) -match 'eslint-plugin-vue globals'))
+# #95: a Tailwind project gets exactly Tailwind's at-rules allowed; any other project
+# keeps the stock scss/at-rule-no-unknown, so an unknown at-rule still fails there.
+$styleRule = { param($dir) (Get-Content (Join-Path $dir '.stylelintrc.json') -Raw | ConvertFrom-Json).rules.'scss/at-rule-no-unknown' }
+Check 'wire leaves at-rule-no-unknown stock without tailwind' ($null -eq (& $styleRule $wire))
+$tw = Join-Path $tmp 'wire-tailwind'
+Copy-Item (Join-Path $PSScriptRoot 'testdata\web-fixture') $tw -Recurse
+$twPkg = Get-Content (Join-Path $tw 'package.json') -Raw | ConvertFrom-Json
+$twPkg | Add-Member devDependencies ([pscustomobject]@{}) -ErrorAction SilentlyContinue
+$twPkg.devDependencies | Add-Member tailwindcss '^4.0.0'
+$twPkg | ConvertTo-Json -Depth 10 | Set-Content (Join-Path $tw 'package.json')
+git -C $tw init -q 2>$null
+& pwsh -NoProfile -File $installer -Target $tw -NoRun -NoHook *> $null
+$twRule = & $styleRule $tw
+Check 'wire allows Tailwind at-rules when tailwindcss is a dependency' `
+    (($twRule[0] -eq $true) -and ($twRule[1].ignoreAtRules -contains 'theme') -and
+    ($twRule[1].ignoreAtRules -contains 'custom-variant') -and ($twRule[1].ignoreAtRules -notcontains 'bogus-rule')) ($twRule | ConvertTo-Json -Depth 5)
 
 }
 
