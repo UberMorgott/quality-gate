@@ -20,3 +20,5 @@ templates/lefthook.yml text eol=lf
 # The sh shim for `qgate` under bash (#77): a CRLF shebang breaks it on Linux/macOS.
 bin/qgate text eol=lf
 graphify-out/graph.json merge=graphify
+# The global dispatcher (#86) is read by sh directly, same as templates/pre-commit.
+hooks/* text eol=lf

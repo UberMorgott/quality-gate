@@ -331,6 +331,28 @@ qgate -All -Full -Quiet; g=$?
 [ $g -eq 0 ] && [ $m -eq 0 ]
 ```
 
+## Глобальный режим (`qgate global`)
+
+```powershell
+qgate global on       # git config --global core.hooksPath <install>/hooks
+qgate global status   # on / off / чужой core.hooksPath
+qgate global off      # снять (только если это путь гейта)
+```
+
+Opt-in: каждый git-репозиторий получает гейт без `qgate wire` и без файлов в репозитории.
+Диспетчер `hooks/pre-commit` (и `pre-merge-commit`) берёт `git rev-parse --show-toplevel` и
+запускает `qgate -All -Full -Quiet -Root <toplevel>`.
+
+- Чужой глобальный `core.hooksPath` не перезаписывается: `on` отказывает.
+- Глобальный `core.hooksPath` отключает `.git/hooks` репозитория, поэтому диспетчер сам
+  запускает его хук (`.git/hooks/<name>`); провал хука блокирует коммит. Хук, уже вызывающий
+  гейт (`qgate wire`, lefthook с qgate), гейт повторно не запускает.
+- Нет `qgate.json` — режим advisory: находки печатаются с `[WARN] global mode: advisory`, коммит
+  проходит. Есть `qgate.json` — гейт блокирует как обычно (baseline и deferrals учитываются).
+- Отказ для репозитория: файл `.qgate-off` в корне или `qgate.json` `{"enabled": false}`.
+- Локальный `core.hooksPath` репозитория (husky, `.githooks`) важнее глобального — туда
+  диспетчер не попадает.
+
 ## Прочие команды
 
 ```powershell

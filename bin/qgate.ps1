@@ -7,6 +7,7 @@
 #   qgate trust           allow this repo's own qgate.json checks to run here
 #   qgate outdated        dependencies and toolchains with a newer release
 #   qgate stop-hook       Claude Code `Stop` hook entry (reads stdin JSON)
+#   qgate global on|off   opt-in: gate every repo via global core.hooksPath (#86)
 #   qgate update          git pull in the install directory
 #   qgate selftest        run the gate's own red-then-green self-test
 #   qgate where           print the install directory and version
@@ -30,6 +31,8 @@ qgate -- one quality gate for every stack in the repository
                         (-Root <path> for another repo, -Remove to forget them)
   qgate outdated        dependencies and toolchains with a newer release
   qgate stop-hook       Claude Code `Stop` hook entry (reads stdin JSON)
+  qgate global on       every git repo gets the gate (global core.hooksPath; off, status)
+                        unwired repos without qgate.json: advisory; opt out: .qgate-off
   qgate update          git pull in the install directory
   qgate selftest        the gate's own red-then-green self-test
   qgate where           install path, commit and the tool versions in use
@@ -62,6 +65,7 @@ switch ($cmd) {
     'wire'      { Invoke-Child 'install.ps1'        $rest }
     'trust'     { Invoke-Child 'gate\trust.ps1'     $rest }
     'selftest'  { Invoke-Child 'selftest.ps1'       $rest }
+    'global'    { Invoke-Child 'gate\global.ps1'    $rest }
     'update' {
         # Same inherited-git-environment trap detect.ps1 clears for every other entry
         # point, and this branch is the one that does not dot-source it. Under a hook's
@@ -144,7 +148,7 @@ switch ($cmd) {
         exit 0
     }
     default {
-        [Console]::Error.WriteLine("qgate: unknown command '$cmd'. Try: run, wire, trust, outdated, stop-hook, update, selftest, where")
+        [Console]::Error.WriteLine("qgate: unknown command '$cmd'. Try: run, wire, trust, global, outdated, stop-hook, update, selftest, where")
         exit 64
     }
 }

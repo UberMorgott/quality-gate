@@ -2686,6 +2686,91 @@ if ($fullGreen) {
 
 }
 
+if (Want 'hooks') {
+# 24 (#86). Global mode: `qgate global on` points the GLOBAL core.hooksPath at the
+# install's dispatcher. GIT_CONFIG_GLOBAL is a temp file for the whole block, so the
+# real user's global git config is never read or written. Commits go through real
+# `git commit`, the path the dispatcher actually runs on.
+$glPriorCfg = $env:GIT_CONFIG_GLOBAL; $glPriorPath = $env:PATH
+$env:GIT_CONFIG_GLOBAL = Join-Path $tmp 'global.gitconfig'
+$env:PATH = "$(Join-Path $PSScriptRoot 'bin');$glPriorPath"
+$qgatePs = Join-Path $PSScriptRoot 'bin\qgate.ps1'
+try {
+    Set-Content $env:GIT_CONFIG_GLOBAL "[core]`n`thooksPath = /somewhere/else"
+    $out = (& pwsh -NoProfile -File $qgatePs global on 2>&1 | Out-String); $code = $LASTEXITCODE
+    Check 'global on refuses to replace a foreign global core.hooksPath' `
+        (($code -ne 0) -and ($out -match 'refused') -and ((& git config --global core.hooksPath) -eq '/somewhere/else')) "code=$code $out"
+    Set-Content $env:GIT_CONFIG_GLOBAL ''
+    $out = (& pwsh -NoProfile -File $qgatePs global on 2>&1 | Out-String); $code = $LASTEXITCODE
+    $set = [string](& git config --global core.hooksPath)
+    Check 'global on sets the global core.hooksPath to the install hooks' `
+        (($code -eq 0) -and ($set -eq ((Join-Path $PSScriptRoot 'hooks') -replace '\\', '/'))) "code=$code set=$set $out"
+    $out = (& pwsh -NoProfile -File $qgatePs global status 2>&1 | Out-String)
+    Check 'global status reports on' ($out -match 'global\s+on') $out
+
+    function New-GlobalRepo([string]$Name) {
+        $r = Join-Path $tmp $Name
+        Copy-Item (Join-Path $PSScriptRoot 'testdata\go-fixture') $r -Recurse
+        git -C $r init -q 2>$null
+        git -C $r add -A 2>$null
+        git -C $r -c user.email=selftest@local -c user.name=selftest commit -q --no-verify -m init 2>$null
+        Set-GoFile (Join-Path $r 'bad.go') "package main`nfunc  Bad() {}"
+        git -C $r add -A 2>$null
+        $r
+    }
+    function Invoke-GlobalCommit([string]$Repo) {
+        $o = (& git -C $Repo -c user.email=selftest@local -c user.name=selftest commit -m 'global' 2>&1 | Out-String)
+        [pscustomobject]@{ Code = $LASTEXITCODE; Out = $o }
+    }
+
+    # Unwired, no qgate.json: the real finding is printed, the commit still lands.
+    $r = New-GlobalRepo 'global-adv'
+    $c = Invoke-GlobalCommit $r
+    Check 'global dispatcher: unwired repo without qgate.json is advisory (commit lands, WARN + findings shown)' `
+        (($c.Code -eq 0) -and ($c.Out -match '\[WARN\] global mode: advisory') -and ($c.Out -match 'FAIL')) "code=$($c.Code) $($c.Out)"
+
+    # qgate.json present: the same defect blocks the commit.
+    $r = New-GlobalRepo 'global-enforce'
+    Set-Content (Join-Path $r 'qgate.json') '{}'
+    git -C $r add -A 2>$null
+    $c = Invoke-GlobalCommit $r
+    Check 'global dispatcher: qgate.json present enforces, the real defect fails the commit' `
+        (($c.Code -ne 0) -and ($c.Out -match 'FAIL') -and ($c.Out -notmatch 'advisory')) "code=$($c.Code) $($c.Out)"
+
+    # Opt-outs: nothing runs, nothing printed.
+    $r = New-GlobalRepo 'global-off'
+    New-Item -ItemType File (Join-Path $r '.qgate-off') | Out-Null
+    $c = Invoke-GlobalCommit $r
+    Check 'global dispatcher: .qgate-off skips the gate silently' `
+        (($c.Code -eq 0) -and ($c.Out -notmatch 'WARN|FAIL')) "code=$($c.Code) $($c.Out)"
+    $r = New-GlobalRepo 'global-disabled'
+    Set-Content (Join-Path $r 'qgate.json') '{"enabled": false}'
+    git -C $r add -A 2>$null
+    $c = Invoke-GlobalCommit $r
+    Check 'global dispatcher: qgate.json enabled:false skips the gate silently' `
+        (($c.Code -eq 0) -and ($c.Out -notmatch 'WARN|FAIL')) "code=$($c.Code) $($c.Out)"
+
+    # Chaining: a repo-local hook still runs. A foreign one that fails blocks; a
+    # wired one (it already calls the gate) runs and the gate is not run a second time.
+    $r = New-GlobalRepo 'global-chain'
+    $marker = Join-Path $r 'hook-ran'
+    [IO.File]::WriteAllText((Join-Path $r '.git\hooks\pre-commit'), "#!/bin/sh`necho ran > hook-ran`nexit 1`n")
+    $c = Invoke-GlobalCommit $r
+    Check 'global dispatcher: runs the repo-local hook, and its failure blocks the commit' `
+        (($c.Code -ne 0) -and (Test-Path $marker) -and ($c.Out -notmatch 'advisory')) "code=$($c.Code) $($c.Out)"
+    Remove-Item $marker
+    [IO.File]::WriteAllText((Join-Path $r '.git\hooks\pre-commit'), "#!/bin/sh`n# quality-gate`necho ran > hook-ran`nexit 0`n")
+    $c = Invoke-GlobalCommit $r
+    Check 'global dispatcher: a wired repo-local hook runs and the gate is not run twice' `
+        (($c.Code -eq 0) -and (Test-Path $marker) -and ($c.Out -notmatch 'WARN|FAIL')) "code=$($c.Code) $($c.Out)"
+
+    $out = (& pwsh -NoProfile -File $qgatePs global off 2>&1 | Out-String); $code = $LASTEXITCODE
+    & git config --global core.hooksPath *> $null
+    Check 'global off removes the global core.hooksPath' (($code -eq 0) -and ($LASTEXITCODE -ne 0)) "code=$code $out"
+} finally { $env:GIT_CONFIG_GLOBAL = $glPriorCfg; $env:PATH = $glPriorPath }
+
+}
+
 if (Want 'custom') {
 # 35. Custom checks the repository declares in its own qgate.json. They are arbitrary
 # command lines out of a file in the working tree, so the whole feature stands on the

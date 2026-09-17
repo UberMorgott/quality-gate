@@ -1,0 +1,30 @@
+#!/bin/sh
+# Global dispatcher (#86). Reached only through `qgate global on`, which points
+# `git config --global core.hooksPath` here. That setting makes git ignore every
+# repository's own .git/hooks, so this script has to run that hook itself.
+#
+# pre-commit and pre-merge-commit are the same file: the hook name comes from $0.
+name=$(basename "$0")
+top=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
+
+# The repository's own hook. NOT `--git-path hooks`: git resolves that through
+# core.hooksPath, which is this directory, and the dispatcher would call itself.
+common=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)
+wired=
+for own in "$common/hooks/$name" "$top/.husky/$name"; do
+  [ -f "$own" ] || continue
+  # A wired repository's hook already runs the gate; running it here too would
+  # run it twice on every commit.
+  grep -qE 'qgate|quality-gate' "$own" && wired=1
+  "$own" "$@" || exit $?
+  break
+done
+[ -f "$top/lefthook.yml" ] && grep -q qgate "$top/lefthook.yml" && wired=1
+[ -n "$wired" ] && exit 0
+
+# Same platform switch as templates/pre-commit, for the same measured reason.
+if uname -o 2>/dev/null | grep -q Msys; then
+  exec qgate.cmd global hook "$top"
+else
+  exec qgate global hook "$top"
+fi
