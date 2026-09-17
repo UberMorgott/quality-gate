@@ -38,7 +38,7 @@ function Install-WebConfigs([string]$dir, [string]$where) {
     } else {
         Copy-Item (Join-Path $PSScriptRoot 'templates\eslint.config.js') $dir
         Write-Output "web       $where -- installed eslint.config.js"
-        $need += 'eslint @eslint/js typescript-eslint eslint-plugin-vue'
+        $need += 'eslint @eslint/js typescript-eslint eslint-plugin-vue globals'
     }
     if (Test-AnyFile $dir @('stylelint.config.*', '.stylelintrc*')) {
         Write-Output "web       $where -- kept existing stylelint config"

@@ -658,6 +658,12 @@ Check 'wire installs the frontend linter configs' `
 Set-Content $eslintCfg 'mine' -NoNewline
 & pwsh -NoProfile -File $installer -Target $wire -NoRun -NoHook *> $null
 Check 'wire keeps a config the project already had' ((Get-Content $eslintCfg -Raw) -eq 'mine')
+# #94: .vue code runs no-undef (typescript-eslint drops it only for .ts), so the
+# template must declare browser globals -- and the install line must ship the package.
+$eslintTpl = Get-Content (Join-Path $PSScriptRoot 'templates\eslint.config.js') -Raw
+Check 'eslint template declares browser globals for .vue' `
+    (($eslintTpl -match "import globals from 'globals'") -and ($eslintTpl -match 'globals: globals\.browser') -and
+    ($eslintTpl -notmatch "'no-undef'") -and ((Get-Content $installer -Raw) -match 'eslint-plugin-vue globals'))
 
 }
 

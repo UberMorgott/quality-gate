@@ -228,7 +228,9 @@ Stop-хук агента (`qgate stop-hook` в `.claude/settings.json`) став
 
 - `templates/eslint.config.js` и `templates/.stylelintrc.json` рядом с `package.json`, если своих
   нет (существующий не трогает — `kept existing eslint config`). Печатает строку установки:
-  `npm i -D eslint @eslint/js typescript-eslint eslint-plugin-vue stylelint stylelint-config-standard-scss stylelint-config-recommended-vue`.
+  `npm i -D eslint @eslint/js typescript-eslint eslint-plugin-vue globals stylelint stylelint-config-standard-scss stylelint-config-recommended-vue`.
+  В `.vue` шаблон eslint объявляет браузерные глобалы (`globals.browser`) вместо `no-undef: off`:
+  `navigator`/`setTimeout` проходят, реально неопределённое имя падает и в `<script>` без TS;
   Пакеты не поставлены — бинарь линтера отсутствует — фаза падает громко, молчаливого пропуска нет;
 - `lefthook.yml` + `lefthook install`, если lefthook в PATH;
   иначе git-хуки `pre-commit` **и `pre-merge-commit`** из `templates/pre-commit` — тело одно
