@@ -40,7 +40,6 @@
   "38": ".golangci.yml template",
   "39": ".Run",
   "40": "gopurity/main.go",
-  "41": "MethodType",
-  "42": "A right outcome does not prove the right cause (§0.1)",
+  "42": "Coverage measures happy paths; a green suite proves nothing",
   "43": "bepinex.ps1"
 }
