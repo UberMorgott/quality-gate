@@ -2272,9 +2272,22 @@ function Invoke-BaseStack($s) {
         }
         if (-not $lBad) { continue }
         $hits = @($lOut -split "`r?`n" | Where-Object { $_.Trim() })
+        # #100: markdownlint-cli2 opens with a banner -- its version, the glob list it was
+        # given, the file count, the issue summary -- before the rule hits. None of those is
+        # a finding, and the `Finding: :a.md :b.md ...` line echoed every checked path into
+        # the warning, so a single MD022 hit read as ten findings.
+        if ($l.Name -eq 'markdownlint') {
+            $hits = @($hits | Where-Object { $_ -notmatch '^(markdownlint-cli2 v|Finding: |Linting: \d+ files?$|Summary: )' })
+        }
+        if (-not $hits) { continue }
+        # The headline counts the files the findings are IN, not every file checked. A format
+        # without a `path:line` prefix (editorconfig's default per-file grouping, a shim) has
+        # nothing to count, so it falls back to the number of files handed to the tool.
+        $hitFiles = @($hits | ForEach-Object { if ($_ -match '^\s*(.+?):\d+[:\s]') { $Matches[1] } } | Sort-Object -Unique)
+        $nFiles = if ($hitFiles) { $hitFiles.Count } else { $files.Count }
         # Report-level, like the Go warnings: a green stack line keeps only the [WARN] header,
         # so the findings themselves would never be seen.
-        $script:Warnings += @("[WARN] $($l.Name): findings in $($files.Count) checked file(s) -- advisory, not a failure"
+        $script:Warnings += @("[WARN] $($l.Name): findings in $nFiles file(s) -- advisory, not a failure"
             $hits | Select-Object -First 20 | ForEach-Object { "       $_" }
             if ($hits.Count -gt 20) { "       ... $($hits.Count - 20) more line(s): run $($l.Exe) on those files" })
     }

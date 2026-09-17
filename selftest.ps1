@@ -3565,6 +3565,41 @@ try {
     }
 } finally { $env:PATH = $priorPath }
 
+# #100: markdownlint-cli2 prints a banner before the rule hits -- version, the glob echo
+# listing every checked path, the file count, the issue summary. The banner is not findings,
+# and the headline counts the files the hits are in, not everything that was linted.
+$mdRepo = Join-Path $tmp 'base-lint-md'
+New-Item -ItemType Directory -Path $mdRepo -Force | Out-Null
+git -C $mdRepo init -q 2>$null
+foreach ($f in 'a.md', 'b.md', 'c.md') { [IO.File]::WriteAllText((Join-Path $mdRepo $f), "# T`n") }
+git -C $mdRepo add -A 2>$null
+$mdShim = Join-Path $tmp 'mdl-banner-shim'
+New-Item -ItemType Directory -Path $mdShim -Force | Out-Null
+$mdBanner = @('markdownlint-cli2 v0.23.2 (markdownlint v0.41.1)', 'Finding: :a.md :b.md :c.md',
+    'Linting: 3 files', 'Summary: 1 issue in 1 file',
+    'b.md:1 error MD022/blanks-around-headings Headings should be surrounded by blank lines')
+if ($IsWindows) {
+    # PowerShell prefers the .ps1 shim npm installs, so that is the one to stand in for.
+    [IO.File]::WriteAllText((Join-Path $mdShim 'markdownlint-cli2.ps1'),
+        (($mdBanner | ForEach-Object { "'$_'" }) -join "`n") + "`nexit 1`n")
+} else {
+    $p = Join-Path $mdShim 'markdownlint-cli2'
+    [IO.File]::WriteAllText($p, "#!/bin/sh`n" + (($mdBanner | ForEach-Object { "echo '$_'" }) -join "`n") + "`nexit 1`n")
+    chmod +x $p
+}
+try {
+    $env:PATH = "$mdShim$sep$strippedPath"
+    $out = (& pwsh -NoProfile -File $gate -Root $mdRepo -Only base -Full 2>&1 | Out-String)
+    $code = $LASTEXITCODE
+    Check 'markdownlint counts the files the findings are in, not every file checked (#100)' `
+        (($code -eq 0) -and ($out -match '\[WARN\] markdownlint: findings in 1 file\(s\)')) "code=$code $out"
+    Check 'markdownlint banner lines are not reported as findings (#100)' `
+        (($out -notmatch 'Finding: :a\.md') -and ($out -notmatch 'Linting: 3 files') -and
+        ($out -notmatch 'markdownlint-cli2 v0') -and ($out -notmatch 'Summary: 1 issue')) $out
+    Check 'markdownlint rule hits survive the banner filter (#100)' `
+        ($out -match 'MD022/blanks-around-headings') $out
+} finally { $env:PATH = $priorPath }
+
 # #50: gremlins runs only under -Mutate. A stand-in that leaves a marker proves the default
 # run never invokes it; a missing tool is a [SKIP]; survivors are a [WARN], exit 0.
 $mut = Join-Path $tmp 'mutate'
