@@ -3238,7 +3238,7 @@
       "node_kind": "heading",
       "norm_label": "graphify",
       "source_file": "CLAUDE.md",
-      "source_location": "L17"
+      "source_location": "L20"
     },
     {
       "id": "testdata_dotnet_fixture_fixture",
@@ -3964,7 +3964,7 @@
       "file_type": "code",
       "norm_label": "get-parrun()",
       "source_file": "selftest.ps1",
-      "source_location": "L2841"
+      "source_location": "L2850"
     },
     {
       "id": "selftest_get_summary",
@@ -4393,7 +4393,7 @@
       "file_type": "code",
       "norm_label": "get-descendants()",
       "source_file": "gate/check.ps1",
-      "source_location": "L2037"
+      "source_location": "L2051"
     },
     {
       "id": "gate_check_get_dotnetchangedcs",
@@ -4459,7 +4459,7 @@
       "file_type": "code",
       "norm_label": "get-leakreport()",
       "source_file": "gate/check.ps1",
-      "source_location": "L2056"
+      "source_location": "L2070"
     },
     {
       "id": "gate_check_get_nugetcachedversion",
@@ -4481,7 +4481,7 @@
       "file_type": "code",
       "norm_label": "get-pdbpath()",
       "source_file": "gate/check.ps1",
-      "source_location": "L2163"
+      "source_location": "L2177"
     },
     {
       "id": "gate_check_get_qgatedotnetconfig",
@@ -4547,7 +4547,7 @@
       "file_type": "code",
       "norm_label": "invoke-customstack()",
       "source_file": "gate/check.ps1",
-      "source_location": "L2086"
+      "source_location": "L2100"
     },
     {
       "id": "gate_check_invoke_deploystack",
@@ -4558,7 +4558,7 @@
       "file_type": "code",
       "norm_label": "invoke-deploystack()",
       "source_file": "gate/check.ps1",
-      "source_location": "L2175"
+      "source_location": "L2189"
     },
     {
       "id": "gate_check_invoke_dotnetstack",
@@ -8972,7 +8972,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "gate/check.ps1",
-      "source_location": "L2060",
+      "source_location": "L2074",
       "weight": 1.0
     },
     {
@@ -9093,7 +9093,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "gate/check.ps1",
-      "source_location": "L2089",
+      "source_location": "L2103",
       "weight": 1.0
     },
     {
@@ -9104,7 +9104,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "gate/check.ps1",
-      "source_location": "L2131",
+      "source_location": "L2145",
       "weight": 1.0
     },
     {
@@ -9115,7 +9115,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "gate/check.ps1",
-      "source_location": "L2139",
+      "source_location": "L2153",
       "weight": 1.0
     },
     {
@@ -9126,7 +9126,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "gate/check.ps1",
-      "source_location": "L2178",
+      "source_location": "L2192",
       "weight": 1.0
     },
     {
@@ -9137,7 +9137,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "gate/check.ps1",
-      "source_location": "L2201",
+      "source_location": "L2215",
       "weight": 1.0
     },
     {
@@ -9148,7 +9148,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "gate/check.ps1",
-      "source_location": "L2206",
+      "source_location": "L2220",
       "weight": 1.0
     },
     {
@@ -9654,7 +9654,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "CLAUDE.md",
-      "source_location": "L17",
+      "source_location": "L20",
       "weight": 1.0
     },
     {
@@ -9720,7 +9720,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "gate/check.ps1",
-      "source_location": "L2037",
+      "source_location": "L2051",
       "weight": 1.0
     },
     {
@@ -9731,7 +9731,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "gate/check.ps1",
-      "source_location": "L2056",
+      "source_location": "L2070",
       "weight": 1.0
     },
     {
@@ -9742,7 +9742,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "gate/check.ps1",
-      "source_location": "L2086",
+      "source_location": "L2100",
       "weight": 1.0
     },
     {
@@ -9753,7 +9753,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "gate/check.ps1",
-      "source_location": "L2163",
+      "source_location": "L2177",
       "weight": 1.0
     },
     {
@@ -9764,7 +9764,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "gate/check.ps1",
-      "source_location": "L2175",
+      "source_location": "L2189",
       "weight": 1.0
     },
     {
@@ -10589,7 +10589,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "selftest.ps1",
-      "source_location": "L2841",
+      "source_location": "L2850",
       "weight": 1.0
     },
     {
@@ -12228,7 +12228,7 @@
       "confidence_score": 0.85,
       "context": "call",
       "source_file": "gate/check.ps1",
-      "source_location": "L2087",
+      "source_location": "L2101",
       "weight": 1.0
     },
     {
@@ -12240,7 +12240,7 @@
       "confidence_score": 0.85,
       "context": "call",
       "source_file": "gate/check.ps1",
-      "source_location": "L2090",
+      "source_location": "L2104",
       "weight": 1.0
     },
     {
@@ -12252,7 +12252,7 @@
       "confidence_score": 0.85,
       "context": "call",
       "source_file": "gate/check.ps1",
-      "source_location": "L2109",
+      "source_location": "L2123",
       "weight": 1.0
     },
     {
@@ -12264,7 +12264,7 @@
       "confidence_score": 0.85,
       "context": "call",
       "source_file": "gate/check.ps1",
-      "source_location": "L2114",
+      "source_location": "L2128",
       "weight": 1.0
     },
     {
@@ -12276,7 +12276,7 @@
       "confidence_score": 0.85,
       "context": "call",
       "source_file": "gate/check.ps1",
-      "source_location": "L2176",
+      "source_location": "L2190",
       "weight": 1.0
     },
     {
@@ -13374,5 +13374,5 @@
       "source_file": "HANDOFF.md"
     }
   ],
-  "built_at_commit": "896de94e6044c18042807acab6825fb1157a8d05"
+  "built_at_commit": "e80cff2de462c9d37de73757c9ceaf8788d84a30"
 }
