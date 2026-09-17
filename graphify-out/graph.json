@@ -53,32 +53,13 @@
   },
   "nodes": [
     {
-      "id": "testdata_dotnet_fixture_greeter_fixture_greeter",
-      "label": "Greeter",
-      "_callable": true,
-      "_callable_class": true,
-      "_origin": "ast",
-      "community": 0,
-      "community_name": "Patches.cs",
-      "file_type": "code",
-      "metadata": {
-        "namespace": "Fixture",
-        "scope_chain": [
-          "s0"
-        ]
-      },
-      "norm_label": "greeter",
-      "source_file": "testdata/dotnet-fixture/Greeter.cs",
-      "source_location": "L4"
-    },
-    {
       "id": "testdata_harmony_fixture_game_hud_hud",
       "label": "Hud",
       "_callable": true,
       "_callable_class": true,
       "_origin": "ast",
       "community": 0,
-      "community_name": "Patches.cs",
+      "community_name": "Hud",
       "file_type": "code",
       "norm_label": "hud",
       "source_file": "testdata/harmony-fixture/Game/Hud.cs",
@@ -91,7 +72,7 @@
       "_callable_class": true,
       "_origin": "ast",
       "community": 0,
-      "community_name": "Patches.cs",
+      "community_name": "Hud",
       "file_type": "code",
       "norm_label": "idamageable",
       "source_file": "testdata/harmony-fixture/Game/Hud.cs",
@@ -104,7 +85,7 @@
       "_callable_class": true,
       "_origin": "ast",
       "community": 0,
-      "community_name": "Patches.cs",
+      "community_name": "Hud",
       "file_type": "code",
       "norm_label": "player",
       "source_file": "testdata/harmony-fixture/Game/Hud.cs",
@@ -117,30 +98,11 @@
       "_callable_class": true,
       "_origin": "ast",
       "community": 0,
-      "community_name": "Patches.cs",
+      "community_name": "Hud",
       "file_type": "code",
       "norm_label": "unit",
       "source_file": "testdata/harmony-fixture/Game/Hud.cs",
       "source_location": "L1"
-    },
-    {
-      "id": "testdata_harmony_fixture_mod_patches_fixture_aritypatch",
-      "label": "ArityPatch",
-      "_callable": true,
-      "_callable_class": true,
-      "_origin": "ast",
-      "community": 0,
-      "community_name": "Patches.cs",
-      "file_type": "code",
-      "metadata": {
-        "namespace": "Fixture",
-        "scope_chain": [
-          "s47"
-        ]
-      },
-      "norm_label": "aritypatch",
-      "source_file": "testdata/harmony-fixture/Mod/Patches.cs",
-      "source_location": "L47"
     },
     {
       "id": "testdata_harmony_fixture_mod_patches_fixture_assignablepatch",
@@ -149,7 +111,7 @@
       "_callable_class": true,
       "_origin": "ast",
       "community": 0,
-      "community_name": "Patches.cs",
+      "community_name": "Hud",
       "file_type": "code",
       "metadata": {
         "namespace": "Fixture",
@@ -162,51 +124,13 @@
       "source_location": "L20"
     },
     {
-      "id": "testdata_harmony_fixture_mod_patches_fixture_computedpatch",
-      "label": "ComputedPatch",
-      "_callable": true,
-      "_callable_class": true,
-      "_origin": "ast",
-      "community": 0,
-      "community_name": "Patches.cs",
-      "file_type": "code",
-      "metadata": {
-        "namespace": "Fixture",
-        "scope_chain": [
-          "s47"
-        ]
-      },
-      "norm_label": "computedpatch",
-      "source_file": "testdata/harmony-fixture/Mod/Patches.cs",
-      "source_location": "L54"
-    },
-    {
-      "id": "testdata_harmony_fixture_mod_patches_fixture_healthgetterpatch",
-      "label": "HealthGetterPatch",
-      "_callable": true,
-      "_callable_class": true,
-      "_origin": "ast",
-      "community": 0,
-      "community_name": "Patches.cs",
-      "file_type": "code",
-      "metadata": {
-        "namespace": "Fixture",
-        "scope_chain": [
-          "s47"
-        ]
-      },
-      "norm_label": "healthgetterpatch",
-      "source_file": "testdata/harmony-fixture/Mod/Patches.cs",
-      "source_location": "L13"
-    },
-    {
       "id": "testdata_harmony_fixture_mod_patches_fixture_healthpatch",
       "label": "HealthPatch",
       "_callable": true,
       "_callable_class": true,
       "_origin": "ast",
       "community": 0,
-      "community_name": "Patches.cs",
+      "community_name": "Hud",
       "file_type": "code",
       "metadata": {
         "namespace": "Fixture",
@@ -217,63 +141,6 @@
       "norm_label": "healthpatch",
       "source_file": "testdata/harmony-fixture/Mod/Patches.cs",
       "source_location": "L7"
-    },
-    {
-      "id": "testdata_harmony_fixture_mod_patches_fixture_staminapatch",
-      "label": "StaminaPatch",
-      "_callable": true,
-      "_callable_class": true,
-      "_origin": "ast",
-      "community": 0,
-      "community_name": "Patches.cs",
-      "file_type": "code",
-      "metadata": {
-        "namespace": "Fixture",
-        "scope_chain": [
-          "s47"
-        ]
-      },
-      "norm_label": "staminapatch",
-      "source_file": "testdata/harmony-fixture/Mod/Patches.cs",
-      "source_location": "L33"
-    },
-    {
-      "id": "testdata_harmony_fixture_mod_patches_fixture_statuspatch",
-      "label": "StatusPatch",
-      "_callable": true,
-      "_callable_class": true,
-      "_origin": "ast",
-      "community": 0,
-      "community_name": "Patches.cs",
-      "file_type": "code",
-      "metadata": {
-        "namespace": "Fixture",
-        "scope_chain": [
-          "s47"
-        ]
-      },
-      "norm_label": "statuspatch",
-      "source_file": "testdata/harmony-fixture/Mod/Patches.cs",
-      "source_location": "L27"
-    },
-    {
-      "id": "testdata_harmony_fixture_mod_patches_fixture_wrongtypespatch",
-      "label": "WrongTypesPatch",
-      "_callable": true,
-      "_callable_class": true,
-      "_origin": "ast",
-      "community": 0,
-      "community_name": "Patches.cs",
-      "file_type": "code",
-      "metadata": {
-        "namespace": "Fixture",
-        "scope_chain": [
-          "s47"
-        ]
-      },
-      "norm_label": "wrongtypespatch",
-      "source_file": "testdata/harmony-fixture/Mod/Patches.cs",
-      "source_location": "L40"
     },
     {
       "id": "gate_harmony_v",
@@ -324,63 +191,6 @@
       "source_location": "L123"
     },
     {
-      "id": "testdata_harmony_fixture_harmony_harmonystub_harmonylib_accesstools",
-      "label": "AccessTools",
-      "_callable": true,
-      "_callable_class": true,
-      "_origin": "ast",
-      "community": 4,
-      "community_name": "Lookups",
-      "file_type": "code",
-      "metadata": {
-        "namespace": "HarmonyLib",
-        "scope_chain": [
-          "s43"
-        ]
-      },
-      "norm_label": "accesstools",
-      "source_file": "testdata/harmony-fixture/Harmony/HarmonyStub.cs",
-      "source_location": "L21"
-    },
-    {
-      "id": "testdata_harmony_fixture_harmony_harmonystub_harmonylib_harmonypatch",
-      "label": "HarmonyPatch",
-      "_callable": true,
-      "_callable_class": true,
-      "_origin": "ast",
-      "community": 4,
-      "community_name": "Lookups",
-      "file_type": "code",
-      "metadata": {
-        "namespace": "HarmonyLib",
-        "scope_chain": [
-          "s43"
-        ]
-      },
-      "norm_label": "harmonypatch",
-      "source_file": "testdata/harmony-fixture/Harmony/HarmonyStub.cs",
-      "source_location": "L8"
-    },
-    {
-      "id": "testdata_harmony_fixture_harmony_harmonystub_harmonylib_methodtype",
-      "label": "MethodType",
-      "_callable": true,
-      "_callable_class": true,
-      "_origin": "ast",
-      "community": 4,
-      "community_name": "Lookups",
-      "file_type": "code",
-      "metadata": {
-        "namespace": "HarmonyLib",
-        "scope_chain": [
-          "s43"
-        ]
-      },
-      "norm_label": "methodtype",
-      "source_file": "testdata/harmony-fixture/Harmony/HarmonyStub.cs",
-      "source_location": "L6"
-    },
-    {
       "id": "testdata_harmony_fixture_mod_patches_fixture_lookups",
       "label": "Lookups",
       "_callable": true,
@@ -398,6 +208,196 @@
       "norm_label": "lookups",
       "source_file": "testdata/harmony-fixture/Mod/Patches.cs",
       "source_location": "L64"
+    },
+    {
+      "id": "testdata_harmony_fixture_harmony_harmonystub_harmonylib_accesstools",
+      "label": "AccessTools",
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast",
+      "community": 41,
+      "community_name": "HarmonyStub.cs",
+      "file_type": "code",
+      "metadata": {
+        "namespace": "HarmonyLib",
+        "scope_chain": [
+          "s43"
+        ]
+      },
+      "norm_label": "accesstools",
+      "source_file": "testdata/harmony-fixture/Harmony/HarmonyStub.cs",
+      "source_location": "L21"
+    },
+    {
+      "id": "testdata_harmony_fixture_harmony_harmonystub_harmonylib_harmonypatch",
+      "label": "HarmonyPatch",
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast",
+      "community": 41,
+      "community_name": "HarmonyStub.cs",
+      "file_type": "code",
+      "metadata": {
+        "namespace": "HarmonyLib",
+        "scope_chain": [
+          "s43"
+        ]
+      },
+      "norm_label": "harmonypatch",
+      "source_file": "testdata/harmony-fixture/Harmony/HarmonyStub.cs",
+      "source_location": "L8"
+    },
+    {
+      "id": "testdata_harmony_fixture_mod_patches_fixture_aritypatch",
+      "label": "ArityPatch",
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast",
+      "community": 44,
+      "community_name": "Patches.cs",
+      "file_type": "code",
+      "metadata": {
+        "namespace": "Fixture",
+        "scope_chain": [
+          "s47"
+        ]
+      },
+      "norm_label": "aritypatch",
+      "source_file": "testdata/harmony-fixture/Mod/Patches.cs",
+      "source_location": "L47"
+    },
+    {
+      "id": "testdata_harmony_fixture_mod_patches_fixture_healthgetterpatch",
+      "label": "HealthGetterPatch",
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast",
+      "community": 44,
+      "community_name": "Patches.cs",
+      "file_type": "code",
+      "metadata": {
+        "namespace": "Fixture",
+        "scope_chain": [
+          "s47"
+        ]
+      },
+      "norm_label": "healthgetterpatch",
+      "source_file": "testdata/harmony-fixture/Mod/Patches.cs",
+      "source_location": "L13"
+    },
+    {
+      "id": "testdata_harmony_fixture_mod_patches_fixture_staminapatch",
+      "label": "StaminaPatch",
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast",
+      "community": 44,
+      "community_name": "Patches.cs",
+      "file_type": "code",
+      "metadata": {
+        "namespace": "Fixture",
+        "scope_chain": [
+          "s47"
+        ]
+      },
+      "norm_label": "staminapatch",
+      "source_file": "testdata/harmony-fixture/Mod/Patches.cs",
+      "source_location": "L33"
+    },
+    {
+      "id": "testdata_harmony_fixture_mod_patches_fixture_statuspatch",
+      "label": "StatusPatch",
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast",
+      "community": 44,
+      "community_name": "Patches.cs",
+      "file_type": "code",
+      "metadata": {
+        "namespace": "Fixture",
+        "scope_chain": [
+          "s47"
+        ]
+      },
+      "norm_label": "statuspatch",
+      "source_file": "testdata/harmony-fixture/Mod/Patches.cs",
+      "source_location": "L27"
+    },
+    {
+      "id": "testdata_harmony_fixture_mod_patches_fixture_wrongtypespatch",
+      "label": "WrongTypesPatch",
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast",
+      "community": 44,
+      "community_name": "Patches.cs",
+      "file_type": "code",
+      "metadata": {
+        "namespace": "Fixture",
+        "scope_chain": [
+          "s47"
+        ]
+      },
+      "norm_label": "wrongtypespatch",
+      "source_file": "testdata/harmony-fixture/Mod/Patches.cs",
+      "source_location": "L40"
+    },
+    {
+      "id": "testdata_harmony_fixture_harmony_harmonystub_harmonylib_methodtype",
+      "label": "MethodType",
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast",
+      "community": 45,
+      "community_name": "MethodType",
+      "file_type": "code",
+      "metadata": {
+        "namespace": "HarmonyLib",
+        "scope_chain": [
+          "s43"
+        ]
+      },
+      "norm_label": "methodtype",
+      "source_file": "testdata/harmony-fixture/Harmony/HarmonyStub.cs",
+      "source_location": "L6"
+    },
+    {
+      "id": "testdata_harmony_fixture_mod_patches_fixture_computedpatch",
+      "label": "ComputedPatch",
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast",
+      "community": 46,
+      "community_name": "ComputedPatch",
+      "file_type": "code",
+      "metadata": {
+        "namespace": "Fixture",
+        "scope_chain": [
+          "s47"
+        ]
+      },
+      "norm_label": "computedpatch",
+      "source_file": "testdata/harmony-fixture/Mod/Patches.cs",
+      "source_location": "L54"
+    },
+    {
+      "id": "testdata_dotnet_fixture_greeter_fixture_greeter",
+      "label": "Greeter",
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast",
+      "community": 47,
+      "community_name": "Fixture",
+      "file_type": "code",
+      "metadata": {
+        "namespace": "Fixture",
+        "scope_chain": [
+          "s0"
+        ]
+      },
+      "norm_label": "greeter",
+      "source_file": "testdata/dotnet-fixture/Greeter.cs",
+      "source_location": "L4"
     },
     {
       "id": "gate_harmony_ins",
@@ -429,30 +429,12 @@
       "source_location": "L32"
     },
     {
-      "id": "testdata_dotnet_fixture_greeter_fixture_greeter_greet",
-      "label": ".Greet()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 0,
-      "community_name": "Patches.cs",
-      "file_type": "code",
-      "metadata": {
-        "namespace": "Fixture",
-        "scope_chain": [
-          "s0"
-        ]
-      },
-      "norm_label": ".greet()",
-      "source_file": "testdata/dotnet-fixture/Greeter.cs",
-      "source_location": "L7"
-    },
-    {
       "id": "testdata_harmony_fixture_game_hud_hud_damage",
       "label": ".Damage()",
       "_callable": true,
       "_origin": "ast",
       "community": 0,
-      "community_name": "Patches.cs",
+      "community_name": "Hud",
       "file_type": "code",
       "norm_label": ".damage()",
       "source_file": "testdata/harmony-fixture/Game/Hud.cs",
@@ -464,7 +446,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 0,
-      "community_name": "Patches.cs",
+      "community_name": "Hud",
       "file_type": "code",
       "norm_label": ".hit()",
       "source_file": "testdata/harmony-fixture/Game/Hud.cs",
@@ -476,7 +458,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 0,
-      "community_name": "Patches.cs",
+      "community_name": "Hud",
       "file_type": "code",
       "norm_label": ".spawn()",
       "source_file": "testdata/harmony-fixture/Game/Hud.cs",
@@ -488,29 +470,11 @@
       "_callable": true,
       "_origin": "ast",
       "community": 0,
-      "community_name": "Patches.cs",
+      "community_name": "Hud",
       "file_type": "code",
       "norm_label": ".updatehealth()",
       "source_file": "testdata/harmony-fixture/Game/Hud.cs",
       "source_location": "L13"
-    },
-    {
-      "id": "testdata_harmony_fixture_mod_patches_fixture_aritypatch_prefix",
-      "label": ".Prefix()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 0,
-      "community_name": "Patches.cs",
-      "file_type": "code",
-      "metadata": {
-        "namespace": "Fixture",
-        "scope_chain": [
-          "s47"
-        ]
-      },
-      "norm_label": ".prefix()",
-      "source_file": "testdata/harmony-fixture/Mod/Patches.cs",
-      "source_location": "L50"
     },
     {
       "id": "testdata_harmony_fixture_mod_patches_fixture_assignablepatch_prefix",
@@ -518,7 +482,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 0,
-      "community_name": "Patches.cs",
+      "community_name": "Hud",
       "file_type": "code",
       "metadata": {
         "namespace": "Fixture",
@@ -531,84 +495,12 @@
       "source_location": "L23"
     },
     {
-      "id": "testdata_harmony_fixture_mod_patches_fixture_computedpatch_pick",
-      "label": ".Pick()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 0,
-      "community_name": "Patches.cs",
-      "file_type": "code",
-      "metadata": {
-        "namespace": "Fixture",
-        "scope_chain": [
-          "s47"
-        ]
-      },
-      "norm_label": ".pick()",
-      "source_file": "testdata/harmony-fixture/Mod/Patches.cs",
-      "source_location": "L59"
-    },
-    {
-      "id": "testdata_harmony_fixture_mod_patches_fixture_computedpatch_postfix",
-      "label": ".Postfix()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 0,
-      "community_name": "Patches.cs",
-      "file_type": "code",
-      "metadata": {
-        "namespace": "Fixture",
-        "scope_chain": [
-          "s47"
-        ]
-      },
-      "norm_label": ".postfix()",
-      "source_file": "testdata/harmony-fixture/Mod/Patches.cs",
-      "source_location": "L61"
-    },
-    {
-      "id": "testdata_harmony_fixture_mod_patches_fixture_computedpatch_targetmethod",
-      "label": ".TargetMethod()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 0,
-      "community_name": "Patches.cs",
-      "file_type": "code",
-      "metadata": {
-        "namespace": "Fixture",
-        "scope_chain": [
-          "s47"
-        ]
-      },
-      "norm_label": ".targetmethod()",
-      "source_file": "testdata/harmony-fixture/Mod/Patches.cs",
-      "source_location": "L57"
-    },
-    {
-      "id": "testdata_harmony_fixture_mod_patches_fixture_healthgetterpatch_postfix",
-      "label": ".Postfix()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 0,
-      "community_name": "Patches.cs",
-      "file_type": "code",
-      "metadata": {
-        "namespace": "Fixture",
-        "scope_chain": [
-          "s47"
-        ]
-      },
-      "norm_label": ".postfix()",
-      "source_file": "testdata/harmony-fixture/Mod/Patches.cs",
-      "source_location": "L16"
-    },
-    {
       "id": "testdata_harmony_fixture_mod_patches_fixture_healthpatch_postfix",
       "label": ".Postfix()",
       "_callable": true,
       "_origin": "ast",
       "community": 0,
-      "community_name": "Patches.cs",
+      "community_name": "Hud",
       "file_type": "code",
       "metadata": {
         "namespace": "Fixture",
@@ -619,60 +511,6 @@
       "norm_label": ".postfix()",
       "source_file": "testdata/harmony-fixture/Mod/Patches.cs",
       "source_location": "L10"
-    },
-    {
-      "id": "testdata_harmony_fixture_mod_patches_fixture_staminapatch_prefix",
-      "label": ".Prefix()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 0,
-      "community_name": "Patches.cs",
-      "file_type": "code",
-      "metadata": {
-        "namespace": "Fixture",
-        "scope_chain": [
-          "s47"
-        ]
-      },
-      "norm_label": ".prefix()",
-      "source_file": "testdata/harmony-fixture/Mod/Patches.cs",
-      "source_location": "L36"
-    },
-    {
-      "id": "testdata_harmony_fixture_mod_patches_fixture_statuspatch_postfix",
-      "label": ".Postfix()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 0,
-      "community_name": "Patches.cs",
-      "file_type": "code",
-      "metadata": {
-        "namespace": "Fixture",
-        "scope_chain": [
-          "s47"
-        ]
-      },
-      "norm_label": ".postfix()",
-      "source_file": "testdata/harmony-fixture/Mod/Patches.cs",
-      "source_location": "L30"
-    },
-    {
-      "id": "testdata_harmony_fixture_mod_patches_fixture_wrongtypespatch_prefix",
-      "label": ".Prefix()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 0,
-      "community_name": "Patches.cs",
-      "file_type": "code",
-      "metadata": {
-        "namespace": "Fixture",
-        "scope_chain": [
-          "s47"
-        ]
-      },
-      "norm_label": ".prefix()",
-      "source_file": "testdata/harmony-fixture/Mod/Patches.cs",
-      "source_location": "L43"
     },
     {
       "id": "gate_harmony_qgateharmony_asmof",
@@ -1917,24 +1755,6 @@
       "source_location": "L249"
     },
     {
-      "id": "testdata_harmony_fixture_harmony_harmonystub_harmonylib_accesstools_field",
-      "label": ".Field()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 4,
-      "community_name": "Lookups",
-      "file_type": "code",
-      "metadata": {
-        "namespace": "HarmonyLib",
-        "scope_chain": [
-          "s43"
-        ]
-      },
-      "norm_label": ".field()",
-      "source_file": "testdata/harmony-fixture/Harmony/HarmonyStub.cs",
-      "source_location": "L27"
-    },
-    {
       "id": "testdata_harmony_fixture_harmony_harmonystub_harmonylib_accesstools_method",
       "label": ".Method()",
       "_callable": true,
@@ -1951,24 +1771,6 @@
       "norm_label": ".method()",
       "source_file": "testdata/harmony-fixture/Harmony/HarmonyStub.cs",
       "source_location": "L23"
-    },
-    {
-      "id": "testdata_harmony_fixture_harmony_harmonystub_harmonylib_accesstools_typebyname",
-      "label": ".TypeByName()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 4,
-      "community_name": "Lookups",
-      "file_type": "code",
-      "metadata": {
-        "namespace": "HarmonyLib",
-        "scope_chain": [
-          "s43"
-        ]
-      },
-      "norm_label": ".typebyname()",
-      "source_file": "testdata/harmony-fixture/Harmony/HarmonyStub.cs",
-      "source_location": "L29"
     },
     {
       "id": "testdata_harmony_fixture_mod_patches_fixture_lookups_dangling",
@@ -2025,24 +1827,6 @@
       "source_location": "L82"
     },
     {
-      "id": "testdata_harmony_fixture_mod_patches_fixture_lookups_danglingtypebyname",
-      "label": ".DanglingTypeByName()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 4,
-      "community_name": "Lookups",
-      "file_type": "code",
-      "metadata": {
-        "namespace": "Fixture",
-        "scope_chain": [
-          "s47"
-        ]
-      },
-      "norm_label": ".danglingtypebyname()",
-      "source_file": "testdata/harmony-fixture/Mod/Patches.cs",
-      "source_location": "L86"
-    },
-    {
       "id": "testdata_harmony_fixture_mod_patches_fixture_lookups_danglingtypes",
       "label": ".DanglingTypes()",
       "_callable": true,
@@ -2095,24 +1879,6 @@
       "norm_label": ".probe()",
       "source_file": "testdata/harmony-fixture/Mod/Patches.cs",
       "source_location": "L93"
-    },
-    {
-      "id": "testdata_harmony_fixture_mod_patches_fixture_lookups_valid",
-      "label": ".Valid()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 4,
-      "community_name": "Lookups",
-      "file_type": "code",
-      "metadata": {
-        "namespace": "Fixture",
-        "scope_chain": [
-          "s47"
-        ]
-      },
-      "norm_label": ".valid()",
-      "source_file": "testdata/harmony-fixture/Mod/Patches.cs",
-      "source_location": "L66"
     },
     {
       "id": "testdata_harmony_fixture_mod_patches_fixture_lookups_validassignable",
@@ -2187,12 +1953,84 @@
       "source_location": "L70"
     },
     {
+      "id": "testdata_harmony_fixture_harmony_harmonystub_harmonylib_accesstools_field",
+      "label": ".Field()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 41,
+      "community_name": "HarmonyStub.cs",
+      "file_type": "code",
+      "metadata": {
+        "namespace": "HarmonyLib",
+        "scope_chain": [
+          "s43"
+        ]
+      },
+      "norm_label": ".field()",
+      "source_file": "testdata/harmony-fixture/Harmony/HarmonyStub.cs",
+      "source_location": "L27"
+    },
+    {
+      "id": "testdata_harmony_fixture_harmony_harmonystub_harmonylib_accesstools_typebyname",
+      "label": ".TypeByName()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 41,
+      "community_name": "HarmonyStub.cs",
+      "file_type": "code",
+      "metadata": {
+        "namespace": "HarmonyLib",
+        "scope_chain": [
+          "s43"
+        ]
+      },
+      "norm_label": ".typebyname()",
+      "source_file": "testdata/harmony-fixture/Harmony/HarmonyStub.cs",
+      "source_location": "L29"
+    },
+    {
+      "id": "testdata_harmony_fixture_mod_patches_fixture_lookups_danglingtypebyname",
+      "label": ".DanglingTypeByName()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 41,
+      "community_name": "HarmonyStub.cs",
+      "file_type": "code",
+      "metadata": {
+        "namespace": "Fixture",
+        "scope_chain": [
+          "s47"
+        ]
+      },
+      "norm_label": ".danglingtypebyname()",
+      "source_file": "testdata/harmony-fixture/Mod/Patches.cs",
+      "source_location": "L86"
+    },
+    {
+      "id": "testdata_harmony_fixture_mod_patches_fixture_lookups_valid",
+      "label": ".Valid()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 41,
+      "community_name": "HarmonyStub.cs",
+      "file_type": "code",
+      "metadata": {
+        "namespace": "Fixture",
+        "scope_chain": [
+          "s47"
+        ]
+      },
+      "norm_label": ".valid()",
+      "source_file": "testdata/harmony-fixture/Mod/Patches.cs",
+      "source_location": "L66"
+    },
+    {
       "id": "testdata_harmony_fixture_mod_patches_fixture_lookups_validtypebyname",
       "label": ".ValidTypeByName()",
       "_callable": true,
       "_origin": "ast",
-      "community": 4,
-      "community_name": "Lookups",
+      "community": 41,
+      "community_name": "HarmonyStub.cs",
       "file_type": "code",
       "metadata": {
         "namespace": "Fixture",
@@ -2203,6 +2041,168 @@
       "norm_label": ".validtypebyname()",
       "source_file": "testdata/harmony-fixture/Mod/Patches.cs",
       "source_location": "L76"
+    },
+    {
+      "id": "testdata_harmony_fixture_mod_patches_fixture_aritypatch_prefix",
+      "label": ".Prefix()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 44,
+      "community_name": "Patches.cs",
+      "file_type": "code",
+      "metadata": {
+        "namespace": "Fixture",
+        "scope_chain": [
+          "s47"
+        ]
+      },
+      "norm_label": ".prefix()",
+      "source_file": "testdata/harmony-fixture/Mod/Patches.cs",
+      "source_location": "L50"
+    },
+    {
+      "id": "testdata_harmony_fixture_mod_patches_fixture_healthgetterpatch_postfix",
+      "label": ".Postfix()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 44,
+      "community_name": "Patches.cs",
+      "file_type": "code",
+      "metadata": {
+        "namespace": "Fixture",
+        "scope_chain": [
+          "s47"
+        ]
+      },
+      "norm_label": ".postfix()",
+      "source_file": "testdata/harmony-fixture/Mod/Patches.cs",
+      "source_location": "L16"
+    },
+    {
+      "id": "testdata_harmony_fixture_mod_patches_fixture_staminapatch_prefix",
+      "label": ".Prefix()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 44,
+      "community_name": "Patches.cs",
+      "file_type": "code",
+      "metadata": {
+        "namespace": "Fixture",
+        "scope_chain": [
+          "s47"
+        ]
+      },
+      "norm_label": ".prefix()",
+      "source_file": "testdata/harmony-fixture/Mod/Patches.cs",
+      "source_location": "L36"
+    },
+    {
+      "id": "testdata_harmony_fixture_mod_patches_fixture_statuspatch_postfix",
+      "label": ".Postfix()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 44,
+      "community_name": "Patches.cs",
+      "file_type": "code",
+      "metadata": {
+        "namespace": "Fixture",
+        "scope_chain": [
+          "s47"
+        ]
+      },
+      "norm_label": ".postfix()",
+      "source_file": "testdata/harmony-fixture/Mod/Patches.cs",
+      "source_location": "L30"
+    },
+    {
+      "id": "testdata_harmony_fixture_mod_patches_fixture_wrongtypespatch_prefix",
+      "label": ".Prefix()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 44,
+      "community_name": "Patches.cs",
+      "file_type": "code",
+      "metadata": {
+        "namespace": "Fixture",
+        "scope_chain": [
+          "s47"
+        ]
+      },
+      "norm_label": ".prefix()",
+      "source_file": "testdata/harmony-fixture/Mod/Patches.cs",
+      "source_location": "L43"
+    },
+    {
+      "id": "testdata_harmony_fixture_mod_patches_fixture_computedpatch_pick",
+      "label": ".Pick()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 46,
+      "community_name": "ComputedPatch",
+      "file_type": "code",
+      "metadata": {
+        "namespace": "Fixture",
+        "scope_chain": [
+          "s47"
+        ]
+      },
+      "norm_label": ".pick()",
+      "source_file": "testdata/harmony-fixture/Mod/Patches.cs",
+      "source_location": "L59"
+    },
+    {
+      "id": "testdata_harmony_fixture_mod_patches_fixture_computedpatch_postfix",
+      "label": ".Postfix()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 46,
+      "community_name": "ComputedPatch",
+      "file_type": "code",
+      "metadata": {
+        "namespace": "Fixture",
+        "scope_chain": [
+          "s47"
+        ]
+      },
+      "norm_label": ".postfix()",
+      "source_file": "testdata/harmony-fixture/Mod/Patches.cs",
+      "source_location": "L61"
+    },
+    {
+      "id": "testdata_harmony_fixture_mod_patches_fixture_computedpatch_targetmethod",
+      "label": ".TargetMethod()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 46,
+      "community_name": "ComputedPatch",
+      "file_type": "code",
+      "metadata": {
+        "namespace": "Fixture",
+        "scope_chain": [
+          "s47"
+        ]
+      },
+      "norm_label": ".targetmethod()",
+      "source_file": "testdata/harmony-fixture/Mod/Patches.cs",
+      "source_location": "L57"
+    },
+    {
+      "id": "testdata_dotnet_fixture_greeter_fixture_greeter_greet",
+      "label": ".Greet()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 47,
+      "community_name": "Fixture",
+      "file_type": "code",
+      "metadata": {
+        "namespace": "Fixture",
+        "scope_chain": [
+          "s0"
+        ]
+      },
+      "norm_label": ".greet()",
+      "source_file": "testdata/dotnet-fixture/Greeter.cs",
+      "source_location": "L7"
     },
     {
       "id": "gate_harmony_qgateharmony_branchonvalue",
@@ -2395,49 +2395,11 @@
       "source_location": "L51"
     },
     {
-      "id": "csharp_namespace:b79957adcf9f3730",
-      "label": "Fixture",
-      "_origin": "ast",
-      "community": 0,
-      "community_name": "Patches.cs",
-      "file_type": "code",
-      "metadata": {
-        "kind": "csharp_namespace",
-        "namespace": "Fixture"
-      },
-      "norm_label": "fixture",
-      "source_file": "testdata/dotnet-fixture/Greeter.cs",
-      "source_location": "L1",
-      "type": "namespace"
-    },
-    {
-      "id": "methodbase",
-      "label": "MethodBase",
-      "_origin": "ast",
-      "community": 0,
-      "community_name": "Patches.cs",
-      "file_type": "code",
-      "norm_label": "methodbase",
-      "source_file": "",
-      "source_location": ""
-    },
-    {
-      "id": "testdata_dotnet_fixture_greeter",
-      "label": "Greeter.cs",
-      "_origin": "ast",
-      "community": 0,
-      "community_name": "Patches.cs",
-      "file_type": "code",
-      "norm_label": "greeter.cs",
-      "source_file": "testdata/dotnet-fixture/Greeter.cs",
-      "source_location": "L1"
-    },
-    {
       "id": "testdata_harmony_fixture_game_hud",
       "label": "Hud.cs",
       "_origin": "ast",
       "community": 0,
-      "community_name": "Patches.cs",
+      "community_name": "Hud",
       "file_type": "code",
       "norm_label": "hud.cs",
       "source_file": "testdata/harmony-fixture/Game/Hud.cs",
@@ -2448,22 +2410,11 @@
       "label": "Health",
       "_origin": "ast",
       "community": 0,
-      "community_name": "Patches.cs",
+      "community_name": "Hud",
       "file_type": "code",
       "norm_label": "health",
       "source_file": "testdata/harmony-fixture/Game/Hud.cs",
       "source_location": "L11"
-    },
-    {
-      "id": "testdata_harmony_fixture_mod_patches",
-      "label": "Patches.cs",
-      "_origin": "ast",
-      "community": 0,
-      "community_name": "Patches.cs",
-      "file_type": "code",
-      "norm_label": "patches.cs",
-      "source_file": "testdata/harmony-fixture/Mod/Patches.cs",
-      "source_location": "L1"
     },
     {
       "id": "gate_detect",
@@ -3082,26 +3033,34 @@
       "source_location": "L81"
     },
     {
-      "id": "bin_qgate",
-      "label": "qgate.ps1",
+      "id": "bin_qgate__entry",
+      "label": "qgate script",
       "_origin": "ast",
       "community": 15,
-      "community_name": "qgate.ps1",
+      "community_name": "qgate script",
       "file_type": "code",
-      "norm_label": "qgate.ps1",
-      "source_file": "bin/qgate.ps1",
+      "metadata": {
+        "language": "bash",
+        "kind": "bash_entrypoint"
+      },
+      "norm_label": "qgate script",
+      "source_file": "bin/qgate",
       "source_location": "L1"
     },
     {
-      "id": "bin_qgate_invoke_child",
-      "label": "Invoke-Child()",
+      "id": "bin_qgate_bin_qgate",
+      "label": "qgate",
       "_origin": "ast",
       "community": 15,
-      "community_name": "qgate.ps1",
+      "community_name": "qgate script",
       "file_type": "code",
-      "norm_label": "invoke-child()",
-      "source_file": "bin/qgate.ps1",
-      "source_location": "L49"
+      "metadata": {
+        "language": "bash",
+        "kind": "file"
+      },
+      "norm_label": "qgate",
+      "source_file": "bin/qgate",
+      "source_location": "L1"
     },
     {
       "id": "templates_pre_commit",
@@ -3238,7 +3197,7 @@
       "node_kind": "heading",
       "norm_label": "graphify",
       "source_file": "CLAUDE.md",
-      "source_location": "L20"
+      "source_location": "L21"
     },
     {
       "id": "testdata_dotnet_fixture_fixture",
@@ -3706,55 +3665,6 @@
       "source_location": ""
     },
     {
-      "id": "attribute",
-      "label": "Attribute",
-      "_origin": "ast",
-      "community": 4,
-      "community_name": "Lookups",
-      "file_type": "code",
-      "norm_label": "attribute",
-      "source_file": "",
-      "source_location": ""
-    },
-    {
-      "id": "csharp_namespace:d8806e74e794b351",
-      "label": "HarmonyLib",
-      "_origin": "ast",
-      "community": 4,
-      "community_name": "Lookups",
-      "file_type": "code",
-      "metadata": {
-        "kind": "csharp_namespace",
-        "namespace": "HarmonyLib"
-      },
-      "norm_label": "harmonylib",
-      "source_file": "testdata/harmony-fixture/Harmony/HarmonyStub.cs",
-      "source_location": "L4",
-      "type": "namespace"
-    },
-    {
-      "id": "fieldinfo",
-      "label": "FieldInfo",
-      "_origin": "ast",
-      "community": 4,
-      "community_name": "Lookups",
-      "file_type": "code",
-      "norm_label": "fieldinfo",
-      "source_file": "",
-      "source_location": ""
-    },
-    {
-      "id": "testdata_harmony_fixture_harmony_harmonystub",
-      "label": "HarmonyStub.cs",
-      "_origin": "ast",
-      "community": 4,
-      "community_name": "Lookups",
-      "file_type": "code",
-      "norm_label": "harmonystub.cs",
-      "source_file": "testdata/harmony-fixture/Harmony/HarmonyStub.cs",
-      "source_location": "L1"
-    },
-    {
       "id": "testdata_harmony_fixture_harmony_harmonystub_cs_methodinfo",
       "label": "MethodInfo",
       "_origin": "ast",
@@ -3766,108 +3676,6 @@
       "source_location": ""
     },
     {
-      "id": "testdata_harmony_fixture_harmony_harmonystub_harmonylib_methodtype_constructor",
-      "label": "Constructor",
-      "_origin": "ast",
-      "community": 4,
-      "community_name": "Lookups",
-      "file_type": "code",
-      "metadata": {
-        "namespace": "HarmonyLib",
-        "scope_chain": [
-          "s43"
-        ]
-      },
-      "norm_label": "constructor",
-      "source_file": "testdata/harmony-fixture/Harmony/HarmonyStub.cs",
-      "source_location": "L6"
-    },
-    {
-      "id": "testdata_harmony_fixture_harmony_harmonystub_harmonylib_methodtype_enumerator",
-      "label": "Enumerator",
-      "_origin": "ast",
-      "community": 4,
-      "community_name": "Lookups",
-      "file_type": "code",
-      "metadata": {
-        "namespace": "HarmonyLib",
-        "scope_chain": [
-          "s43"
-        ]
-      },
-      "norm_label": "enumerator",
-      "source_file": "testdata/harmony-fixture/Harmony/HarmonyStub.cs",
-      "source_location": "L6"
-    },
-    {
-      "id": "testdata_harmony_fixture_harmony_harmonystub_harmonylib_methodtype_getter",
-      "label": "Getter",
-      "_origin": "ast",
-      "community": 4,
-      "community_name": "Lookups",
-      "file_type": "code",
-      "metadata": {
-        "namespace": "HarmonyLib",
-        "scope_chain": [
-          "s43"
-        ]
-      },
-      "norm_label": "getter",
-      "source_file": "testdata/harmony-fixture/Harmony/HarmonyStub.cs",
-      "source_location": "L6"
-    },
-    {
-      "id": "testdata_harmony_fixture_harmony_harmonystub_harmonylib_methodtype_normal",
-      "label": "Normal",
-      "_origin": "ast",
-      "community": 4,
-      "community_name": "Lookups",
-      "file_type": "code",
-      "metadata": {
-        "namespace": "HarmonyLib",
-        "scope_chain": [
-          "s43"
-        ]
-      },
-      "norm_label": "normal",
-      "source_file": "testdata/harmony-fixture/Harmony/HarmonyStub.cs",
-      "source_location": "L6"
-    },
-    {
-      "id": "testdata_harmony_fixture_harmony_harmonystub_harmonylib_methodtype_setter",
-      "label": "Setter",
-      "_origin": "ast",
-      "community": 4,
-      "community_name": "Lookups",
-      "file_type": "code",
-      "metadata": {
-        "namespace": "HarmonyLib",
-        "scope_chain": [
-          "s43"
-        ]
-      },
-      "norm_label": "setter",
-      "source_file": "testdata/harmony-fixture/Harmony/HarmonyStub.cs",
-      "source_location": "L6"
-    },
-    {
-      "id": "testdata_harmony_fixture_harmony_harmonystub_harmonylib_methodtype_staticconstructor",
-      "label": "StaticConstructor",
-      "_origin": "ast",
-      "community": 4,
-      "community_name": "Lookups",
-      "file_type": "code",
-      "metadata": {
-        "namespace": "HarmonyLib",
-        "scope_chain": [
-          "s43"
-        ]
-      },
-      "norm_label": "staticconstructor",
-      "source_file": "testdata/harmony-fixture/Harmony/HarmonyStub.cs",
-      "source_location": "L6"
-    },
-    {
       "id": "testdata_harmony_fixture_mod_patches_cs_methodinfo",
       "label": "MethodInfo",
       "_origin": "ast",
@@ -3875,17 +3683,6 @@
       "community_name": "Lookups",
       "file_type": "code",
       "norm_label": "methodinfo",
-      "source_file": "",
-      "source_location": ""
-    },
-    {
-      "id": "type",
-      "label": "Type",
-      "_origin": "ast",
-      "community": 4,
-      "community_name": "Lookups",
-      "file_type": "code",
-      "norm_label": "type",
       "source_file": "",
       "source_location": ""
     },
@@ -3912,6 +3709,66 @@
       "source_location": "L23"
     },
     {
+      "id": "attribute",
+      "label": "Attribute",
+      "_origin": "ast",
+      "community": 41,
+      "community_name": "HarmonyStub.cs",
+      "file_type": "code",
+      "norm_label": "attribute",
+      "source_file": "",
+      "source_location": ""
+    },
+    {
+      "id": "csharp_namespace:d8806e74e794b351",
+      "label": "HarmonyLib",
+      "_origin": "ast",
+      "community": 41,
+      "community_name": "HarmonyStub.cs",
+      "file_type": "code",
+      "metadata": {
+        "kind": "csharp_namespace",
+        "namespace": "HarmonyLib"
+      },
+      "norm_label": "harmonylib",
+      "source_file": "testdata/harmony-fixture/Harmony/HarmonyStub.cs",
+      "source_location": "L4",
+      "type": "namespace"
+    },
+    {
+      "id": "fieldinfo",
+      "label": "FieldInfo",
+      "_origin": "ast",
+      "community": 41,
+      "community_name": "HarmonyStub.cs",
+      "file_type": "code",
+      "norm_label": "fieldinfo",
+      "source_file": "",
+      "source_location": ""
+    },
+    {
+      "id": "testdata_harmony_fixture_harmony_harmonystub",
+      "label": "HarmonyStub.cs",
+      "_origin": "ast",
+      "community": 41,
+      "community_name": "HarmonyStub.cs",
+      "file_type": "code",
+      "norm_label": "harmonystub.cs",
+      "source_file": "testdata/harmony-fixture/Harmony/HarmonyStub.cs",
+      "source_location": "L1"
+    },
+    {
+      "id": "type",
+      "label": "Type",
+      "_origin": "ast",
+      "community": 41,
+      "community_name": "HarmonyStub.cs",
+      "file_type": "code",
+      "norm_label": "type",
+      "source_file": "",
+      "source_location": ""
+    },
+    {
       "id": "gate_bepinex",
       "label": "bepinex.ps1",
       "_origin": "ast",
@@ -3932,6 +3789,179 @@
       "norm_label": "resolve-arg()",
       "source_file": "gate/bepinex.ps1",
       "source_location": "L28"
+    },
+    {
+      "id": "testdata_harmony_fixture_mod_patches",
+      "label": "Patches.cs",
+      "_origin": "ast",
+      "community": 44,
+      "community_name": "Patches.cs",
+      "file_type": "code",
+      "norm_label": "patches.cs",
+      "source_file": "testdata/harmony-fixture/Mod/Patches.cs",
+      "source_location": "L1"
+    },
+    {
+      "id": "testdata_harmony_fixture_harmony_harmonystub_harmonylib_methodtype_constructor",
+      "label": "Constructor",
+      "_origin": "ast",
+      "community": 45,
+      "community_name": "MethodType",
+      "file_type": "code",
+      "metadata": {
+        "namespace": "HarmonyLib",
+        "scope_chain": [
+          "s43"
+        ]
+      },
+      "norm_label": "constructor",
+      "source_file": "testdata/harmony-fixture/Harmony/HarmonyStub.cs",
+      "source_location": "L6"
+    },
+    {
+      "id": "testdata_harmony_fixture_harmony_harmonystub_harmonylib_methodtype_enumerator",
+      "label": "Enumerator",
+      "_origin": "ast",
+      "community": 45,
+      "community_name": "MethodType",
+      "file_type": "code",
+      "metadata": {
+        "namespace": "HarmonyLib",
+        "scope_chain": [
+          "s43"
+        ]
+      },
+      "norm_label": "enumerator",
+      "source_file": "testdata/harmony-fixture/Harmony/HarmonyStub.cs",
+      "source_location": "L6"
+    },
+    {
+      "id": "testdata_harmony_fixture_harmony_harmonystub_harmonylib_methodtype_getter",
+      "label": "Getter",
+      "_origin": "ast",
+      "community": 45,
+      "community_name": "MethodType",
+      "file_type": "code",
+      "metadata": {
+        "namespace": "HarmonyLib",
+        "scope_chain": [
+          "s43"
+        ]
+      },
+      "norm_label": "getter",
+      "source_file": "testdata/harmony-fixture/Harmony/HarmonyStub.cs",
+      "source_location": "L6"
+    },
+    {
+      "id": "testdata_harmony_fixture_harmony_harmonystub_harmonylib_methodtype_normal",
+      "label": "Normal",
+      "_origin": "ast",
+      "community": 45,
+      "community_name": "MethodType",
+      "file_type": "code",
+      "metadata": {
+        "namespace": "HarmonyLib",
+        "scope_chain": [
+          "s43"
+        ]
+      },
+      "norm_label": "normal",
+      "source_file": "testdata/harmony-fixture/Harmony/HarmonyStub.cs",
+      "source_location": "L6"
+    },
+    {
+      "id": "testdata_harmony_fixture_harmony_harmonystub_harmonylib_methodtype_setter",
+      "label": "Setter",
+      "_origin": "ast",
+      "community": 45,
+      "community_name": "MethodType",
+      "file_type": "code",
+      "metadata": {
+        "namespace": "HarmonyLib",
+        "scope_chain": [
+          "s43"
+        ]
+      },
+      "norm_label": "setter",
+      "source_file": "testdata/harmony-fixture/Harmony/HarmonyStub.cs",
+      "source_location": "L6"
+    },
+    {
+      "id": "testdata_harmony_fixture_harmony_harmonystub_harmonylib_methodtype_staticconstructor",
+      "label": "StaticConstructor",
+      "_origin": "ast",
+      "community": 45,
+      "community_name": "MethodType",
+      "file_type": "code",
+      "metadata": {
+        "namespace": "HarmonyLib",
+        "scope_chain": [
+          "s43"
+        ]
+      },
+      "norm_label": "staticconstructor",
+      "source_file": "testdata/harmony-fixture/Harmony/HarmonyStub.cs",
+      "source_location": "L6"
+    },
+    {
+      "id": "methodbase",
+      "label": "MethodBase",
+      "_origin": "ast",
+      "community": 46,
+      "community_name": "ComputedPatch",
+      "file_type": "code",
+      "norm_label": "methodbase",
+      "source_file": "",
+      "source_location": ""
+    },
+    {
+      "id": "csharp_namespace:b79957adcf9f3730",
+      "label": "Fixture",
+      "_origin": "ast",
+      "community": 47,
+      "community_name": "Fixture",
+      "file_type": "code",
+      "metadata": {
+        "kind": "csharp_namespace",
+        "namespace": "Fixture"
+      },
+      "norm_label": "fixture",
+      "source_file": "testdata/dotnet-fixture/Greeter.cs",
+      "source_location": "L1",
+      "type": "namespace"
+    },
+    {
+      "id": "testdata_dotnet_fixture_greeter",
+      "label": "Greeter.cs",
+      "_origin": "ast",
+      "community": 47,
+      "community_name": "Fixture",
+      "file_type": "code",
+      "norm_label": "greeter.cs",
+      "source_file": "testdata/dotnet-fixture/Greeter.cs",
+      "source_location": "L1"
+    },
+    {
+      "id": "bin_qgate_invoke_child",
+      "label": "Invoke-Child()",
+      "_origin": "ast",
+      "community": 48,
+      "community_name": "Invoke-Child",
+      "file_type": "code",
+      "norm_label": "invoke-child()",
+      "source_file": "bin/qgate.ps1",
+      "source_location": "L49"
+    },
+    {
+      "id": "bin_qgate_ps1_bin_qgate",
+      "label": "qgate.ps1",
+      "_origin": "ast",
+      "community": 48,
+      "community_name": "Invoke-Child",
+      "file_type": "code",
+      "norm_label": "qgate.ps1",
+      "source_file": "bin/qgate.ps1",
+      "source_location": "L1"
     },
     {
       "id": "selftest",
@@ -3964,7 +3994,7 @@
       "file_type": "code",
       "norm_label": "get-parrun()",
       "source_file": "selftest.ps1",
-      "source_location": "L2896"
+      "source_location": "L2930"
     },
     {
       "id": "selftest_get_summary",
@@ -3975,7 +4005,7 @@
       "file_type": "code",
       "norm_label": "get-summary()",
       "source_file": "selftest.ps1",
-      "source_location": "L1881"
+      "source_location": "L1915"
     },
     {
       "id": "selftest_invoke_deploygate",
@@ -3986,7 +4016,7 @@
       "file_type": "code",
       "norm_label": "invoke-deploygate()",
       "source_file": "selftest.ps1",
-      "source_location": "L2507"
+      "source_location": "L2541"
     },
     {
       "id": "selftest_invoke_gate",
@@ -4008,7 +4038,7 @@
       "file_type": "code",
       "norm_label": "invoke-smoke()",
       "source_file": "selftest.ps1",
-      "source_location": "L2381"
+      "source_location": "L2415"
     },
     {
       "id": "selftest_invoke_stophook",
@@ -4019,7 +4049,7 @@
       "file_type": "code",
       "norm_label": "invoke-stophook()",
       "source_file": "selftest.ps1",
-      "source_location": "L1496"
+      "source_location": "L1530"
     },
     {
       "id": "selftest_invoke_trust",
@@ -4030,7 +4060,7 @@
       "file_type": "code",
       "norm_label": "invoke-trust()",
       "source_file": "selftest.ps1",
-      "source_location": "L2246"
+      "source_location": "L2280"
     },
     {
       "id": "selftest_set_deferrals",
@@ -4041,7 +4071,7 @@
       "file_type": "code",
       "norm_label": "set-deferrals()",
       "source_file": "selftest.ps1",
-      "source_location": "L1870"
+      "source_location": "L1904"
     },
     {
       "id": "selftest_set_gofile",
@@ -4063,7 +4093,7 @@
       "file_type": "code",
       "norm_label": "set-outdatedcache()",
       "source_file": "selftest.ps1",
-      "source_location": "L1877"
+      "source_location": "L1911"
     },
     {
       "id": "a",
@@ -9566,7 +9596,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "selftest.ps1",
-      "source_location": "L2386",
+      "source_location": "L2420",
       "weight": 1.0
     },
     {
@@ -9636,7 +9666,18 @@
       "weight": 1.0
     },
     {
-      "source": "bin_qgate",
+      "source": "bin_qgate_bin_qgate",
+      "target": "bin_qgate__entry",
+      "relation": "contains",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "bin/qgate",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "bin_qgate_ps1_bin_qgate",
       "target": "bin_qgate_invoke_child",
       "relation": "contains",
       "_origin": "ast",
@@ -9665,7 +9706,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "CLAUDE.md",
-      "source_location": "L20",
+      "source_location": "L21",
       "weight": 1.0
     },
     {
@@ -10534,7 +10575,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "selftest.ps1",
-      "source_location": "L1496",
+      "source_location": "L1530",
       "weight": 1.0
     },
     {
@@ -10545,7 +10586,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "selftest.ps1",
-      "source_location": "L1870",
+      "source_location": "L1904",
       "weight": 1.0
     },
     {
@@ -10556,7 +10597,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "selftest.ps1",
-      "source_location": "L1877",
+      "source_location": "L1911",
       "weight": 1.0
     },
     {
@@ -10567,7 +10608,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "selftest.ps1",
-      "source_location": "L1881",
+      "source_location": "L1915",
       "weight": 1.0
     },
     {
@@ -10578,7 +10619,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "selftest.ps1",
-      "source_location": "L2246",
+      "source_location": "L2280",
       "weight": 1.0
     },
     {
@@ -10589,7 +10630,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "selftest.ps1",
-      "source_location": "L2381",
+      "source_location": "L2415",
       "weight": 1.0
     },
     {
@@ -10600,18 +10641,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "selftest.ps1",
-      "source_location": "L2507",
-      "weight": 1.0
-    },
-    {
-      "source": "selftest",
-      "target": "selftest_get_parrun",
-      "relation": "contains",
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "selftest.ps1",
-      "source_location": "L2896",
+      "source_location": "L2541",
       "weight": 1.0
     },
     {
@@ -10623,6 +10653,17 @@
       "confidence_score": 1.0,
       "source_file": "selftest.ps1",
       "source_location": "L29",
+      "weight": 1.0
+    },
+    {
+      "source": "selftest",
+      "target": "selftest_get_parrun",
+      "relation": "contains",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "selftest.ps1",
+      "source_location": "L2930",
       "weight": 1.0
     },
     {
@@ -12430,7 +12471,7 @@
       "confidence_score": 0.85,
       "context": "call",
       "source_file": "selftest.ps1",
-      "source_location": "L1879",
+      "source_location": "L1913",
       "weight": 1.0
     },
     {
@@ -13396,5 +13437,5 @@
       "source_file": "HANDOFF.md"
     }
   ],
-  "built_at_commit": "3c4f41be1aea1b40362119785d797d8caf84c029"
+  "built_at_commit": "45cb5249279b18cb83e990cb7cf4790e48b076fa"
 }

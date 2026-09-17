@@ -1,5 +1,5 @@
 {
-  "0": "Patches.cs",
+  "0": "Hud",
   "1": "detect.ps1",
   "2": "qgate wire (repo wiring, config only)",
   "3": ".Scan",
@@ -14,7 +14,7 @@
   "12": "main.rs",
   "13": "outdated.ps1",
   "14": "Proto stack phases (buf)",
-  "15": "qgate.ps1",
+  "15": "qgate script",
   "16": "errno=1455 is a page-file commit limit, not RAM exhaustion",
   "17": "Modernizing autofixes can be breaking",
   "18": "Run the linter without --fix",
@@ -40,6 +40,12 @@
   "38": ".golangci.yml template",
   "39": ".Run",
   "40": "gopurity/main.go",
+  "41": "HarmonyStub.cs",
   "42": "Coverage measures happy paths; a green suite proves nothing",
-  "43": "bepinex.ps1"
+  "43": "bepinex.ps1",
+  "44": "Patches.cs",
+  "45": "MethodType",
+  "46": "ComputedPatch",
+  "47": "Fixture",
+  "48": "Invoke-Child"
 }
