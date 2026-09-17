@@ -73,7 +73,20 @@ switch ($cmd) {
         # repository, so this would fast-forward the repository being COMMITTED.
         $env:GIT_DIR = $null
         $env:GIT_WORK_TREE = $null
-        git -C $home_ pull --ff-only
+        # #90: one install serves every repo, and agents update it at the same moment.
+        # Measured: 8 parallel pulls failed 39/40 (FETCH_HEAD, ref and object writes collide),
+        # so the pull is serialized on an exclusive handle in the install's git dir.
+        $lockPath = Join-Path (git -C $home_ rev-parse --absolute-git-dir) 'qgate-update.lock'
+        $lock = $null; $waited = $false; $deadline = (Get-Date).AddMinutes(5)
+        while (-not $lock) {
+            try { $lock = [IO.File]::Open($lockPath, 'OpenOrCreate', 'ReadWrite', 'None') }
+            catch [IO.IOException] {
+                if ((Get-Date) -gt $deadline) { Write-Output "qgate update: another update still holds $lockPath after 5 min"; exit 1 }
+                if (-not $waited) { Write-Output 'qgate update: another update is running, waiting for it...'; $waited = $true }
+                Start-Sleep -Milliseconds 250
+            }
+        }
+        try { git -C $home_ pull --ff-only } finally { $lock.Dispose() }
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         Write-Output "quality-gate $(git -C $home_ rev-parse --short HEAD) at $home_"
         exit 0

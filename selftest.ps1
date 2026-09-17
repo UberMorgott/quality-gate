@@ -3776,6 +3776,24 @@ if ($blHave['editorconfig-checker']) {
 }
 Check '-Baseline over advisory linters exits 0' ($LASTEXITCODE -eq 0) "code=$LASTEXITCODE $out"
 
+# #91: dotnet format aligns a follow-up comment with tabs + spaces; that is not spaces-for-tabs.
+# The measured dotnet format output is the fixture; space-only indentation must still warn.
+if ($blHave['editorconfig-checker']) {
+    $ect = Join-Path $tmp 'ec-tabs'
+    New-Item -ItemType Directory -Path $ect -Force | Out-Null
+    git -C $ect init -q 2>$null
+    [IO.File]::WriteAllText((Join-Path $ect '.editorconfig'), "root = true`n[*.cs]`nindent_style = tab`n")
+    [IO.File]::WriteAllText((Join-Path $ect 'a.cs'), "class C`n{`n`tprivate static int ab; // trailing`n`t`t`t`t`t`t   // for b`n`tprivate static int b;`n}`n")
+    git -C $ect add -A 2>$null
+    $out = (& pwsh -NoProfile -File $gate -Root $ect -Only base -Full 2>&1 | Out-String)
+    Check 'editorconfig: tabs + alignment spaces from dotnet format are not a finding (#91)' ($out -notmatch '\[WARN\] editorconfig') $out
+    [IO.File]::WriteAllText((Join-Path $ect 'b.cs'), "class D`n{`n    private static int c;`n}`n")
+    git -C $ect add -A 2>$null
+    $out = (& pwsh -NoProfile -File $gate -Root $ect -Only base -Full 2>&1 | Out-String)
+    Check 'editorconfig: space-only indentation under indent_style = tab still warns (#91)' `
+        (($out -match '\[WARN\] editorconfig') -and ($out -match 'b\.cs') -and ($out -notmatch 'a\.cs')) $out
+}
+
 # 38. secrets. Measured across nine real repositories, the phase reported 51 findings
 # and every one was false -- so the two questions here are "does it still catch a real
 # secret" and "has it stopped failing repositories over files git cannot commit".
@@ -3925,6 +3943,26 @@ git clone -q $bsUrl $bsOther 2>&1 | Out-Null
 git -C $bsOther remote set-url origin 'https://example.invalid/other.git' 2>&1 | Out-Null
 $r = Invoke-Bootstrap79 $bsOther 'foreign'
 Check 'bootstrap does not adopt a qgate on PATH from another repository' $r.Cloned $r.Out
+
+# #90: parallel `qgate update` on one install raced (39/40 failed, measured). The pull waits
+# for the lock a running update holds, says so, and still succeeds once it is released.
+$upInst = Join-Path $bs 'upd90'
+git clone -q $bsUrl $upInst 2>&1 | Out-Null
+Copy-Item (Join-Path $PSScriptRoot 'bin\qgate.ps1') (Join-Path $upInst 'bin\qgate.ps1') -Force
+$upLock = [IO.File]::Open((Join-Path $upInst '.git\qgate-update.lock'), 'OpenOrCreate', 'ReadWrite', 'None')
+$upProc = Start-Process pwsh -ArgumentList '-NoProfile', '-File', (Join-Path $upInst 'bin\qgate.ps1'), 'update' -PassThru -NoNewWindow `
+    -RedirectStandardOutput (Join-Path $bs 'upd90.out') -RedirectStandardError (Join-Path $bs 'upd90.err')
+$upWaiting = $false
+foreach ($i in 1..80) {
+    if ((Get-Content (Join-Path $bs 'upd90.out') -Raw -ErrorAction SilentlyContinue) -match 'waiting') { $upWaiting = $true; break }
+    Start-Sleep -Milliseconds 250
+}
+$upEarly = $upProc.HasExited
+$upLock.Dispose()
+$upProc | Wait-Process -Timeout 60
+$upOut = (Get-Content (Join-Path $bs 'upd90.out'), (Join-Path $bs 'upd90.err') -Raw -ErrorAction SilentlyContinue) -join ''
+Check 'qgate update waits for a running update and then succeeds (#90)' `
+    ($upWaiting -and -not $upEarly -and $upProc.ExitCode -eq 0 -and $upOut -match 'quality-gate [0-9a-f]+ at') $upOut
 
 }
 Remove-Item $tmp -Recurse -Force
