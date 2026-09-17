@@ -20,15 +20,26 @@
 # Sections run as parallel child processes (#84): the run is waiting on processes, not
 # CPU, so one section at a time left the cores idle. -Sequential runs everything in this
 # process, as before. -SectionTimeoutSec bounds each child.
-param([string[]]$Only, [switch]$Sequential, [int]$SectionTimeoutSec = 1500)
+#
+# The longest sections are split into parts (go2, dotnet2, dotnet3) so they run as parallel
+# jobs too; naming a section runs its parts. -Exact (what each job gets) runs only the
+# names given.
+param([string[]]$Only, [switch]$Sequential, [switch]$Exact, [int]$SectionTimeoutSec = 1500)
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'gate\detect.ps1')
 
-$sections = 'detect', 'go', 'core', 'wiring', 'rust', 'dotnet', 'proto', 'godot', 'hooks', 'custom', 'cpp', 'base', 'web', 'bootstrap'
+# No registry in the loop: every fixture is a new path, so the full run's update advisory
+# never answered from its cache and asked the network on each green -Full run (#84). The
+# advisory's own checks (section core) put it back for their runs.
+$env:QGATE_NO_ADVISORY = '1'
+
+$sections = 'detect', 'go', 'go2', 'core', 'wiring', 'rust', 'dotnet', 'dotnet2', 'dotnet3', 'proto', 'godot', 'hooks', 'custom', 'cpp', 'base', 'web', 'bootstrap'
+$parts = @{ go = @('go2'); dotnet = @('dotnet2', 'dotnet3') }
 # `pwsh -File` hands "go,base" over as one string.
 $Only = @($Only -split ',' | ForEach-Object Trim | Where-Object { $_ })
 $bad = @($Only | Where-Object { $_ -notin $sections })
 if ($bad) { Write-Output "unknown section(s): $($bad -join ', '); valid: $($sections -join ', ')"; exit 2 }
+if (-not $Exact) { $Only = @($Only | ForEach-Object { $_; $parts[$_] } | Where-Object { $_ } | Select-Object -Unique) }
 
 if (-not $Sequential -and $Only.Count -ne 1) {
     $run = @(if ($Only) { $sections | Where-Object { $_ -in $Only } } else { $sections })
@@ -55,7 +66,7 @@ if (-not $Sequential -and $Only.Count -ne 1) {
         foreach ($j in @($jobs | Where-Object { -not $_.Proc } | Select-Object -First ($throttle - $busy))) {
             # Own TEMP per child: the gate keys temp files and tools keep lock files there
             # (golangci-lint's parallel-runner lock), which concurrent sections must not share.
-            $cmd = "`$env:TMP = `$env:TEMP = '$($j.Dir)'; & '$self' -Only $($j.Name) -Sequential *> '$($j.Out)'; exit `$LASTEXITCODE"
+            $cmd = "`$env:TMP = `$env:TEMP = '$($j.Dir)'; & '$self' -Only $($j.Name) -Sequential -Exact *> '$($j.Out)'; exit `$LASTEXITCODE"
             $j.Proc = Start-Process pwsh -ArgumentList '-NoProfile', '-Command', $cmd -PassThru -WindowStyle Hidden
             $j.Watch = [Diagnostics.Stopwatch]::StartNew()
         }
@@ -660,7 +671,7 @@ Check 'rust green again after the fix' ($r.Code -eq 0) $r.Out
 
 }
 
-if (Want 'dotnet') {
+if ((Want 'dotnet') -or (Want 'dotnet2') -or (Want 'dotnet3')) {
 # 11b. .NET, red then green -- and then the two verdicts that are NOT red: a project
 # whose references live in a game install this machine does not have, and one targeting
 # an SDK major nobody here has. Both are gaps in the machine, and reporting them as a
@@ -673,6 +684,8 @@ if ($dnSdks) {
     $dnCs = Join-Path $dn 'Greeter.cs'
     $dnProjClean = [IO.File]::ReadAllText($dnProj)
     $dnCsClean = [IO.File]::ReadAllText($dnCs)
+    # Three parts, each its own job in a parallel run (#84); each part works on its own copies.
+    if (Want 'dotnet') {
     $r = Invoke-Gate $dn
     Check 'clean dotnet fixture passes' ($r.Code -eq 0) $r.Out
     $dnFullOut = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $dn -All -Full 2>&1 | Out-String)
@@ -1153,7 +1166,9 @@ if ($dnSdks) {
     } else {
         Write-Output '[skip] advisory source unreachable -- the vulnerable-package check cannot run'
     }
+    }
 
+    if (Want 'dotnet2') {
     # Roslyn analyzers, injected through -p:CustomBeforeMicrosoftCommonProps: not one of
     # these repositories edits its csproj to get static analysis, so the gate carries the
     # packages into the build and leaves the work tree alone. Four questions: does anything
@@ -1339,7 +1354,11 @@ internal class Sealable
     Check 'an uncached BannedApiAnalyzers is a skip, not a download' `
         (($dnBanCode -eq 0) -and ($out -match '\[SKIP\] Microsoft\.CodeAnalysis\.BannedApiAnalyzers \(BannedSymbols\.txt\) -- not in the local NuGet cache') -and
             (-not (Get-ChildItem $dnBanEmpty.FullName))) "code=$dnBanCode $out"
+    }
 
+    if (Want 'dotnet3') {
+    $nugetPrev = $env:NUGET_PACKAGES
+    $dnBanEmpty = New-Item -ItemType Directory -Force (Join-Path $tmp 'nuget-empty')
     # SonarAnalyzer.CSharp (#62): qgate.json dotnet.sonar, same cache-only injection.
     $dnSonar = Join-Path $tmp 'dotnet-sonar'
     Copy-Item (Join-Path $PSScriptRoot 'testdata\dotnet-fixture') $dnSonar -Recurse
@@ -1491,6 +1510,7 @@ public sealed class Bad
     Check 'qgate.json harmony.assemblies are checked too, as warnings' `
         (($out -match '\[WARN\] harmony: Other\.dll: Hud\.UpdateFood method not found') -and
             ($out -match '\[NOTE\] harmony: Other\.dll -- ')) $out
+    }
 } else {
     Write-Output '[skip] no .NET SDK on this machine -- the dotnet stack cannot be exercised'
 }
@@ -1721,7 +1741,16 @@ if (Get-Command lefthook -ErrorAction SilentlyContinue) {
 
 }
 
-if (Want 'go') {
+if (Want 'go2') {
+# go2 is its own job in a parallel run: rebuild what the go part leaves behind -- the clean
+# fixture with the template config, and whether a -Full run is green on this machine.
+if ($null -eq $fullGreen) {
+    $go = Join-Path $tmp 'go'
+    Copy-Item (Join-Path $PSScriptRoot 'testdata\go-fixture') $go -Recurse
+    Copy-Item (Join-Path $PSScriptRoot 'templates\.golangci.yml') $go
+    & pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $go -All -Full *> $null
+    $fullGreen = ($LASTEXITCODE -eq 0)
+}
 # 15. The version report is advisory. It must never fail a run -- offline, rate
 # limited or with a registry that answers garbage, the exit code stays 0.
 $outdated = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\outdated.ps1') -Root $go 2>&1 | Out-String)
@@ -1862,7 +1891,7 @@ if ((Get-Command gdformat -ErrorAction SilentlyContinue) -and (Get-Command gdlin
 
 }
 
-if (Want 'go') {
+if (Want 'go2') {
 # 19. Discoverability: a flag value nobody validates and a config key nobody reads
 # are both silent no-ops that look exactly like enforcement.
 $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $go -Only 'nonsense' 2>&1 | Out-String)
@@ -2170,7 +2199,7 @@ Check 'the concurrency guard is silent outside a commit' ($r.Out -notmatch 'stag
 
 }
 
-if (Want 'go') {
+if (Want 'go2') {
 # 24. A pin exists to make a run reproducible, so at the full level a mismatch is
 # a failure, not a note: a green -Full run on a different compiler than the repo
 # declared says nothing about the pinned version. Fast lane still only warns.
@@ -2234,8 +2263,11 @@ function Set-OutdatedCache([string]$RepoRoot, [string[]]$Lines) {
     Set-Content -Path (Join-Path ([IO.Path]::GetTempPath()) `
         "quality-gate-outdated-$(Get-PathKey (Resolve-Path $RepoRoot).Path).txt") -Value ($Lines -join "`n")
 }
-function Get-Summary([string]$RepoRoot) {
-    (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\outdated.ps1') -Root $RepoRoot -Summary 2>&1 | Out-String)
+function Get-Summary([string]$RepoRoot, [switch]$NoAdvisory) {
+    # The suite runs with QGATE_NO_ADVISORY=1; the cache path under test needs it off.
+    $env:QGATE_NO_ADVISORY = if ($NoAdvisory) { '1' } else { $null }
+    try { (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\outdated.ps1') -Root $RepoRoot -Summary 2>&1 | Out-String) }
+    finally { $env:QGATE_NO_ADVISORY = '1' }
 }
 $fixedFinding = '[OUTDATED] tool rust/cargo 1.0.0 -> 2.0.0'
 
@@ -2262,6 +2294,12 @@ Check 'an expired deferral is reported and its finding comes back' `
 # Printed ahead of the cache branch, so it must survive the path the pre-commit run
 # actually takes -- this used to be asserted only against the live report.
 Check 'a deferral without until is a warning, not a silent skip' ($s -match "entry for 'nodate' needs 'until'") $s
+# #84: QGATE_NO_ADVISORY=1 drops the -Summary note (the same seeded finding printed it
+# above), and the deferrals warning still prints.
+Set-OutdatedCache $def @($fixedFinding)
+$s = Get-Summary $def -NoAdvisory
+Check 'QGATE_NO_ADVISORY=1 drops the update note and keeps the deferrals warning' `
+    (($s -notmatch 'dependency update\(s\) available') -and ($s -notmatch 'have expired') -and ($s -match "entry for 'nodate' needs 'until'")) $s
 
 # The live path is still worth one smoke test -- a real registry answer flowing into a
 # real deferral is not what the cache path proves -- but only when its subject exists.
@@ -2326,7 +2364,7 @@ Check 'an unreadable deferrals file is not also blamed on a missing name/reason'
 
 }
 
-if (Want 'go') {
+if (Want 'go2') {
 # 27. The same warning has to reach the -Full gate run. It was emitted only after
 # the -Summary early return, and -Summary is the path -Full calls -- so a malformed
 # qgate.deferrals.json was silently ignored exactly where it guards a commit, while
@@ -2515,7 +2553,7 @@ Check 'a repo with no marker file gets base, not "no known stack"' `
 
 }
 
-if (Want 'go') {
+if (Want 'go2') {
 # 32. A tool binary older than the module's go directive. Both failures are opaque:
 # golangci-lint refuses to load its config, govulncheck names every file in the repo
 # and four more inside the standard library. The verdict has to name the binary and

@@ -50,6 +50,12 @@ $badDeferrals = @($deferrals | Where-Object { $_.Bad } | ForEach-Object { "[WARN
 # where it guards a commit, while the docs promised a [WARN] and not a silent skip.
 if ($badDeferrals.Count) { $badDeferrals | ForEach-Object { Write-Output $_ } }
 
+# QGATE_NO_ADVISORY=1: the -Full run's note asks no registry -- a machine or CI job with no
+# registry access, and the self-test, whose fixtures are new paths every run and so never
+# hit the cache (#84: each green -Full run asked again, up to 30s while a registry stalled).
+# The deferrals warnings above still print; an explicit `qgate outdated` always looks.
+if ($Summary -and $env:QGATE_NO_ADVISORY -eq '1') { exit 0 }
+
 # Splits a findings list into what is still reported, what a live deferral hides,
 # and which deferrals have run out. A deferral matches the report line for its
 # package -- the name, then its current version, then the arrow -- anchored that
