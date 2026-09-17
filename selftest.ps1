@@ -522,12 +522,12 @@ $wire = Join-Path $tmp 'wire'
 Copy-Item (Join-Path $PSScriptRoot 'testdata\web-fixture') $wire -Recurse
 git -C $wire init -q 2>$null
 $installer = Join-Path $PSScriptRoot 'install.ps1'
-& pwsh -NoProfile -File $installer -Target $wire -NoHook *> $null
+& pwsh -NoProfile -File $installer -Target $wire -NoRun -NoHook *> $null
 $eslintCfg = Join-Path $wire 'eslint.config.js'
 Check 'wire installs the frontend linter configs' `
     ((Test-Path $eslintCfg) -and (Test-Path (Join-Path $wire '.stylelintrc.json')))
 Set-Content $eslintCfg 'mine' -NoNewline
-& pwsh -NoProfile -File $installer -Target $wire -NoHook *> $null
+& pwsh -NoProfile -File $installer -Target $wire -NoRun -NoHook *> $null
 Check 'wire keeps a config the project already had' ((Get-Content $eslintCfg -Raw) -eq 'mine')
 
 }
@@ -1503,12 +1503,35 @@ Check 'every generated pre-commit invocation is quiet on green' `
     (($invocations.Count -ge 3) -and ($noisy.Count -eq 0)) `
     "found $($invocations.Count), noisy: $($noisy -join ' | ')"
 
+# 13b (#80). Wire ends by running the gate once: on a red repository it says so and
+# names the adoption path instead of "break something on purpose", and wiring still
+# exits 0. Base-stack-only fixtures, so each run costs ~2-5s, not a Go build.
+$greenWire = Join-Path $tmp 'wire-green'
+New-Item -ItemType Directory -Path $greenWire -Force | Out-Null
+git -C $greenWire init -q 2>$null
+Set-Content (Join-Path $greenWire 'notes.md') 'the word'
+$gOut = (& pwsh -NoProfile -File $installer -Target $greenWire -NoHook 2>&1 | Out-String)
+Check 'wire on a green repo prints GREEN and the break-something hint' `
+    (($LASTEXITCODE -eq 0) -and ($gOut -match 'GREEN') -and ($gOut -match 'break something on purpose')) $gOut
+if (Get-Command typos -ErrorAction SilentlyContinue) {
+    $redWire = Join-Path $tmp 'wire-red'
+    New-Item -ItemType Directory -Path $redWire -Force | Out-Null
+    git -C $redWire init -q 2>$null
+    Set-Content (Join-Path $redWire 'notes.md') 'teh word'
+    $rOut = (& pwsh -NoProfile -File $installer -Target $redWire -NoHook 2>&1 | Out-String)
+    Check 'wire on a red repo prints RED, the adoption path, no break-something hint, exit 0' `
+        (($LASTEXITCODE -eq 0) -and ($rOut -match 'RED') -and ($rOut -match '\[FAIL\] typos') -and
+         ($rOut -match '-Baseline') -and ($rOut -match '_typos\.toml') -and ($rOut -notmatch 'break something')) $rOut
+} else {
+    Write-Output '[skip] no typos -- wire red-verdict fixture needs a failing base phase'
+}
+
 # 14. gofmt reads a CRLF checkout as unformatted, so the .gitattributes line is a
 # prerequisite, not advice -- wire has to write it. Go repo: it is a Go rule.
 $goWire = Join-Path $tmp 'gowire'
 Copy-Item (Join-Path $PSScriptRoot 'testdata\go-fixture') $goWire -Recurse
 git -C $goWire init -q 2>$null
-& pwsh -NoProfile -File $installer -Target $goWire -NoHook *> $null
+& pwsh -NoProfile -File $installer -Target $goWire -NoRun -NoHook *> $null
 $ga = Join-Path $goWire '.gitattributes'
 Check 'wire writes the gofmt eol rule' ((Test-Path $ga) -and ((Get-Content $ga -Raw) -match '\*\.go text eol=lf')) `
     "$(if (Test-Path $ga) { Get-Content $ga -Raw })"
@@ -1522,7 +1545,7 @@ Check 'wire writes the gofmt eol rule' ((Test-Path $ga) -and ((Get-Content $ga -
 # absence is what stops that from being "helpfully" restored later.
 [IO.File]::WriteAllText((Join-Path $goWire 'crlf.go'), "package main`r`n")
 git -C $goWire add -A 2>$null
-$wireOut = (& pwsh -NoProfile -File $installer -Target $goWire -NoHook 2>&1 | Out-String)
+$wireOut = (& pwsh -NoProfile -File $installer -Target $goWire -NoRun -NoHook 2>&1 | Out-String)
 Check 'wire names a command that really rewrites a CRLF working tree' `
     (($wireOut -match '1 tracked \.go file\(s\) are CRLF') -and ($wireOut -match '(?m)^\s+gofmt -w \.\s*$')) $wireOut
 Check 'wire does not name the renormalise no-op' ($wireOut -notmatch 'renormalize') $wireOut
@@ -1535,7 +1558,7 @@ Check 'wire does not name the renormalise no-op' ($wireOut -notmatch 'renormaliz
 # core.autocrlf=true -- never equalled the LF block and was rewritten every run.
 $agentsFile = Join-Path $goWire 'AGENTS.md'
 $agentsBefore = [IO.File]::ReadAllBytes($agentsFile)
-$wireAgain = (& pwsh -NoProfile -File $installer -Target $goWire -NoHook 2>&1 | Out-String)
+$wireAgain = (& pwsh -NoProfile -File $installer -Target $goWire -NoRun -NoHook 2>&1 | Out-String)
 $agentsAfter = [IO.File]::ReadAllBytes($agentsFile)
 Check 'a second wire leaves AGENTS.md byte-identical' `
     ((($agentsBefore -join ',') -eq ($agentsAfter -join ',')) -and ($wireAgain -match 'AGENTS\.md\s+-- unchanged')) `
@@ -1555,14 +1578,14 @@ if (Get-Command lefthook -ErrorAction SilentlyContinue) {
     $lhr = Join-Path $tmp 'lefthookver'
     Copy-Item (Join-Path $PSScriptRoot 'testdata\go-fixture') $lhr -Recurse
     git -C $lhr init -q 2>$null
-    & pwsh -NoProfile -File $installer -Target $lhr *> $null
-    $curOut = (& pwsh -NoProfile -File $installer -Target $lhr 2>&1 | Out-String)
+    & pwsh -NoProfile -File $installer -Target $lhr -NoRun *> $null
+    $curOut = (& pwsh -NoProfile -File $installer -Target $lhr -NoRun 2>&1 | Out-String)
     # The absence half, and it is falsifiable here because this repo really was wired
     # by this version a line ago: a check that fires on a current config would make the
     # warning noise nobody reads.
     Check 'a current lefthook.yml is not reported as stale' ($curOut -notmatch 'no pre-merge-commit hook') $curOut
     Set-Content (Join-Path $lhr 'lefthook.yml') "pre-commit:`n  jobs:`n    - name: quality-gate`n      run: 'qgate.cmd -All -Full -Quiet'`n"
-    $staleOut = (& pwsh -NoProfile -File $installer -Target $lhr 2>&1 | Out-String)
+    $staleOut = (& pwsh -NoProfile -File $installer -Target $lhr -NoRun 2>&1 | Out-String)
     Check 'wire names the hook a stale lefthook.yml is missing' `
         (($staleOut -match 'no pre-merge-commit hook') -and ($staleOut -match 'lefthook install')) $staleOut
 } else {
@@ -1617,8 +1640,8 @@ New-Item -ItemType Directory -Path (Join-Path $swRepo '.claude') -Force | Out-Nu
 git -C $swRepo init -q 2>$null
 $swFile = Join-Path $swRepo '.claude\settings.json'
 Set-Content $swFile '{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"echo mine"}]},{"hooks":[{"type":"command","command":"qgate stop-hook"}]}]}}'
-& pwsh -NoProfile -File $installer -Target $swRepo -NoHook *> $null
-& pwsh -NoProfile -File $installer -Target $swRepo -NoHook *> $null
+& pwsh -NoProfile -File $installer -Target $swRepo -NoRun -NoHook *> $null
+& pwsh -NoProfile -File $installer -Target $swRepo -NoRun -NoHook *> $null
 $swCmds = @((Get-Content $swFile -Raw | ConvertFrom-Json).hooks.Stop.hooks.command)
 Check 'wire keeps other Stop hooks and never duplicates its own' `
     ((@($swCmds | Where-Object { $_ -eq 'echo mine' }).Count -eq 1) -and (@($swCmds | Where-Object { $_ -match 'qgate' }).Count -eq 1)) ($swCmds -join ' | ')
@@ -1796,7 +1819,7 @@ if ($shExe) {
 } else {
     Write-Output '[skip] no sh.exe -- the generated hook body cannot be run as git would'
 }
-& pwsh -NoProfile -File $installer -Target $genRepo *> $null
+& pwsh -NoProfile -File $installer -Target $genRepo -NoRun *> $null
 git -C $genRepo add -A 2>$null
 git -C $genRepo -c user.email=selftest@local -c user.name=selftest commit -qm 'clean' *> $null
 $commitCode = $LASTEXITCODE
@@ -1825,7 +1848,7 @@ git -C $mrg init -q 2>$null
 # fixture back as CRLF, buf format then reports the whole file as misformatted, and
 # this block fails for a reason that has nothing to do with which hook git ran.
 git -C $mrg config core.autocrlf false 2>$null
-& pwsh -NoProfile -File $installer -Target $mrg *> $null
+& pwsh -NoProfile -File $installer -Target $mrg -NoRun *> $null
 git -C $mrg add -A 2>$null
 git -C $mrg -c user.email=selftest@local -c user.name=selftest commit -qm 'clean' *> $null
 # Whatever `git init` called it: init.defaultBranch is a user setting, and assuming
@@ -1958,7 +1981,7 @@ $cc = Join-Path $tmp 'concurrent'
 Copy-Item (Join-Path $PSScriptRoot 'testdata\go-fixture') $cc -Recurse
 Copy-Item (Join-Path $PSScriptRoot 'templates\.golangci.yml') $cc
 git -C $cc init -q 2>$null
-& pwsh -NoProfile -File $installer -Target $cc *> $null
+& pwsh -NoProfile -File $installer -Target $cc -NoRun *> $null
 git -C $cc add -A 2>$null
 git -C $cc -c user.email=selftest@local -c user.name=selftest commit -qm base --no-verify *> $null
 Set-Content (Join-Path $cc 'a.txt') 'a'
@@ -2409,7 +2432,7 @@ Check 'the shipped config keeps the linter out of node_modules' `
 # under the gate flags and wire took only -Target, so `qgate wire -Root <path>` died
 # with a raw "A parameter cannot be found that matches parameter name 'Root'".
 git -C $nm init -q 2>$null
-$wireRoot = (& pwsh -NoProfile -File $installer -Root $nm -NoHook 2>&1 | Out-String)
+$wireRoot = (& pwsh -NoProfile -File $installer -Root $nm -NoRun -NoHook 2>&1 | Out-String)
 Check 'wire accepts -Root as the repository to wire' `
     (($LASTEXITCODE -eq 0) -and ($wireRoot -match [regex]::Escape($nm))) "code=$LASTEXITCODE $wireRoot"
 

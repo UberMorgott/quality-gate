@@ -15,6 +15,7 @@
 param(
     [Alias('Root')][string]$Target = (Get-Location).Path,
     [switch]$NoHook,
+    [switch]$NoRun,  # skip the initial `qgate -All -Full` at the end
     [switch]$CI      # write .github/workflows/quality-gate.yml (opt-in)
 )
 
@@ -332,5 +333,46 @@ if (Test-Path $wf) {
     Write-Output 'ci        -- not installed; `qgate wire -CI` adds a GitHub Actions workflow'
 }
 
+# --- first run (#80) ----------------------------------------------------------
+# Wire used to end on "break something on purpose" without running the gate once,
+# so on an existing, never-linted repository the first commit -- the commit of the
+# files wire just wrote -- was the one the hook refused. The run is the pre-commit's
+# own (-All -Full): -Fast is ~3x cheaper (6.5s vs 23s on the Go fixture) but skips
+# phases the hook runs, so a green -Fast verdict could still end in a refused commit.
 Write-Output ''
-Write-Output 'Now break something on purpose and confirm `qgate` complains.'
+if ($NoRun) {
+    Write-Output 'gate      -- initial run skipped (-NoRun); run `qgate -All -Full` before the first commit'
+    exit 0
+}
+Write-Output 'gate      -- running qgate -All -Full once, the same run the pre-commit hook does...'
+$runLines = @(& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $root -All -Full -Quiet 2>&1 |
+    ForEach-Object { "$_" })
+$runCode = $LASTEXITCODE
+if ($runCode -eq 0) {
+    Write-Output 'gate      -- GREEN: commits will pass the hook'
+    Write-Output ''
+    Write-Output 'Now break something on purpose and confirm `qgate` complains.'
+    exit 0
+}
+# Only the verdict lines: a legacy repository can print hundreds of findings, and
+# `qgate -All` shows them in full when they are wanted.
+$failed = @($runLines | Where-Object { $_ -match '^\[FAIL\] (\S+)' } | ForEach-Object { $Matches[1] })
+Write-Output "gate      -- RED (exit $runCode): the pre-commit hook will refuse commits until this is resolved"
+$runLines | Where-Object { $_ -match '^\[(FAIL|WARN)\]' } | ForEach-Object { Write-Output "            $_" }
+Write-Output '  adopt:  full report: qgate -All -Full. Existing debt, not a reason for --no-verify'
+Write-Output "          (README `"Внедрение на существующей базе`", $(Join-Path $PSScriptRoot 'README.md')):"
+Write-Output '          - only findings newer than a revision: qgate -All -Baseline <rev> (a CLI flag; the hooks do not use it)'
+if ($failed -contains 'typos') {
+    Write-Output '          - typos false positives: your own _typos.toml at the repo root ([default.extend-words])'
+}
+if ($failed | Where-Object { $_ -in 'vuln', 'govulncheck' }) {
+    Write-Output '          - advisories with no fixed version: qgate.deferrals.json "vulnerabilities" [{id, until, reason}]'
+}
+if ($failed -contains 'golangci-lint') {
+    Write-Output '          - noisy Go linters: per-package linters.exclusions.rules in .golangci.yml, deleted as packages are cleaned'
+}
+if ($failed -contains 'eslint') {
+    Write-Output '          - ESLint: eslint --suppress-all writes eslint-suppressions.json (commit it)'
+}
+# Wiring itself succeeded; a red gate is the repository's state, not a failed wire.
+exit 0
