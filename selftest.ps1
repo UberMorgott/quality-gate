@@ -1840,6 +1840,44 @@ if (-not (Get-Command godot -ErrorAction SilentlyContinue)) {
 } else {
     Write-Output '[skip] godot is on PATH -- the missing-binary levels cannot be exercised'
 }
+# #104: an engine that never exits must not hold the gate. A stand-in binary that
+# hangs, a 2-second budget in qgate.json, and the run has to end with the timeout in
+# the phase name -- and the same stand-in path still has to carry a real verdict:
+# a stand-in that prints SCRIPT ERROR fails, a silent one passes.
+if ($IsWindows) {
+    $gdShims = Join-Path $tmp 'godot-shims'
+    New-Item -ItemType Directory $gdShims -Force | Out-Null
+    $hang = Join-Path $gdShims 'godot-hang.cmd'
+    [IO.File]::WriteAllText($hang, "@echo off`r`necho Godot Engine v4.7.1.stable (stand-in)`r`necho importing...`r`nping -n 300 127.0.0.1 >nul`r`n")
+    $loud = Join-Path $gdShims 'godot-loud.cmd'
+    [IO.File]::WriteAllText($loud, "@echo off`r`necho SCRIPT ERROR: boom at res://main.gd:3`r`n")
+    $quiet = Join-Path $gdShims 'godot-quiet.cmd'
+    [IO.File]::WriteAllText($quiet, "@echo off`r`n")
+    Set-Content (Join-Path $gdt 'qgate.json') '{"timeouts": {"godot": 2}}'
+    $priorGodot = $env:GODOT_BIN
+    try {
+        $env:GODOT_BIN = $hang
+        $sw = [Diagnostics.Stopwatch]::StartNew()
+        $hangOut = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $gdt -Only godot -Full 2>&1 | Out-String)
+        $hangCode = $LASTEXITCODE
+        $sw.Stop()
+        $env:GODOT_BIN = $loud
+        $loudOut = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $gdt -Only godot -Full 2>&1 | Out-String)
+        $loudCode = $LASTEXITCODE
+        $env:GODOT_BIN = $quiet
+        $quietOut = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $gdt -Only godot -Full 2>&1 | Out-String)
+        $quietCode = $LASTEXITCODE
+    } finally { $env:GODOT_BIN = $priorGodot; Remove-Item (Join-Path $gdt 'qgate.json') -Force -ErrorAction SilentlyContinue }
+    Check 'a hung godot is killed within the qgate.json budget' ($sw.Elapsed.TotalSeconds -lt 60) "took $([int]$sw.Elapsed.TotalSeconds)s $hangOut"
+    Check 'a hung godot fails the phase with the timeout in its name' `
+        (($hangCode -ne 0) -and ($hangOut -match '\[FAIL\] godot import -- timeout after 2s')) $hangOut
+    Check 'a hung godot reports the tail of what it printed' ($hangOut -match 'importing\.\.\.') $hangOut
+    Check 'a hung godot skips the later engine phases instead of running them' ($hangOut -match '\[SKIP\] godot smoke') $hangOut
+    Check 'a bounded godot run still fails on SCRIPT ERROR output' `
+        (($loudCode -ne 0) -and ($loudOut -match '\[FAIL\] godot import \(') -and ($loudOut -match 'SCRIPT ERROR: boom')) $loudOut
+    Check 'a bounded godot run that prints nothing passes' `
+        (($quietCode -eq 0) -and ($quietOut -match '\[PASS\] godot import') -and ($quietOut -match '\[PASS\] godot smoke')) $quietOut
+}
 
 }
 

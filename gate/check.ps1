@@ -1837,12 +1837,17 @@ function Invoke-GodotStack($s) {
     # phase below filters its run down to the error lines and fails on any output;
     # a clean run prints nothing.
     $errs = 'SCRIPT ERROR|ERROR:'
+    # quality-gate#104: every engine run below is bounded. `--import` sat at 100 % CPU
+    # for 73 minutes on CodeDungeon (a broken %APPDATA%\Godot junction hung every
+    # user:// write inside the editor) and the gate waited with it, in the pre-commit
+    # lane too. An import normally takes seconds; ten minutes is generous for a first
+    # import of a large asset tree and still ends a hang inside one coffee.
+    $budget = Get-ToolTimeoutSec 'godot' 600
+    # Quoted by hand: Start-Process joins -ArgumentList with bare spaces.
+    $dirArg = "`"$($s.Dir)`""
     # Run twice: the first pass creates .godot/ and routinely reports errors that
     # exist only because it did not yet. Only the second pass is a verdict.
-    Phase 'godot import' {
-        & $godot --headless --path $s.Dir --import *>&1 | Out-Null
-        (& $godot --headless --path $s.Dir --import *>&1) | Where-Object { $_ -match $errs }
-    } -FailIfOutput
+    Invoke-GodotPhase 'godot import' $godot $s.Dir @('--headless', '--path', $dirArg, '--import') $errs $budget -Warmup
     # A test that exercises a rejection path makes the engine print ERROR: lines
     # on purpose (a codec refusing a corrupt frame, say) -- that is the code under
     # test working. So here only a script that failed to load or parse is a
@@ -1851,16 +1856,84 @@ function Invoke-GodotStack($s) {
     $scriptErrs = 'SCRIPT ERROR|Parse Error|Failed to load script'
     foreach ($t in Get-ChildItem $s.Dir -Recurse -File -Filter '*_headless_test.gd' -ErrorAction SilentlyContinue |
         Where-Object { $_.FullName -notmatch $noGodotDir }) {
-        $tf = $t.FullName
-        Phase "godot test $($t.Name)" {
-            (& $godot --headless --path $s.Dir --script $tf *>&1) | Where-Object { $_ -match $scriptErrs }
-        } -FailIfOutput
+        $tf = "`"$($t.FullName)`""
+        Invoke-GodotPhase "godot test $($t.Name)" $godot $s.Dir @('--headless', '--path', $dirArg, '--script', $tf) $scriptErrs $budget
     }
     # Boots the main scene and quits: catches autoload and boot-order breakage that
     # neither the import nor a script test ever loads.
-    Phase 'godot smoke' {
-        (& $godot --headless --path $s.Dir --quit-after 1 *>&1) | Where-Object { $_ -match $errs }
-    } -FailIfOutput
+    Invoke-GodotPhase 'godot smoke' $godot $s.Dir @('--headless', '--path', $dirArg, '--quit-after', '1') $errs $budget
+}
+
+# One bounded engine run, reported as a phase. -Warmup runs the same command once
+# more first and discards what it printed (the import's create-.godot pass); a warmup
+# that hangs is the same finding as a verdict that hangs, and is reported as one.
+function Invoke-GodotPhase([string]$Name, [string]$Godot, [string]$Dir, [string[]]$GodotArgs, [string]$ErrPattern, [int]$TimeoutSec, [switch]$Warmup) {
+    if ($script:Failed) { Phase $Name { }; return }
+    $elapsed = 0.0
+    if ($Warmup) {
+        $r = Invoke-Bounded $Godot $GodotArgs $Dir $TimeoutSec
+        $elapsed += $r.Elapsed
+    }
+    if (-not $Warmup -or $r.Done) {
+        $r = Invoke-Bounded $Godot $GodotArgs $Dir $TimeoutSec
+        $elapsed += $r.Elapsed
+    }
+    # The timeout goes in the NAME, like the custom stack's: "the engine never came
+    # back" and "the engine reported an error" are different findings.
+    $name = if ($r.Done) { $Name } else { "$Name -- timeout after ${TimeoutSec}s" }
+    Phase $name {
+        if ($r.Done) {
+            $r.Lines | Where-Object { $_ -match $ErrPattern }
+            if ($r.ExitCode -ne 0) { $global:LASTEXITCODE = $r.ExitCode }
+        } else {
+            # A hang usually has a cause outside the project (user:// on a broken
+            # junction, a modal the headless run still waits on), so the remedy names
+            # the budget, and the tail of the output is the only evidence there is.
+            "godot was killed: no exit after ${TimeoutSec}s (budget: `"timeouts`": {`"godot`": <seconds>} in qgate.json)"
+            $tail = @($r.Lines | Where-Object { "$_".Trim() } | Select-Object -Last 10)
+            if ($tail) { 'last output:'; $tail }
+        }
+    } -FailIfOutput -Elapsed $elapsed
+}
+
+# --- bounded tool runs (#104) ---------------------------------------------
+# A spawned tool with no time budget makes the gate exactly as reliable as the tool's
+# worst day: a child at 100 % CPU with no output and no exit held a commit for 73
+# minutes. Every run through here ends -- by exit or by kill of the whole process tree
+# -- and says which. Output goes to files, not pipes: a process that fills a pipe
+# nobody drains blocks forever, and the whole reason there is a timeout is that this
+# process may not come back.
+function Invoke-Bounded([string]$FilePath, [string[]]$ArgumentList, [string]$WorkingDirectory, [int]$TimeoutSec) {
+    $outFile = Join-Path ([IO.Path]::GetTempPath()) "quality-gate-run-$PID-$([IO.Path]::GetRandomFileName()).out"
+    $errFile = "$outFile.err"
+    $sw = [Diagnostics.Stopwatch]::StartNew()
+    $p = Start-Process $FilePath -ArgumentList $ArgumentList -WorkingDirectory $WorkingDirectory `
+        -NoNewWindow -PassThru -RedirectStandardOutput $outFile -RedirectStandardError $errFile
+    $done = $p.WaitForExit($TimeoutSec * 1000)
+    $sw.Stop()
+    # Kill the tree, not just the root: what hangs may be a child of what was launched.
+    if (-not $done) { try { $p.Kill($true) } catch { } ; [void]$p.WaitForExit(5000) }
+    $lines = @(foreach ($f in $outFile, $errFile) { Get-Content $f -ErrorAction SilentlyContinue })
+    Remove-Item $outFile, $errFile -Force -ErrorAction SilentlyContinue
+    [pscustomobject]@{
+        Done     = $done
+        ExitCode = $(if ($done) { $p.ExitCode } else { 1 })
+        Lines    = $lines
+        Elapsed  = $sw.Elapsed.TotalSeconds
+    }
+}
+
+# Optional qgate.json: {"timeouts": {"godot": 120}} -- seconds a stack's spawned tool
+# may run before it is killed. Per stack, not per phase: the repo knows how long its
+# tools take, and one number a reader can find beats one per engine flag. Anything
+# that is not a positive integer means the default.
+function Get-ToolTimeoutSec([string]$Stack, [int]$Default) {
+    $file = Join-Path $Root 'qgate.json'
+    if (-not (Test-Path $file)) { return $Default }
+    $t = try { (Get-Content $file -Raw | ConvertFrom-Json).timeouts.$Stack } catch { $null }
+    $n = $t -as [int]
+    if ($n -gt 0) { return $n }
+    return $Default
 }
 
 # The compile database, when the configure above did not write one. The Visual Studio
