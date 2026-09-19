@@ -177,7 +177,7 @@ The runner also validates requested stacks/revisions and tool pins, rejects an u
 | `property tests` | Advisory (full, opt-in) | None | Flags deterministic packages without property/fuzz tests to identify missing invariant coverage. |
 | `flaky tests` | Advisory (full, opt-in); blocking with `fail: true` | Go; gcc for race mode | Scans fragile test deadlines and reruns selected packages under constrained scheduling to expose timing failures. |
 | `go fuzz` | Advisory (full) | Go | Exercises fuzz targets for 10 seconds each within a 60-second module budget to find unexpected inputs. |
-| `deadcode` | Advisory (full) | deadcode; skip if missing/stale | Reports unreachable functions so unused implementation can be reviewed. |
+| `deadcode` | Advisory (full) | deadcode; skip if missing/stale | Reports unreachable functions so unused implementation can be reviewed. cgo `//export` functions (a c-shared/c-archive C ABI) and same-package functions they reach are treated as live. |
 | `gremlins` | Advisory (`-Mutate`) | gremlins; skip if missing/stale | Mutates Go code and reports surviving mutants to reveal weak assertions. |
 
 Go-built linter/scanner binaries older than the module's Go language version are rejected for golangci-lint/govulncheck; advisory tools are skipped. These are toolchain errors, not source findings.

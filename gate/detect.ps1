@@ -556,6 +556,47 @@ function Invoke-GoFuzz([string]$Dir, [int]$PerTargetSec = 10, [int]$BudgetSec = 
     $res
 }
 
+# A cgo `//export` function is the C ABI of a -buildmode=c-shared/c-archive build: C calls it,
+# Go never does, and deadcode roots only main, init and tests -- so it reports every export
+# and every helper only exports call. deadcode takes no extra roots, so this returns the names
+# (deadcode's spelling: `f`, `T.m`) in package dir $PkgDir that its exports reach: the exports
+# of files importing "C", then, transitively, each top-level func or method of the package whose
+# name appears as an identifier in a reached body (comments dropped). A textual scan, so it errs
+# toward live: an identifier that merely shares a name counts. Callees in OTHER packages that
+# only an export reaches are not followed and stay reported. No exports: an empty set.
+function Get-GoCgoExportLive([string]$PkgDir) {
+    $live = [Collections.Generic.HashSet[string]]::new()
+    $files = @(Get-ChildItem -LiteralPath $PkgDir -Filter '*.go' -File -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -notlike '*_test.go' })
+    $roots = [Collections.Generic.List[string]]::new()
+    $bodies = [hashtable]::new([StringComparer]::Ordinal); $byIdent = [hashtable]::new([StringComparer]::Ordinal)
+    foreach ($f in $files) {
+        $lines = @(Get-Content -LiteralPath $f.FullName)
+        $cgo = [bool]@($lines -match '^\s*(import\s+)?"C"\s*$').Count
+        $key = $null
+        foreach ($l in $lines) {
+            if ($cgo -and $l -match '^//export\s+(\w+)') { $roots.Add($Matches[1]); continue }
+            if ($l -match '^func\s+(?:\(\s*(?:\w+\s+)?\*?(\w+)[^)]*\)\s*)?(\w+)') {
+                $key = if ($Matches[1]) { "$($Matches[1]).$($Matches[2])" } else { $Matches[2] }
+                if (-not $byIdent.ContainsKey($Matches[2])) { $byIdent[$Matches[2]] = @() }
+                $byIdent[$Matches[2]] += $key
+                $bodies[$key] = ''
+            } elseif ($l -match '^(type|var|const|import)\b') { $key = $null }
+            if ($key) { $bodies[$key] += ($l -replace '//.*$', '') + "`n" }
+        }
+    }
+    $queue = [Collections.Generic.Queue[string]]::new()
+    foreach ($r in $roots) { if ($live.Add($r)) { $queue.Enqueue($r) } }
+    while ($queue.Count) {
+        $k = $queue.Dequeue()
+        if (-not $bodies.ContainsKey($k)) { continue }
+        foreach ($m in [regex]::Matches($bodies[$k], '\b[A-Za-z_]\w*\b')) {
+            foreach ($c in @($byIdent[$m.Value])) { if ($c -and $live.Add($c)) { $queue.Enqueue($c) } }
+        }
+    }
+    , $live
+}
+
 # quality-gate#51: whole-program unreachable functions (golang.org/x/tools/cmd/deadcode).
 # -test, so a helper only tests call is reachable -- the first false-positive class the
 # report named; it also makes a library's test binaries the roots, so a library with
@@ -572,6 +613,14 @@ function Get-GoDeadcode([string]$Dir) {
         return "[WARN] deadcode could not analyze this module -- $(@($out | Select-Object -Last 1))"
     }
     $hits = @($out | Where-Object { $_ -match 'unreachable func' })
+    $live = @{}
+    $hits = @($hits | Where-Object {
+        if ($_ -notmatch '^(?<file>.+\.go):\d+:\d+: unreachable func: (?<name>\S+)') { return $true }
+        $name = $Matches.name
+        $pkg = Split-Path ([IO.Path]::Combine($Dir, $Matches.file)) -Parent
+        if (-not $live.ContainsKey($pkg)) { $live[$pkg] = Get-GoCgoExportLive $pkg }
+        -not $live[$pkg].Contains($name)
+    })
     if (-not $hits) { return }
     "[WARN] deadcode: $($hits.Count) unreachable function(s) -- advisory, not a failure"
     $hits | Select-Object -First 20 | ForEach-Object { "       $_" }

@@ -410,6 +410,20 @@ if ((Get-Command deadcode -ErrorAction SilentlyContinue) -and -not (Test-GoToolS
     $dw = (Get-GoDeadcode $dc) -join "`n"
     Check 'an unreachable function is warned by deadcode' (($dw -match '^\[WARN\] deadcode: 1 unreachable') -and ($dw -match 'unreachable func: orphan')) $dw
     Check 'a helper only tests call is not dead code' ($dw -notmatch 'testOnly') $dw
+    # A cgo //export is the C ABI of a c-shared build: it and what only it calls are live;
+    # an unreferenced function in that same package is still dead. The export sits in its own
+    # file and its helpers in a plain one, so without a C compiler (cgo file excluded from the
+    # build) the helpers are still named by deadcode and the filter still has work to prove.
+    $cl = Join-Path $dc 'clib'
+    New-Item -ItemType Directory -Force $cl | Out-Null
+    Set-GoFile (Join-Path $cl 'export.go') "package main`n`n/*`n#include <stdlib.h>`n*/`nimport `"C`"`n`n//export Answer`nfunc Answer(x C.int) C.int {`n`treturn C.int(viaExport(int(x))) // orphanC is not a call`n}"
+    Set-GoFile (Join-Path $cl 'util.go') "package main`n`nfunc main() {}`n`nfunc viaExport(x int) int { return deeper(x) + 1 }`n`nfunc deeper(x int) int { return x }`n`nfunc orphanC() {}"
+    $dw = (Get-GoDeadcode $dc) -join "`n"
+    Check 'a cgo //export and the helpers only it reaches are not dead code' `
+        (($dw -notmatch 'Answer|viaExport|deeper') -and ($dw -match '^\[WARN\] deadcode: 2 unreachable')) $dw
+    Check 'an unreferenced function beside a cgo //export is still dead code' `
+        (($dw -match 'unreachable func: orphanC') -and ($dw -match 'unreachable func: orphan\b')) $dw
+    Remove-Item $cl -Recurse -Force
     Set-GoFile (Join-Path $dc 'main.go') "// Package lib is a library.`npackage lib`n`n// Add returns the sum of a and b.`nfunc Add(a, b int) int { return a + b }"
     Get-ChildItem $dc -Filter '*.go' | Where-Object Name -ne 'main.go' | Remove-Item
     Check 'a module with no main package is not a deadcode warning' (-not (Get-GoDeadcode $dc)) "$(Get-GoDeadcode $dc)"
