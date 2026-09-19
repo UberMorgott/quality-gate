@@ -1,17 +1,17 @@
 # Graph Report - quality-gate  (2026-09-19)
 
 ## Corpus Check
-- 49 files · ~115,900 words
+- 49 files · ~117,671 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 17 file(s) not represented in the graph (top: (none) 5, .toml 3, .gd 2)
 
 ## Summary
-- 470 nodes · 697 edges · 49 communities (21 shown, 28 thin omitted)
+- 472 nodes · 700 edges · 49 communities (21 shown, 28 thin omitted)
 - Extraction: 93% EXTRACTED · 7% INFERRED · 0% AMBIGUOUS · INFERRED: 50 edges (avg confidence: 0.85)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `1e661e6a`
+- Built from commit: `bef3a078`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -68,14 +68,14 @@
 10. `Get-PathKey()` - 8 edges
 
 ## Surprising Connections (you probably didn't know these)
-- `Set-OutdatedCache()` --calls--> `Get-PathKey()`  [INFERRED]
-  selftest.ps1 → gate/detect.ps1
-- `Incoming agent reports: symptom right, cause wrong half the time` --semantically_similar_to--> `Second-engine review`  [INFERRED] [semantically similar]
-  HANDOFF.md → PLAYBOOK.md
 - `detect stacks step (monorepo-aware marker search)` --semantically_similar_to--> `Marker-file stack detection`  [INFERRED] [semantically similar]
   templates/ci.yml → README.md
 - `QG_REF tag pin (v1), never main` --semantically_similar_to--> `qgate.json toolchain pinning`  [INFERRED] [semantically similar]
   templates/ci.yml → README.md
+- `Incoming agent reports: symptom right, cause wrong half the time` --semantically_similar_to--> `Second-engine review`  [INFERRED] [semantically similar]
+  HANDOFF.md → PLAYBOOK.md
+- `Set-OutdatedCache()` --calls--> `Get-PathKey()`  [INFERRED]
+  selftest.ps1 → gate/detect.ps1
 - `Cancellability findings (context propagation)` --conceptually_related_to--> `.golangci.yml template`  [INFERRED]
   PLAYBOOK.md → templates/.golangci.yml
 
@@ -94,8 +94,8 @@ Cohesion: 0.05
 Nodes (29): Attribute, Fixture, HarmonyLib, system, system_collections_generic, system_collections_immutable, system_io, system_linq (+21 more)
 
 ### Community 1 - "detect.ps1"
-Cohesion: 0.06
-Nodes (27): Find-Marker(), Get-ChecksHash(), Get-CMakeGenerator(), Get-CppStaleTool(), Get-CustomChecks(), Get-DefaultTrustStore(), Get-DeployEntries(), Get-GitIgnoredSet() (+19 more)
+Cohesion: 0.07
+Nodes (23): Find-Marker(), Get-ChecksHash(), Get-CustomChecks(), Get-DefaultTrustStore(), Get-DeployEntries(), Get-GoBuiltWith(), Get-GoCgoExportLive(), Get-GoDeadcode() (+15 more)
 
 ### Community 2 - "GitHub Actions quality-gate workflow"
 Cohesion: 0.08
@@ -111,7 +111,7 @@ Nodes (8): FieldInfo, MethodBase, MethodInfo, AccessTools, MethodInfo, ComputedP
 
 ### Community 5 - "selftest.ps1"
 Cohesion: 0.12
-Nodes (5): Invoke-Smoke(), Invoke-Trust(), New-GlobalRepo(), Set-GoFile(), Set-OutdatedCache()
+Nodes (4): Invoke-Smoke(), Invoke-Trust(), New-GlobalRepo(), Set-GoFile()
 
 ### Community 6 - "QGateHarmony"
 Cohesion: 0.09
@@ -126,8 +126,8 @@ Cohesion: 0.29
 Nodes (6): name, private, scripts, build-only, type-check, type
 
 ### Community 9 - "check.ps1"
-Cohesion: 0.11
-Nodes (38): Fail(), Get-ChangedPaths(), Get-CppCompileDb(), Get-CppGeneratedIncludes(), Get-Descendants(), Get-DotnetChangedCs(), Get-DotnetEval(), Get-DotnetSharedFormat() (+30 more)
+Cohesion: 0.08
+Nodes (45): Fail(), Get-ChangedPaths(), Get-CppCompileDb(), Get-CppGeneratedIncludes(), Get-Descendants(), Get-DotnetChangedCs(), Get-DotnetEval(), Get-DotnetSharedFormat() (+37 more)
 
 ### Community 10 - ".Get"
 Cohesion: 0.35
@@ -182,9 +182,9 @@ Nodes (42): "Gate is wrong" issue template, cherry-pick and revert cannot be cov
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `QGateHarmony` connect `QGateHarmony` to `harmony.cs`, `.Scan`, `MetadataReader`, `.Resolve`, `.Run`, `.Get`, `.Callee`?**
-  _High betweenness centrality (0.113) - this node is a cross-community bridge._
-- **Why does `Get-PathKey()` connect `check.ps1` to `detect.ps1`, `selftest.ps1`?**
-  _High betweenness centrality (0.023) - this node is a cross-community bridge._
+  _High betweenness centrality (0.112) - this node is a cross-community bridge._
+- **Why does `Get-PathKey()` connect `check.ps1` to `detect.ps1`?**
+  _High betweenness centrality (0.024) - this node is a cross-community bridge._
 - **Why does `Lookups` connect `Lookups` to `harmony.cs`?**
   _High betweenness centrality (0.022) - this node is a cross-community bridge._
 - **Are the 4 inferred relationships involving `Invoke-BaseStack()` (e.g. with `Get-GitIgnoredSet()` and `Get-NestedRepos()`) actually correct?**
@@ -194,4 +194,4 @@ _Questions this graph is uniquely positioned to answer:_
 - **Should `harmony.cs` be split into smaller, more focused modules?**
   _Cohesion score 0.05398110661268556 - nodes in this community are weakly interconnected._
 - **Should `detect.ps1` be split into smaller, more focused modules?**
-  _Cohesion score 0.057624113475177305 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.0664451827242525 - nodes in this community are weakly interconnected._
