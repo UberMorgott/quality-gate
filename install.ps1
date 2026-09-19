@@ -421,7 +421,7 @@ $failed = @($runLines | Where-Object { $_ -match '^\[FAIL\] (\S+)' } | ForEach-O
 Write-Output "gate      -- RED (exit $runCode): the pre-commit hook will refuse commits until this is resolved"
 $runLines | Where-Object { $_ -match '^\[(FAIL|WARN)\]' } | ForEach-Object { Write-Output "            $_" }
 Write-Output '  adopt:  full report: qgate -All -Full. Existing debt, not a reason for --no-verify'
-Write-Output "          (README `"Внедрение на существующей базе`", $(Join-Path $PSScriptRoot 'README.md')):"
+Write-Output "          (README `"Adopting on an existing codebase`", $(Join-Path $PSScriptRoot 'README.md')):"
 $head = (& git -C $root rev-parse --verify --quiet HEAD 2>$null)
 $rev = if ($head) { "$head" } else { '<commit sha>' }
 Write-Output "          - only findings newer than a revision, hooks and CI included: qgate.json `"baseline`": `"$rev`""
