@@ -3539,6 +3539,33 @@ try {
         (($fullCode -ne 0) -and ($full -match 'cmake not on PATH -- required at the full level')) $full
 } finally { $env:PATH = $priorPath }
 
+# #105: `-A x64` went to every Windows configure, and Ninja -- what CMake 4.x picks when
+# no Visual Studio is installed, or what an existing cache recorded -- refuses a platform
+# outright. The generator is read in CMake's own order: the cache, then CMAKE_GENERATOR.
+$genTree = Join-Path $tmp 'cpp-gen'
+New-Item -ItemType Directory -Path $genTree -Force | Out-Null
+$priorGen = $env:CMAKE_GENERATOR
+try {
+    $env:CMAKE_GENERATOR = 'Visual Studio 17 2022'
+    Set-Content (Join-Path $genTree 'CMakeCache.txt') "CMAKE_GENERATOR:INTERNAL=Ninja`nCMAKE_GENERATOR_PLATFORM:INTERNAL="
+    Check 'the generator a build cache recorded wins' ((Get-CMakeGenerator $genTree) -eq 'Ninja') (Get-CMakeGenerator $genTree)
+    Set-Content (Join-Path $genTree 'CMakeCache.txt') 'CMAKE_GENERATOR:INTERNAL=Visual Studio 17 2022'
+    $env:CMAKE_GENERATOR = 'Ninja'
+    Check 'a Visual Studio cache is still read as Visual Studio' `
+        ((Get-CMakeGenerator $genTree) -eq 'Visual Studio 17 2022') (Get-CMakeGenerator $genTree)
+    Remove-Item (Join-Path $genTree 'CMakeCache.txt') -Force
+    Check 'with no cache, CMAKE_GENERATOR names the generator' ((Get-CMakeGenerator $genTree) -eq 'Ninja') (Get-CMakeGenerator $genTree)
+    # End to end, where a Ninja configure is possible at all: no platform reaches it.
+    if ($IsWindows -and (Get-Command cmake -ErrorAction SilentlyContinue) -and (Get-Command ninja -ErrorAction SilentlyContinue)) {
+        $cppNinja = Join-Path $tmp 'cpp-ninja'
+        Copy-Item (Join-Path $PSScriptRoot 'testdata\cpp-fixture') $cppNinja -Recurse
+        Remove-Item (Join-Path $cppNinja 'build') -Recurse -Force -ErrorAction SilentlyContinue
+        $out = (& pwsh -NoProfile -File $gate -Root $cppNinja -Only cpp -All -Full 2>&1 | Out-String)
+        Check 'a Ninja configure on Windows is not handed -A x64' `
+            (($out -match '\bconfigure\b') -and ($out -notmatch 'does not support platform specification')) $out
+    }
+} finally { $env:CMAKE_GENERATOR = $priorGen }
+
 # The two static-analysis phases read their file list out of a compile database, which
 # is CMake's answer: it names every translation unit the BUILD compiles, dependencies
 # included, and the findings arrive from wherever the preprocessor reached. Both

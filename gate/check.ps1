@@ -2054,13 +2054,15 @@ function Invoke-CppStack($s) {
     # compiler probe and re-fetches every FetchContent dependency, and this phase runs
     # on a commit.
     $build = Join-Path $s.Dir 'build'
+    # -A x64 is the generator PLATFORM, which only the Visual Studio generators take --
+    # and Ninja refuses it outright (#105), so it goes only to one of those: the one the
+    # cache recorded, or the one CMake would pick. Every other generator is single-config,
+    # so the build type is a configure-time answer there.
+    $vs = $IsWindows -and ((Get-CMakeGenerator $build) -like 'Visual Studio*')
     Phase 'configure' {
-        # -A x64 is the generator PLATFORM, which only the Visual Studio generators
-        # take -- and one of those is the default on Windows. Everywhere else the
-        # generator is single-config, so the build type is a configure-time answer.
         # CMAKE_EXPORT_COMPILE_COMMANDS is what the two analysis phases below are
         # driven by; it costs nothing where it works and is ignored where it does not.
-        if ($IsWindows) { cmake -S $s.Dir -B $build -A x64 -DCMAKE_EXPORT_COMPILE_COMMANDS=ON }
+        if ($vs) { cmake -S $s.Dir -B $build -A x64 -DCMAKE_EXPORT_COMPILE_COMMANDS=ON }
         else { cmake -S $s.Dir -B $build -DCMAKE_BUILD_TYPE=Release -DCMAKE_EXPORT_COMPILE_COMMANDS=ON }
     }
     # --config on both platforms: a multi-config generator needs it and a single-config

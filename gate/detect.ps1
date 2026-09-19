@@ -69,6 +69,24 @@ function Test-CppOwn([string]$Path, [string]$Dir) {
     return ($p.Substring($d.Length) -notmatch $script:CppSkipDir)
 }
 
+# The generator a configure of $Build will use, in CMake's own order: the one an
+# existing cache recorded (cmake refuses to switch it), then the CMAKE_GENERATOR
+# environment variable, then the default `cmake --help` marks with `*`. #105: -A is a
+# platform only the Visual Studio generators (and Green Hills MULTI) accept, and the
+# Windows default is Visual Studio only where one is installed -- without one CMake 4.x
+# picks Ninja, which refuses -A outright. Empty when none of the three answers.
+function Get-CMakeGenerator([string]$Build) {
+    $cache = Join-Path $Build 'CMakeCache.txt'
+    if (Test-Path -LiteralPath $cache) {
+        $m = Select-String -LiteralPath $cache -Pattern '^CMAKE_GENERATOR:INTERNAL=(.+)$' | Select-Object -First 1
+        if ($m) { return $m.Matches[0].Groups[1].Value.Trim() }
+    }
+    if ($env:CMAKE_GENERATOR) { return $env:CMAKE_GENERATOR }
+    $m = @(& cmake --help 2>$null) | Select-String -Pattern '^\*\s*(.+?)\s*(=.*)?$' | Select-Object -First 1
+    if ($m) { return $m.Matches[0].Groups[1].Value }
+    return ''
+}
+
 function Get-RepoRoot([string]$StartDir) {
     $top = (& git -C $StartDir rev-parse --show-toplevel 2>$null)
     if ($LASTEXITCODE -eq 0 -and $top) { return (Resolve-Path ($top -replace '/', '\')).Path }
