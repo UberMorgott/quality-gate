@@ -127,6 +127,9 @@ function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
     if ($Ok) { Write-Output "[ok]   $Name" }
     else { Write-Output "[FAIL] $Name $Detail"; $script:Fails++ }
 }
+# The report above the end-of-run advisories summary, which repeats every [WARN] once more
+# on purpose. For assertions about where and how often a warning is reported inline.
+function Get-InlineReport([string]$Out) { ($Out -split '(?m)^\[WARN\] advisories -- ', 2)[0] }
 function Set-GoFile([string]$Path, [string]$Text) {
     # LF only: gofmt reports a CRLF file as unformatted, which would fail the
     # wrong phase and hide the violation we are testing for.
@@ -319,7 +322,7 @@ $go = Join-Path $tmp 'go'
 Copy-Item (Join-Path $PSScriptRoot 'testdata\go-fixture') $go -Recurse
 $r = Invoke-Gate $go
 Check 'clean go fixture passes without config' ($r.Code -eq 0) $r.Out
-Check 'missing .golangci.yml warned once' (([regex]::Matches($r.Out, 'no \.golangci\.yml')).Count -eq 1) $r.Out
+Check 'missing .golangci.yml warned once' (([regex]::Matches((Get-InlineReport $r.Out), 'no \.golangci\.yml')).Count -eq 1) $r.Out
 $script:noCfgOut = $r.Out
 
 # 3. Same fixture with the template config -> still green, no warning.
@@ -1734,7 +1737,7 @@ public sealed class Bad
     Check 'a null-checked lookup is a version probe: a warning, not a failure' `
         (($out -match '\[WARN\] harmony: Hud\.UpdateShield .*null-checked') -and
             ($out -match '\[WARN\] harmony: Hud\.UpdateMana .*null-checked') -and
-            ($out -notmatch '(?m)^(?!\[WARN\]).*Hud\.Update(Shield|Mana)')) $out
+            ((Get-InlineReport $out) -notmatch '(?m)^(?!\[WARN\]).*Hud\.Update(Shield|Mana)')) $out
     Check 'lookups that cannot be checked statically are counted' `
         ($out -match '\[NOTE\] harmony: Mod\.dll -- \d+ target\(s\) checked, 2 not checkable statically') $out
     Check 'valid Harmony targets stay silent (assignable, interface, generic argumentTypes too)' `
