@@ -70,11 +70,15 @@ if ($PSBoundParameters.ContainsKey('Sarif')) {
     $childOut | ForEach-Object { Write-Output $_ }
     $base = try { (Resolve-Path $(if ($Root) { $Root } else { Get-RepoRoot (Get-Location).Path })).Path } catch { $null }
     $results = [Collections.Generic.List[object]]::new()
-    $rule = 'gate'; $tagLevel = $null
+    $rule = 'gate'; $tagLevel = $null; $summary = $false
     $levels = @{ FAIL = 'error'; WARN = 'warning'; UNKNOWN = 'warning'; SKIP = 'note'; NOTE = 'note'; INFO = 'note' }
     foreach ($line in @($childOut | ForEach-Object { "$_" -split "`r?`n" })) {
         # Older reports carried a passing stack's phases inline: `[PASS] go (go.mod) [PASS] build [WARN] ...`.
         foreach ($seg in ($line -split ' (?=\[(?:PASS|FAIL|WARN|SKIP|UNKNOWN|NOTE|INFO)\] )')) {
+            # The end-of-run advisories summary repeats warnings already reported one by one.
+            if ($seg -match '^\[WARN\] advisories -- ') { $summary = $true; continue }
+            if ($summary -and $seg -match '^\s') { continue }
+            $summary = $false
             if ($seg -match '^\[(PASS|FAIL|WARN|SKIP|UNKNOWN|NOTE|INFO|WHY)\] (.*)$') {
                 $tagLevel = $levels[$Matches[1]]
                 $rule = if ($Matches[2] -match '^([^\s:(]+)') { $Matches[1] } else { 'gate' }
@@ -143,6 +147,11 @@ $Root = (Resolve-Path $Root).Path
 
 $stacks = @(Get-Stacks $Root)
 $allStacks = $stacks
+# Every advisory [WARN] of this run, first line each, for the summary at the end and for
+# qgate.json "strict". Collected where each one is made, not read back off the report:
+# -Quiet drops a passing stack's lines, and a -Parallel worker's lines never reach this
+# process except through its result record.
+$script:Advisories = @()
 
 # Optional qgate.json: {"tools": {"golangci-lint": "2.13.1"}}. Linter output is not
 # stable across patch releases, so a green run against a different version than CI
@@ -176,7 +185,9 @@ if (Test-Path $pinFile) {
         }
         if (-not $known) {
             # A typo'd key used to be a silent no-op that read as enforcement.
-            Write-Output "[WARN] qgate.json pins unknown tool '$($p.Name)' -- known: go, golangci-lint, cargo, node, buf, gdformat/gdlint/gdtoolkit, godot"
+            $w = "[WARN] qgate.json pins unknown tool '$($p.Name)' -- known: go, golangci-lint, cargo, node, buf, gdformat/gdlint/gdtoolkit, godot"
+            Write-Output $w
+            $script:Advisories += $w
         } elseif ($have -and $have -ne ([string]$p.Value).TrimStart('v')) {
             $pinMismatch += "$($p.Name) $have on PATH, qgate.json pins $($p.Value)"
         }
@@ -194,7 +205,7 @@ if (Test-Path $pinFile) {
             # only way to make this verdict stick.
             exit 1
         }
-        foreach ($m in $pinMismatch) { Write-Output "[WARN] $m -- this run may not match CI" }
+        foreach ($m in $pinMismatch) { Write-Output "[WARN] $m -- this run may not match CI"; $script:Advisories += "[WARN] $m -- this run may not match CI" }
     }
 }
 
@@ -2832,7 +2843,7 @@ foreach ($s in $stacks) {
     # from a web stack that does not exist -- the reader cannot tell "not run" from
     # "nothing to check". The work is still skipped; the skipping is now on the record.
     if ($script:Failed) { $report += "[SKIP] $label ($($s.Marker)) -- an earlier stack failed, not run"; continue }
-    if ($s.Warn) { $report += "[WARN] $label -- $($s.Warn)" }
+    if ($s.Warn) { $report += "[WARN] $label -- $($s.Warn)"; $script:Advisories += "[WARN] $label -- $($s.Warn)" }
     if ($parallelKeys -contains $key) {
         # Fail closed: a child that died without a result is a failure, not a pass.
         $r = $script:ChildResults[$key]
@@ -2841,6 +2852,7 @@ foreach ($s in $stacks) {
         $script:Warnings += @($r.Warnings | Where-Object { $null -ne $_ })
         $script:Phases += $r.Phases
         $script:Skipped += @($r.Skipped | Where-Object { $null -ne $_ })
+        $script:Advisories += @($r.Advisories | Where-Object { $null -ne $_ })
         if ($r.Failed) { $script:Failed = $true }
         if ($r.Soft) { $script:SoftFailed = $true }
         continue
@@ -2873,6 +2885,8 @@ foreach ($s in $stacks) {
     $stackSkips = @($script:Lines | Where-Object { "$_" -match '^\[SKIP\] ' -and "$_" -notmatch 'an earlier phase failed' } | ForEach-Object { "$_".Substring(7).Trim() })
     if (-not ($script:Failed -or $script:StackSoft) -and $script:Phases -eq $before) { $stackSkips += "$label ($($s.Marker)) -- no check phase applies here" }
     $script:Skipped += $stackSkips
+    $stackAdv = @($script:Lines | Where-Object { "$_" -match '^\[WARN\] ' } | ForEach-Object { ("$_" -split "`r?`n")[0].Trim() })
+    $script:Advisories += $stackAdv
     if ($script:Failed -or $script:StackSoft) {
         $out = Format-StackOutput $script:Lines $MaxChars
         $report += "[FAIL] $label"
@@ -2903,11 +2917,14 @@ foreach ($s in $stacks) {
         $childRec[$key] = @{
             Report = @($report | Select-Object -Skip $reportAt); Warnings = @($script:Warnings | Select-Object -Skip $warnAt)
             Phases = $script:Phases - $before; Failed = $script:Failed; Soft = $script:StackSoft; Skipped = $stackSkips
+            Advisories = $stackAdv
         }
     }
 }
 # Advisory, never a verdict: printed after the stack lines, shown under -Quiet (below).
 if ($script:Warnings) { $report += $script:Warnings }
+# A worker's report-level warnings came back through $r.Warnings, so this covers both.
+$script:Advisories += @($script:Warnings | Where-Object { "$_" -match '^\[WARN\] ' } | ForEach-Object { ("$_" -split "`r?`n")[0].Trim() })
 # Every stack has run; from here on a soft failure is a failure like any other.
 if ($script:SoftFailed) { $script:Failed = $true }
 
@@ -2969,21 +2986,42 @@ if ($script:StagedAtStart) {
 # skip; an array names the checks that must run (the first word of the [SKIP] line:
 # "typos", "vuln", "tidy"), so a check that does not apply here (`vuln -- no package
 # sources found`) does not make the strict mode unusable for the whole repository.
+# The same for every advisory [WARN]: reported from the field, `qgate -All -Full` exited 0
+# for weeks over golangci floor, goleak, slow-test and deadcode warnings nobody acted on.
+# qgate.json "strict" (opt-in, full level) fails the run on any of them and on any skip --
+# it implies strictSkips true. A broken qgate.json is an advisory like the rest: a strict
+# repository wants to hear about it. The dependency-update note and its timeout come
+# after this decision on purpose: newer releases are never a verdict, strict or not.
 $skipped = @($script:Skipped)
 $strictSkips = $null
+$strict = $false
 if (Test-Path $pinFile) {
     # Read off the object, not assigned out of a pipeline: a one-element array would unroll to a string.
     $cfg = try { Get-Content $pinFile -Raw | ConvertFrom-Json } catch { $null }
-    $ss = $null
-    if ($cfg) { $ss = $cfg.strictSkips }
+    $ss = $null; $st = $null
+    if ($cfg) { $ss = $cfg.strictSkips; $st = $cfg.strict }
+    if ($st -is [bool]) { $strict = $st }
+    elseif ($null -ne $st) {
+        $w = "[WARN] qgate.json strict must be true or false, got '$st' -- ignored"
+        $report += $w; $script:Advisories += $w
+    }
     if ($ss -is [bool]) { $strictSkips = $ss }
     elseif ($ss -is [array] -and -not @($ss | Where-Object { $_ -isnot [string] -or -not $_.Trim() })) { $strictSkips = @($ss | ForEach-Object { $_.Trim() }) }
-    elseif ($null -ne $ss) { $report += "[WARN] qgate.json strictSkips must be true, false or an array of check names, got '$ss' -- ignored" }
+    elseif ($null -ne $ss) {
+        $w = "[WARN] qgate.json strictSkips must be true, false or an array of check names, got '$ss' -- ignored"
+        $report += $w; $script:Advisories += $w
+    }
 }
+if ($strict) { $strictSkips = $true }
+# Unique: a broken qgate.deferrals.json is reported by every vuln phase that reads it.
+$advisories = @($script:Advisories | Select-Object -Unique | ForEach-Object { $_ -replace '^\[WARN\] ', '' })
 $strictHit = @(if ($Full -and -not $script:Failed -and $strictSkips) {
     $skipped | Where-Object { $strictSkips -is [bool] -or (($_ -split ' ')[0] -in $strictSkips) }
 })
-if ($strictHit) { $script:Failed = $true }
+# Except a live qgate.deferrals.json acknowledgement: the repository already decided that
+# one, with a reason and an expiry, and failing it would leave strict repos no deferral at all.
+$strictAdv = @(if ($Full -and -not $script:Failed -and $strict) { $advisories | Where-Object { $_ -notmatch '^qgate\.deferrals\.json: .* acknowledged until ' } })
+if ($strictHit -or $strictAdv) { $script:Failed = $true }
 
 # Only on the full level, only when everything passed: a note about newer releases,
 # never a verdict. It cannot fail the run, and the Stop hook (-Fast) never sees it.
@@ -3008,12 +3046,24 @@ if ($Full -and -not $script:Failed) {
     }
     Remove-Item $outFile, "$outFile.err" -Force -ErrorAction SilentlyContinue
 }
-if ($skipped) {
-    $n = "$($skipped.Count) check$(if ($skipped.Count -ne 1) { 's' })"
-    $report += (@("[WARN] skipped -- $n did not run, so this run did not verify them:") + @($skipped | ForEach-Object { "       $_" })) -join "`n"
-}
-if ($strictHit) {
-    $report += (@("[FAIL] strictSkips -- qgate.json requires these checks at the full level, and they did not run:") + @($strictHit | ForEach-Object { "       $_" })) -join "`n"
+# Indented lines carry no [WARN] tag: whatever counts or filters the report's tagged lines
+# must see each finding once, where it was made.
+if ($strict -and ($strictHit -or $strictAdv)) {
+    # One block naming everything once; the two summaries below would only repeat it.
+    $n = $strictAdv.Count + $strictHit.Count
+    $report += (@("[FAIL] strict -- qgate.json `"strict`" fails the full level on every warning and skipped check, and this run has ${n}:") +
+        @($strictAdv | ForEach-Object { "       $_" }) + @($strictHit | ForEach-Object { "       skipped: $_" })) -join "`n"
+} else {
+    if ($advisories) {
+        $report += (@("[WARN] advisories -- $($advisories.Count) warning(s) this run did not fail on:") + @($advisories | ForEach-Object { "       $_" })) -join "`n"
+    }
+    if ($skipped) {
+        $n = "$($skipped.Count) check$(if ($skipped.Count -ne 1) { 's' })"
+        $report += (@("[WARN] skipped -- $n did not run, so this run did not verify them:") + @($skipped | ForEach-Object { "       $_" })) -join "`n"
+    }
+    if ($strictHit) {
+        $report += (@("[FAIL] strictSkips -- qgate.json requires these checks at the full level, and they did not run:") + @($strictHit | ForEach-Object { "       $_" })) -join "`n"
+    }
 }
 
 # -Quiet keeps a PASSING run silent -- that is its whole documented job, and the
@@ -3026,6 +3076,7 @@ if ($strictHit) {
 # it is the reason this commit took 30s longer, and it says nothing was checked. A slow
 # test package is shown: the hook is the only early warning before CI's -race times out.
 # So is a CI Go variant the gate never runs: green here says nothing about that target.
+# The advisories and skipped summaries stay silent on green too; "strict" is the opt-in that makes them heard.
 if ($Quiet -and -not $script:Failed) { $report = @($report | Where-Object { $_ -match '^\[WARN\] (qgate\.|dependency update advisory timed out|slow tests:|CI parity:)' }) }
 # A broken qgate.deferrals.json is read by outdated and by every vuln phase; say it once.
 $seenDefer = [Collections.Generic.HashSet[string]]::new()

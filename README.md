@@ -88,7 +88,7 @@ On Windows, call the gate from Lefthook via `pwsh -File <script>` or copy the [t
 
 Gate exit codes: `0` means no enforced failure, `1` means failure; Stop hook `2` blocks the turn. CLI unknown commands and invalid hold/global actions return `64`; selftest uses `2` for unknown sections, and `update` can propagate Git's exit code. A `0` may mean no changes/no known stack or intentionally deferred custom/deploy/base checks, not that every listed check ran. Other zero-phase runs fail.
 
-`[FAIL]` normally skips later phases/stacks; .NET whitespace failures allow later checks to continue. `[WARN]` is advisory, `[SKIP]` means no verification, and `[UNKNOWN]` means a tool could not establish a result. A run with any `[SKIP]` ends with a `[WARN] skipped -- N checks did not run` block listing each with its reason (not under `-Quiet` on a green run; exit code unchanged). `qgate.json` `strictSkips` turns those skips into a full-level `[FAIL]`. Reports can truncate detailed findings; run the named tool directly for its complete output. Builds, caches, tests, and `buf generate` can write files even without `-Fix`.
+`[FAIL]` normally skips later phases/stacks; .NET whitespace failures allow later checks to continue. `[WARN]` is advisory, `[SKIP]` means no verification, and `[UNKNOWN]` means a tool could not establish a result. A run with any `[SKIP]` ends with a `[WARN] skipped -- N checks did not run` block listing each with its reason (not under `-Quiet` on a green run; exit code unchanged). `qgate.json` `strictSkips` turns those skips into a full-level `[FAIL]`. Every advisory `[WARN]` is likewise listed at the end in a `[WARN] advisories` block (same `-Quiet` rule), and `qgate.json` `strict` turns warnings and skips alike into a full-level `[FAIL]`. Reports can truncate detailed findings; run the named tool directly for its complete output. Builds, caches, tests, and `buf generate` can write files even without `-Fix`.
 
 ## Project configuration
 
@@ -109,6 +109,7 @@ Place one optional `qgate.json` at the repository root. Tool-specific rules rema
 | `baseline` | Git revision for existing-debt adoption, including hooks; use a fixed commit SHA, not a branch. |
 | `tools` | Exact version pins for `go`, `golangci-lint`, `cargo`, `node`, `buf`, `gdformat`, `gdlint`, `gdtoolkit`, `godot`; mismatches warn in fast and fail in full. |
 | `strictSkips` | Opt-in, full level only (hooks included): `true` fails the run on any `[SKIP]`; an array (`["typos", "vuln", "tidy"]`) fails only skips whose line starts with a listed check name. Skips caused by an earlier failure are not counted. |
+| `strict` | Opt-in, full level only (hooks included): `true` fails the run on any advisory `[WARN]` (qgate.json warnings included) and on any `[SKIP]` (implies `strictSkips: true`), naming each in one `[FAIL] strict` block. A live `qgate.deferrals.json` acknowledgement and the dependency-update note do not count. The fast lane only warns. |
 | `stopHook` | `false` makes `wire` omit/remove its Claude Code Stop hook; re-run `wire` after changing it. |
 | `enabled` | `false` disables the global hook dispatcher for this repository. |
 | `timeouts.godot` | Positive per-process timeout in seconds; default 600. |

@@ -3502,6 +3502,41 @@ $r = Invoke-DeployGate
 Check 'skips: strictSkips true with nothing skipped stays green and quiet about it' `
     (($r.Code -eq 0) -and ($r.Out -notmatch 'skipped --|strictSkips')) $r.Out
 
+# 35d. Advisory [WARN]s are summarized at the end too; qgate.json "strict" (opt-in) fails the
+# full level on any warning or skip. Reported from the field: `qgate -All -Full` exited 0 for
+# weeks over golangci floor, goleak, slow-test and deadcode warnings nobody acted on.
+$okDeploy = '"deploy":[{"built":"out/Mod.dll","deployed":"game/Mod.dll"}]'
+$pinWarn = '"tools":{"nosuchtool":"1"}'
+[IO.File]::WriteAllText((Join-Path $dep 'qgate.json'), "{$okDeploy,$pinWarn}")
+$r = Invoke-DeployGate
+Check 'advisories: a green run lists every warning at the end, exit unchanged' `
+    (($r.Code -eq 0) -and ($r.Out -match '\[WARN\] advisories -- 1 warning\(s\)') -and
+        ($r.Out -match "(?m)^\s+qgate\.json pins unknown tool 'nosuchtool'") -and ($r.Out -match '\[PASS\] deploy Mod\.dll')) $r.Out
+$qOut = (& pwsh -NoProfile -File $gate -Root $dep -Only deploy -Full -Quiet 2>&1 | Out-String); $qCode = $LASTEXITCODE
+Check 'advisories: -Quiet on green prints no summary block' (($qCode -eq 0) -and ($qOut -notmatch 'advisories --')) "code=$qCode $qOut"
+[IO.File]::WriteAllText((Join-Path $dep 'qgate.json'), "{$okDeploy,$pinWarn,`"strict`":true}")
+$r = Invoke-DeployGate
+# Named once in the strict block, beside the line where it was made -- never a second summary.
+Check 'strict: a warning fails the full level and is named once in the block' `
+    (($r.Code -ne 0) -and ($r.Out -match '\[FAIL\] strict -- ') -and ($r.Out -notmatch 'advisories --') -and
+        ([regex]::Matches($r.Out, "pins unknown tool 'nosuchtool'").Count -eq 2)) $r.Out
+$r = Invoke-DeployGate -Fast
+Check 'strict: the fast lane only warns' (($r.Code -eq 0) -and ($r.Out -notmatch '\[FAIL\] strict')) $r.Out
+$qOut = (& pwsh -NoProfile -File $gate -Root $dep -Only deploy -Full -Quiet 2>&1 | Out-String); $qCode = $LASTEXITCODE
+Check 'strict: holds under -Quiet (the pre-commit hook)' (($qCode -ne 0) -and ($qOut -match '\[FAIL\] strict -- ')) "code=$qCode $qOut"
+[IO.File]::WriteAllText((Join-Path $dep 'qgate.json'), "{$okDeploy,`"strict`":true}")
+$r = Invoke-DeployGate
+Check 'strict: no warning and no skip stays green' (($r.Code -eq 0) -and ($r.Out -notmatch 'strict --|advisories --|skipped --')) $r.Out
+[IO.File]::WriteAllText((Join-Path $dep 'qgate.json'), "{$skipDeploy,`"strict`":true}")
+$r = Invoke-DeployGate
+Check 'strict: a skip fails the full level (strict implies strictSkips)' `
+    (($r.Code -ne 0) -and ($r.Out -match '\[FAIL\] strict -- ') -and ($r.Out -match '(?m)^\s+skipped: deploy Gone\.dll -- not deployed') -and
+        ($r.Out -notmatch '\[FAIL\] strictSkips|skipped -- ')) $r.Out
+[IO.File]::WriteAllText((Join-Path $dep 'qgate.json'), "{$okDeploy,`"strict`":`"yes`"}")
+$r = Invoke-DeployGate
+Check 'strict: a wrong type warns and is ignored' `
+    (($r.Code -eq 0) -and ($r.Out -match "\[WARN\] qgate\.json strict must be true or false, got 'yes' -- ignored")) $r.Out
+
 }
 
 if (Want 'cpp') {
@@ -3975,6 +4010,14 @@ try {
                 ([regex]::Matches($out, '\[WARN\] (shellcheck|actionlint|hadolint|markdownlint|yamllint|editorconfig):').Count -eq 6)) "code=$code $out"
             # A green stack line drops its detail lines; the findings are report-level.
             Check 'file-kind linter findings are printed, not just counted' ($out -match 'shimfinding') $out
+            Check 'check-phase warnings are listed in the advisories summary' `
+                (($out -match '\[WARN\] advisories -- \d+ warning') -and ($out -match '(?m)^\s+shellcheck: findings in')) $out
+            # qgate.json "strict": the pre-commit form (-Quiet) still fails on report-level warnings.
+            [IO.File]::WriteAllText((Join-Path $lint 'qgate.json'), '{"strict":true}')
+            $sOut = (& pwsh -NoProfile -File $gate -Root $lint -Only base -Full -Quiet 2>&1 | Out-String); $sCode = $LASTEXITCODE
+            Remove-Item (Join-Path $lint 'qgate.json')
+            Check 'strict fails a check-phase warning under -Quiet' `
+                (($sCode -ne 0) -and ($sOut -match '\[FAIL\] strict -- ') -and ($sOut -match '(?m)^\s+shellcheck: findings in')) "code=$sCode $sOut"
             # An LF script in the index is not a literal-CR defect, whatever the checkout wrote.
             Check 'shellcheck skips SC1017 for a script the index holds LF' ($out -match 'shimfinding -f gcc -e SC1017') $out
             if ($IsWindows) { Check 'markdownlint gets each argument separately through a .ps1 shim (#73)' ($out -match 'shimfinding args=3') $out }
