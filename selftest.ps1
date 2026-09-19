@@ -2125,12 +2125,12 @@ Copy-Item (Join-Path $PSScriptRoot 'testdata\go-fixture') $hook2 -Recurse
 git -C $hook2 init -q 2>$null
 git -C $hook2 add -A 2>$null
 git -C $hook2 -c user.email=selftest@local -c user.name=selftest commit -qm init 2>$null
-function Invoke-StopHook([string]$Repo, [string]$Session) {
+function Invoke-StopHook([string]$Repo, [string]$Session, [string]$Extra = '') {
     $err = Join-Path $tmp "hook-$([guid]::NewGuid()).err"
     Push-Location $Repo
     try {
         $env:CLAUDE_PROJECT_DIR = $Repo
-        "{`"session_id`":`"$Session`"}" | & cmd /c "`"$(Join-Path $PSScriptRoot 'bin\qgate.cmd')`" stop-hook" 2>$err | Out-Null
+        "{`"session_id`":`"$Session`"$Extra}" | & cmd /c "`"$(Join-Path $PSScriptRoot 'bin\qgate.cmd')`" stop-hook" 2>$err | Out-Null
         $code = $LASTEXITCODE
         $env:CLAUDE_PROJECT_DIR = $null
     } finally { Pop-Location }
@@ -2185,6 +2185,23 @@ $relOut = Invoke-Qgate @('release', '-Root', "`"$holdRepo`"")
 $h = Invoke-StopHook $holdRepo ([guid]::NewGuid())
 Check 'qgate release gives the gate back on the same failing tree' `
     (($h.Code -eq 2) -and ($relOut -match 'released')) "code=$($h.Code) $relOut $($h.Err)"
+# #98 again: the hold relied on the LEAD remembering to call it, and it did not. Claude
+# Code hands the Stop hook `background_tasks` (in-flight tasks); a running subagent there
+# is a writer the LEAD did not have to announce. Same failing tree, no hold: only the
+# stdin payload changes the verdict, and it downgrades to a report, never a silent pass.
+$bgAgent = ',"background_tasks":[{"id":"a1","type":"subagent","status":"running","description":"write tests","agent_type":"general-purpose"}]'
+$h = Invoke-StopHook $holdRepo ([guid]::NewGuid()) $bgAgent
+Check 'a running background subagent turns the block into a report' `
+    (($h.Code -eq 0) -and ($h.Err -match 'background writer') -and ($h.Err -match 'general-purpose') -and ($h.Err -match '\[FAIL\]')) "code=$($h.Code) $($h.Err)"
+# The true-positive side: what is in flight must be a writer, and still in flight.
+$bgShell = ',"background_tasks":[{"id":"s1","type":"shell","status":"running","description":"dev server","command":"npm run dev"}]'
+$h = Invoke-StopHook $holdRepo ([guid]::NewGuid()) $bgShell
+Check 'a background shell task (dev server, tail -f) does not switch the gate off' ($h.Code -eq 2) "code=$($h.Code) $($h.Err)"
+$bgDone = ',"background_tasks":[{"id":"a1","type":"subagent","status":"completed","agent_type":"general-purpose"}]'
+$h = Invoke-StopHook $holdRepo ([guid]::NewGuid()) $bgDone
+Check 'a finished subagent no longer excuses the tree' ($h.Code -eq 2) "code=$($h.Code) $($h.Err)"
+$h = Invoke-StopHook $holdRepo ([guid]::NewGuid()) ',"background_tasks":[],"session_crons":[]'
+Check 'an empty background_tasks list gates as before' ($h.Code -eq 2) "code=$($h.Code) $($h.Err)"
 # An expired hold is no hold: a window nobody released must not disable the hook for the
 # rest of the session. Written straight into the marker the hold command owns.
 . (Join-Path $PSScriptRoot 'gate\detect.ps1')

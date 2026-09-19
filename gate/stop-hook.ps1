@@ -20,9 +20,25 @@ $root = if ($env:CLAUDE_PROJECT_DIR) { $env:CLAUDE_PROJECT_DIR } else { Get-Repo
 # working tree, and a counter left behind by one of them must not eat another
 # session's attempts (or wave a failing gate straight through).
 $session = ''
+$writers = @()
 $raw = [Console]::In.ReadToEnd()
 if ($raw) {
-    try { $session = ($raw | ConvertFrom-Json).session_id } catch { }
+    try {
+        $in = $raw | ConvertFrom-Json
+        $session = $in.session_id
+        # #98: `qgate hold` relied on the LEAD remembering to call it, and it did not. Claude
+        # Code already tells the Stop hook what is still in flight: `background_tasks`, one
+        # entry per in-flight task, `type` a label such as subagent / teammate / workflow /
+        # shell / monitor (https://code.claude.com/docs/en/hooks#stop-input). Only the kinds
+        # that edit files count as writers -- a background `tail -f` or dev server must not
+        # switch the gate off for the whole session. `local_agent` is the raw discriminant a
+        # subagent falls back to when the label is unknown. Absent on older Claude Code: then
+        # nothing changes and `qgate hold` is still the way to say it.
+        $writers = @($in.background_tasks | Where-Object {
+                $_ -and ("$($_.type)" -match 'subagent|teammate|workflow|local_agent') -and
+                ("$($_.status)" -notmatch '^(completed|failed|killed|stopped|cancell?ed)$')
+            })
+    } catch { }
 }
 $stateFile = Join-Path ([IO.Path]::GetTempPath()) "quality-gate-stop-$(Get-PathKey "$root|$session").txt"
 
@@ -89,6 +105,16 @@ if ($LASTEXITCODE -eq 0) {
     # Only a green run may move this mark, or a failing run would excuse itself from
     # the next turn's check.
     if ($head) { Set-Content -Path $greenFile -Value $head -NoNewline }
+    exit 0
+}
+
+# A red tree while a background writer is still running is not the LEAD's to fix (#98):
+# report it, do not block. The true positive is not lost -- the turn that follows the
+# writer's finish has no writer in flight and is gated as usual, and commits are gated by
+# pre-commit either way. The block counter is left alone: this was not a blocked stop.
+if ($writers) {
+    $names = ($writers | ForEach-Object { (@($_.type, $_.agent_type) | Where-Object { $_ }) -join ' ' }) -join ', '
+    [Console]::Error.WriteLine("[WARN] Quality gate not enforced this turn: $($writers.Count) background writer(s) still running ($names), the tree may be half-written. Do not edit their files. The turn after they finish is gated; commits are still gated.`n$out")
     exit 0
 }
 
