@@ -3807,6 +3807,43 @@ try {
         ($out -match 'MD022/blanks-around-headings') $out
 } finally { $env:PATH = $priorPath }
 
+# A third-party addon's docs committed in-tree drowned the repository's own findings (837
+# hits, most vendored). linguist-vendored/-generated and .markdownlintignore keep a file out;
+# `linguist-vendored=false` and every other path still reach the linter. The stand-in echoes
+# each argument it was handed as a finding, so the report shows exactly what was linted.
+$mdVend = Join-Path $tmp 'base-lint-md-vendored'
+New-Item -ItemType Directory -Path (Join-Path $mdVend 'addons\thirdparty'), (Join-Path $mdVend 'gen'), (Join-Path $mdVend 'drafts') -Force | Out-Null
+git -C $mdVend init -q 2>$null
+foreach ($f in 'own.md', 'kept.md', 'addons/thirdparty/README.md', 'gen/api.md', 'drafts/wip.md') {
+    [IO.File]::WriteAllText((Join-Path $mdVend $f), "#T`n")
+}
+[IO.File]::WriteAllText((Join-Path $mdVend '.gitattributes'),
+    "addons/thirdparty/** linguist-vendored`ngen/*.md linguist-generated=true`nkept.md linguist-vendored=false`n")
+[IO.File]::WriteAllText((Join-Path $mdVend '.markdownlintignore'), "# drafts are not published`ndrafts/`n")
+git -C $mdVend add -A 2>$null
+$mdEcho = Join-Path $tmp 'mdl-echo-shim'
+New-Item -ItemType Directory -Path $mdEcho -Force | Out-Null
+if ($IsWindows) {
+    [IO.File]::WriteAllText((Join-Path $mdEcho 'markdownlint-cli2.ps1'),
+        "foreach (`$a in `$args) { `"`$(`$a.TrimStart(':')):1 error MD018/no-missing-space-atx echo`" }; exit 1`n")
+} else {
+    $p = Join-Path $mdEcho 'markdownlint-cli2'
+    [IO.File]::WriteAllText($p, "#!/bin/sh`nfor a in `"`$@`"; do echo `"`${a#:}:1 error MD018/no-missing-space-atx echo`"; done`nexit 1`n")
+    chmod +x $p
+}
+try {
+    $env:PATH = "$mdEcho$sep$strippedPath"
+    $out = (& pwsh -NoProfile -File $gate -Root $mdVend -Only base -Full 2>&1 | Out-String)
+    $code = $LASTEXITCODE
+    Check 'markdownlint still reports the repository''s own Markdown, =false included' `
+        (($code -eq 0) -and ($out -match '\[WARN\] markdownlint: findings in') -and
+        ($out -match 'own\.md:1 error MD018') -and ($out -match 'kept\.md:1 error MD018')) "code=$code $out"
+    Check 'markdownlint skips linguist-vendored and linguist-generated Markdown' `
+        (($out -notmatch 'addons/thirdparty/README\.md') -and ($out -notmatch 'gen/api\.md')) $out
+    Check 'markdownlint skips paths listed in .markdownlintignore' ($out -notmatch 'drafts/wip\.md') $out
+    Check 'a .markdownlintignore alone keeps the gate''s markdownlint defaults' ($out -match '--config:1') $out
+} finally { $env:PATH = $priorPath }
+
 # #50: gremlins runs only under -Mutate. A stand-in that leaves a marker proves the default
 # run never invokes it; a missing tool is a [SKIP]; survivors are a [WARN], exit 0.
 $mut = Join-Path $tmp 'mutate'

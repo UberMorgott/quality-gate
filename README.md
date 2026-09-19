@@ -151,7 +151,7 @@ The runner also validates requested stacks/revisions and tool pins, rejects an u
 
 | Printed check | Tier | External tool | What it checks and why |
 | --- | --- | --- | --- |
-| `markdownlint` | Advisory (fast/full) | markdownlint-cli2; skip if missing | Checks changed Markdown, or tracked Markdown with `-All`/`-Full`, for structural and formatting problems that hurt readability. |
+| `markdownlint` | Advisory (fast/full) | markdownlint-cli2; skip if missing | Checks changed Markdown, or tracked Markdown with `-All`/`-Full`, for structural and formatting problems that hurt readability. Skips paths marked `linguist-vendored`/`linguist-generated` in `.gitattributes` (every advisory linter does), paths in `.markdownlintignore`, and the `ignores` of `.markdownlint-cli2.*`. |
 
 ### Go (`go.mod`)
 

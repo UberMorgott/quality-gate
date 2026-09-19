@@ -571,6 +571,17 @@ function Format-StackOutput([string[]]$Lines, [int]$Max) {
 
 function Have([string]$Exe) { [bool](Get-Command $Exe -ErrorAction SilentlyContinue) }
 
+# The paths a repository marked as not its own code in .gitattributes: linguist-vendored
+# (a third-party addon committed in-tree) or linguist-generated. One `git check-attr` for the
+# whole list, NUL-separated both ways -- piped line by line, PowerShell appended a CR to every
+# path and no pattern matched it (measured). `=false` and `-attr` stay in.
+function Get-VendoredPaths([string]$Repo, [string[]]$Paths) {
+    if (-not $Paths) { return @() }
+    $raw = ((@($Paths) -join "`0") + "`0") | & git -C $Repo check-attr -z --stdin linguist-vendored linguist-generated 2>$null
+    $f = ($raw -join '') -split "`0"
+    @(for ($i = 0; $i + 2 -lt $f.Count; $i += 3) { if ($f[$i + 2] -in 'set', 'true') { $f[$i] } }) | Sort-Object -Unique
+}
+
 # quality-gate#82: an advisory with no fixed version failed every -Full run and every
 # commit, and nothing in the repository could fix it. qgate.deferrals.json
 # "vulnerabilities" acknowledges one by id, with a reason and an expiry. $Found holds
@@ -2352,8 +2363,22 @@ function Invoke-BaseStack($s) {
     # straight on that arrived as ONE item, so the fast lane linted nothing.
     $lintPool = if (-not $Full -and -not $All) { Get-ChangedPaths $Root } else { & git -C $Root ls-files 2>$null }
     $lintPool = @($lintPool) | Where-Object { $_ -and (Test-Path -LiteralPath (Join-Path $Root $_) -PathType Leaf) }
+    # Style advice on code the repository did not write is noise it cannot act on: measured on
+    # a game repo, most of 837 markdownlint hits sat in a vendored addon's docs. A path marked
+    # linguist-vendored/-generated in .gitattributes stays out of every advisory linter here.
+    $vendored = [Collections.Generic.HashSet[string]]::new([string[]]@(Get-VendoredPaths $Root $lintPool))
+    if ($vendored.Count) { $lintPool = @($lintPool | Where-Object { -not $vendored.Contains($_) }) }
+    # The gate names files literally, so a tool's own ignore list must still reach them.
+    # markdownlint-cli2's `ignores` in .markdownlint-cli2.* already applies to literal paths
+    # (measured); .markdownlintignore is markdownlint-cli's gitignore-syntax file, which cli2
+    # never reads, so git matches it against the tracked files instead.
+    $mdIgnoreFile = Join-Path $Root '.markdownlintignore'
+    $mdIgnored = [Collections.Generic.HashSet[string]]::new([string[]]@(if (Test-Path -LiteralPath $mdIgnoreFile -PathType Leaf) {
+                & git -C $Root ls-files -c -i "--exclude-from=$mdIgnoreFile" 2>$null }))
     $tpl = Join-Path $PSScriptRoot '..\templates'
-    $mdCfg = @(if (-not (Get-ChildItem -LiteralPath $Root -Force -Filter '.markdownlint*' -ErrorAction SilentlyContinue)) {
+    # A config file, not the ignore file: .markdownlintignore alone must not drop the defaults.
+    $mdCfg = @(if (-not (Get-ChildItem -LiteralPath $Root -Force -Filter '.markdownlint*' -ErrorAction SilentlyContinue |
+                    Where-Object Name -NE '.markdownlintignore')) {
             '--config'; (Join-Path $tpl '.markdownlint.jsonc') })
     $yCfg = @(if (-not (Get-ChildItem -LiteralPath $Root -Force -Filter '.yamllint*' -ErrorAction SilentlyContinue)) {
             '-c'; (Join-Path $tpl '.yamllint.yml') })
@@ -2373,6 +2398,7 @@ function Invoke-BaseStack($s) {
     )
     foreach ($l in $linters) {
         $files = @($lintPool | Where-Object { $_ -match $l.Match })
+        if ($l.Name -eq 'markdownlint' -and $mdIgnored.Count) { $files = @($files | Where-Object { -not $mdIgnored.Contains($_) }) }
         if (-not $files) { continue }
         if (-not (Have $l.Exe)) { $script:Lines += "[SKIP] $($l.Name) -- $($l.Exe) not on PATH ($($l.Url))"; continue }
         # markdownlint-cli2 reads its arguments as globs; ':' makes each a literal path.
