@@ -2767,12 +2767,17 @@ if ($Parallel -and -not $ParallelStacks) {
     }
 }
 $childRec = @{}
+# Every check the run did not perform, for the summary after the loop. Kept apart from
+# $report: under -Quiet a passing stack's [SKIP] lines never reach the report, and the
+# pre-commit hook -- where strictSkips has to hold -- runs -Quiet.
+$script:Skipped = @()
 
 foreach ($s in $stacks) {
     $label = if ($s.Rel) { "$($s.Stack) $($s.Rel)/" } else { $s.Stack }
     $key = "$($s.Stack)|$($s.Rel)"
     if (-not $s.Implemented) {
         $report += "[SKIP] $label ($($s.Marker)) -- $($s.Warn)"
+        $script:Skipped += "$label ($($s.Marker)) -- $($s.Warn)"
         continue
     }
     # Fail-fast across stacks, but never in silence: `break` ended the loop and the
@@ -2788,6 +2793,7 @@ foreach ($s in $stacks) {
         $report += @($r.Report | Where-Object { $null -ne $_ })
         $script:Warnings += @($r.Warnings | Where-Object { $null -ne $_ })
         $script:Phases += $r.Phases
+        $script:Skipped += @($r.Skipped | Where-Object { $null -ne $_ })
         if ($r.Failed) { $script:Failed = $true }
         if ($r.Soft) { $script:SoftFailed = $true }
         continue
@@ -2816,6 +2822,10 @@ foreach ($s in $stacks) {
     } finally { Set-Location $cwd }
 
     if ($script:StackSoft) { $script:SoftFailed = $true }
+    # A phase skipped because an earlier one failed is left out: the [FAIL] already says it.
+    $stackSkips = @($script:Lines | Where-Object { "$_" -match '^\[SKIP\] ' -and "$_" -notmatch 'an earlier phase failed' } | ForEach-Object { "$_".Substring(7).Trim() })
+    if (-not ($script:Failed -or $script:StackSoft) -and $script:Phases -eq $before) { $stackSkips += "$label ($($s.Marker)) -- no check phase applies here" }
+    $script:Skipped += $stackSkips
     if ($script:Failed -or $script:StackSoft) {
         $out = Format-StackOutput $script:Lines $MaxChars
         $report += "[FAIL] $label"
@@ -2845,7 +2855,7 @@ foreach ($s in $stacks) {
     if ($ParallelStacks) {
         $childRec[$key] = @{
             Report = @($report | Select-Object -Skip $reportAt); Warnings = @($script:Warnings | Select-Object -Skip $warnAt)
-            Phases = $script:Phases - $before; Failed = $script:Failed; Soft = $script:StackSoft
+            Phases = $script:Phases - $before; Failed = $script:Failed; Soft = $script:StackSoft; Skipped = $stackSkips
         }
     }
 }
@@ -2901,6 +2911,33 @@ if ($script:StagedAtStart) {
     }
 }
 
+# Every check this run did not perform, gathered at the end where a reader looks.
+# Reported from the field: `qgate -All -Full` exited 0 for days with five [SKIP] lines
+# (typos, osv-scanner, clang-tidy, cppcheck, clang-format) scattered between [PASS] lines,
+# and nobody noticed a machine that verified a third of what the repo declared.
+# $script:Skipped is filled by the stack loop; skips caused by an earlier failure are
+# not in it, the [FAIL] already says the run is red.
+# qgate.json "strictSkips" makes them fatal at the full level -- opt-in, because a
+# missing optional binary must not turn every other repository red. `true` means every
+# skip; an array names the checks that must run (the first word of the [SKIP] line:
+# "typos", "vuln", "tidy"), so a check that does not apply here (`vuln -- no package
+# sources found`) does not make the strict mode unusable for the whole repository.
+$skipped = @($script:Skipped)
+$strictSkips = $null
+if (Test-Path $pinFile) {
+    # Read off the object, not assigned out of a pipeline: a one-element array would unroll to a string.
+    $cfg = try { Get-Content $pinFile -Raw | ConvertFrom-Json } catch { $null }
+    $ss = $null
+    if ($cfg) { $ss = $cfg.strictSkips }
+    if ($ss -is [bool]) { $strictSkips = $ss }
+    elseif ($ss -is [array] -and -not @($ss | Where-Object { $_ -isnot [string] -or -not $_.Trim() })) { $strictSkips = @($ss | ForEach-Object { $_.Trim() }) }
+    elseif ($null -ne $ss) { $report += "[WARN] qgate.json strictSkips must be true, false or an array of check names, got '$ss' -- ignored" }
+}
+$strictHit = @(if ($Full -and -not $script:Failed -and $strictSkips) {
+    $skipped | Where-Object { $strictSkips -is [bool] -or (($_ -split ' ')[0] -in $strictSkips) }
+})
+if ($strictHit) { $script:Failed = $true }
+
 # Only on the full level, only when everything passed: a note about newer releases,
 # never a verdict. It cannot fail the run, and the Stop hook (-Fast) never sees it.
 # Bounded, the way the web test phase bounds npm: `go list -m -u all` and `npm outdated`
@@ -2923,6 +2960,13 @@ if ($Full -and -not $script:Failed) {
         $report += "[WARN] dependency update advisory timed out after ${advisoryTimeoutSec}s; update status is unknown"
     }
     Remove-Item $outFile, "$outFile.err" -Force -ErrorAction SilentlyContinue
+}
+if ($skipped) {
+    $n = "$($skipped.Count) check$(if ($skipped.Count -ne 1) { 's' })"
+    $report += (@("[WARN] skipped -- $n did not run, so this run did not verify them:") + @($skipped | ForEach-Object { "       $_" })) -join "`n"
+}
+if ($strictHit) {
+    $report += (@("[FAIL] strictSkips -- qgate.json requires these checks at the full level, and they did not run:") + @($strictHit | ForEach-Object { "       $_" })) -join "`n"
 }
 
 # -Quiet keeps a PASSING run silent -- that is its whole documented job, and the

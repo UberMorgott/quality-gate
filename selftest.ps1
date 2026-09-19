@@ -3415,6 +3415,40 @@ $r = Invoke-DeployGate
 Check 'deploy: a malformed entry fails with the reason' `
     (($r.Code -ne 0) -and ($r.Out -match '\[FAIL\] deploy') -and ($r.Out -match 'needs non-empty "built" and "deployed"')) $r.Out
 
+# 35c. Skipped checks are summarized at the end of the run; qgate.json "strictSkips" (opt-in)
+# makes them fail the full level. Reported from the field: `qgate -All -Full` exited 0 for
+# days with five [SKIP] lines between the [PASS] lines, and nobody saw them.
+# One deploy entry passes, the other is not deployed on this machine: a skip no tool decides.
+[IO.File]::WriteAllText((Join-Path $dep 'game\Mod.dll'), 'v2')
+$skipDeploy = '"deploy":[{"built":"out/Mod.dll","deployed":"game/Mod.dll"},{"built":"out/Mod.dll","deployed":"game/Gone.dll"}]'
+[IO.File]::WriteAllText((Join-Path $dep 'qgate.json'), "{$skipDeploy}")
+$r = Invoke-DeployGate
+Check 'skips: a green run lists every skipped check at the end, exit unchanged' `
+    (($r.Code -eq 0) -and ($r.Out -match '\[WARN\] skipped -- 1 check did not run') -and
+        ($r.Out -match '(?m)^\s+deploy Gone\.dll -- not deployed on this machine') -and ($r.Out -match '\[PASS\] deploy Mod\.dll')) $r.Out
+$qOut = (& pwsh -NoProfile -File $gate -Root $dep -Only deploy -Full -Quiet 2>&1 | Out-String); $qCode = $LASTEXITCODE
+Check 'skips: -Quiet keeps a green run silent, summary included' (($qCode -eq 0) -and -not $qOut.Trim()) "code=$qCode $qOut"
+[IO.File]::WriteAllText((Join-Path $dep 'qgate.json'), "{$skipDeploy,`"strictSkips`":true}")
+$r = Invoke-DeployGate
+Check 'skips: strictSkips true fails the full level and names the skipped check' `
+    (($r.Code -ne 0) -and ($r.Out -match '\[FAIL\] strictSkips') -and ($r.Out -match '(?m)^\s+deploy Gone\.dll -- not deployed')) $r.Out
+$r = Invoke-DeployGate -Fast
+Check 'skips: strictSkips does not apply to the fast lane' (($r.Code -eq 0) -and ($r.Out -notmatch 'strictSkips')) $r.Out
+# The pre-commit hook runs -Quiet, where a passing stack's [SKIP] lines never reach the report.
+$qOut = (& pwsh -NoProfile -File $gate -Root $dep -Only deploy -Full -Quiet 2>&1 | Out-String); $qCode = $LASTEXITCODE
+Check 'skips: strictSkips holds under -Quiet (the pre-commit hook)' (($qCode -ne 0) -and ($qOut -match '\[FAIL\] strictSkips')) "code=$qCode $qOut"
+# An array names the checks that must run; a skip it does not name stays a warning.
+[IO.File]::WriteAllText((Join-Path $dep 'qgate.json'), "{$skipDeploy,`"strictSkips`":[`"typos`"]}")
+$r = Invoke-DeployGate
+Check 'skips: strictSkips ["typos"] does not fail a deploy skip' (($r.Code -eq 0) -and ($r.Out -match '\[WARN\] skipped --')) $r.Out
+[IO.File]::WriteAllText((Join-Path $dep 'qgate.json'), "{$skipDeploy,`"strictSkips`":[`"deploy`"]}")
+$r = Invoke-DeployGate
+Check 'skips: strictSkips ["deploy"] fails a deploy skip' (($r.Code -ne 0) -and ($r.Out -match '\[FAIL\] strictSkips')) $r.Out
+[IO.File]::WriteAllText((Join-Path $dep 'qgate.json'), '{"deploy":[{"built":"out/Mod.dll","deployed":"game/Mod.dll"}],"strictSkips":true}')
+$r = Invoke-DeployGate
+Check 'skips: strictSkips true with nothing skipped stays green and quiet about it' `
+    (($r.Code -eq 0) -and ($r.Out -notmatch 'skipped --|strictSkips')) $r.Out
+
 }
 
 if (Want 'cpp') {
