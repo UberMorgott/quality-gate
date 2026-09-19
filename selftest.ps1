@@ -1576,7 +1576,8 @@ internal class Sealable
     # a failing runner is advisory unless qgate.json dotnet.testRunner is "fail".
     $dnRun = Join-Path $tmp 'dotnet-runner'
     Copy-Item (Join-Path $PSScriptRoot 'testdata\dotnet-fixture') $dnRun -Recurse
-    Remove-Item (Join-Path $dnRun 'bin'), (Join-Path $dnRun 'obj') -Recurse -Force
+    # bin/obj are gitignored build output: a fresh clone has neither.
+    Remove-Item (Join-Path $dnRun 'bin'), (Join-Path $dnRun 'obj') -Recurse -Force -ErrorAction SilentlyContinue
     Remove-Item (Join-Path $dnRun 'Fixture.csproj')
     [IO.File]::WriteAllText((Join-Path $dnRun 'Fixture.Tests.csproj'), $dnProjClean.Replace('<Nullable>enable</Nullable>', "<OutputType>Exe</OutputType>`n    <Nullable>enable</Nullable>"))
     $dnRunMain = Join-Path $dnRun 'Program.cs'
