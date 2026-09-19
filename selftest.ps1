@@ -2130,12 +2130,12 @@ function Invoke-StopHook([string]$Repo, [string]$Session, [string]$Extra = '') {
     Push-Location $Repo
     try {
         $env:CLAUDE_PROJECT_DIR = $Repo
-        "{`"session_id`":`"$Session`"$Extra}" | & cmd /c "`"$(Join-Path $PSScriptRoot 'bin\qgate.cmd')`" stop-hook" 2>$err | Out-Null
+        $stdout = ("{`"session_id`":`"$Session`"$Extra}" | & cmd /c "`"$(Join-Path $PSScriptRoot 'bin\qgate.cmd')`" stop-hook" 2>$err | Out-String).Trim()
         $code = $LASTEXITCODE
         $env:CLAUDE_PROJECT_DIR = $null
     } finally { Pop-Location }
     $text = if (Test-Path $err) { Get-Content $err -Raw } else { '' }
-    [pscustomobject]@{ Code = $code; Err = $text }
+    [pscustomobject]@{ Code = $code; Err = $text; Out = $stdout }
 }
 $sid = [guid]::NewGuid()
 $h = Invoke-StopHook $hook2 $sid
@@ -2193,6 +2193,11 @@ $bgAgent = ',"background_tasks":[{"id":"a1","type":"subagent","status":"running"
 $h = Invoke-StopHook $holdRepo ([guid]::NewGuid()) $bgAgent
 Check 'a running background subagent turns the block into a report' `
     (($h.Code -eq 0) -and ($h.Err -match 'background writer') -and ($h.Err -match 'general-purpose') -and ($h.Err -match '\[FAIL\]')) "code=$($h.Code) $($h.Err)"
+# Stderr of an exit-0 hook reaches the debug log only; the report must ride on stdout as
+# `systemMessage` or nobody sees it.
+$sm = try { ($h.Out | ConvertFrom-Json).systemMessage } catch { $null }
+Check 'the non-blocking report reaches the transcript as systemMessage JSON' `
+    (($sm -match 'background writer') -and ($sm -match '\[FAIL\]')) "out=$($h.Out)"
 # The true-positive side: what is in flight must be a writer, and still in flight.
 $bgShell = ',"background_tasks":[{"id":"s1","type":"shell","status":"running","description":"dev server","command":"npm run dev"}]'
 $h = Invoke-StopHook $holdRepo ([guid]::NewGuid()) $bgShell

@@ -11,6 +11,16 @@
 $ErrorActionPreference = 'Continue'
 $MaxBlocks = 3
 
+# Stderr of a hook that exits 0 goes to the debug log only, never the transcript
+# (https://code.claude.com/docs/en/hooks#exit-code-0), so a non-blocking verdict printed
+# there reached nobody. `systemMessage` on stdout is shown in the transcript. Stderr keeps
+# the copy for the debug log.
+function Exit-Advisory([string]$Message) {
+    [Console]::Error.WriteLine($Message)
+    [Console]::Out.WriteLine((@{ systemMessage = $Message } | ConvertTo-Json -Compress))
+    exit 0
+}
+
 . (Join-Path $PSScriptRoot 'detect.ps1')
 # The gate lives outside the repo it checks, so $PSScriptRoot says nothing about
 # which repo this is: the project directory comes from Claude Code, cwd otherwise.
@@ -92,8 +102,7 @@ $hold = if ($env:QGATE_HOLD -in '1', 'true', 'yes') { 'QGATE_HOLD' } else {
 if ($hold) {
     # Exit 0 and no gate run at all: the green mark is left alone, because no green run
     # happened and the next unheld turn still owes the check.
-    [Console]::Error.WriteLine("Quality gate skipped: qgate hold is active ($hold) -- a background writer owns this tree. Commits are still gated; qgate release ends the hold.")
-    exit 0
+    Exit-Advisory "Quality gate skipped: qgate hold is active ($hold) -- a background writer owns this tree. Commits are still gated; qgate release ends the hold."
 }
 
 $argv = @('-Root', $root, '-Fast', '-Quiet')
@@ -114,8 +123,7 @@ if ($LASTEXITCODE -eq 0) {
 # pre-commit either way. The block counter is left alone: this was not a blocked stop.
 if ($writers) {
     $names = ($writers | ForEach-Object { (@($_.type, $_.agent_type) | Where-Object { $_ }) -join ' ' }) -join ', '
-    [Console]::Error.WriteLine("[WARN] Quality gate not enforced this turn: $($writers.Count) background writer(s) still running ($names), the tree may be half-written. Do not edit their files. The turn after they finish is gated; commits are still gated.`n$out")
-    exit 0
+    Exit-Advisory "[WARN] Quality gate not enforced this turn: $($writers.Count) background writer(s) still running ($names), the tree may be half-written. Do not edit their files. The turn after they finish is gated; commits are still gated.`n$out"
 }
 
 $blocks = 0
@@ -125,8 +133,7 @@ Set-Content -Path $stateFile -Value $blocks -NoNewline
 
 if ($blocks -gt $MaxBlocks) {
     Remove-Item $stateFile -ErrorAction SilentlyContinue
-    [Console]::Error.WriteLine("Quality gate still failing after $MaxBlocks blocks, letting the turn end:`n$out")
-    exit 0
+    Exit-Advisory "Quality gate still failing after $MaxBlocks blocks, letting the turn end:`n$out"
 }
 
 # Whose failure is this? A file written seconds ago can still be mid-edit by a background
