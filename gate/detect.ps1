@@ -87,6 +87,31 @@ function Get-CMakeGenerator([string]$Build) {
     return ''
 }
 
+# A build tree remembers its tools by ABSOLUTE path -- the compiler in every
+# compile_commands.json entry, the make program, linker and archiver in CMakeCache.txt
+# -- and a reconfigure does not look them up again. Uninstall or move LLVM and the tree
+# keeps naming the old one: measured, cmake then fails the reconfigure ("Tell CMake where
+# to find the compiler") and leaves the previous database in place, which the gate read
+# as current. The first recorded tool that is gone, or $null when every one still exists.
+function Get-CppStaleTool([string]$Tree) {
+    $paths = @()
+    $db = Join-Path $Tree 'compile_commands.json'
+    if (Test-Path -LiteralPath $db) {
+        $e = try { @(Get-Content -LiteralPath $db -Raw | ConvertFrom-Json)[0] } catch { $null }
+        if ($e.arguments) { $paths += "$($e.arguments[0])" }
+        elseif ("$($e.command)" -match '^\s*(?:"([^"]+)"|(\S+))') { $paths += "$($Matches[1])$($Matches[2])" }
+    }
+    $cache = Join-Path $Tree 'CMakeCache.txt'
+    if (Test-Path -LiteralPath $cache) {
+        $paths += @(Select-String -LiteralPath $cache -Pattern '^CMAKE_(C_COMPILER|CXX_COMPILER|MAKE_PROGRAM|LINKER|AR):(FILEPATH|STRING)=(.+)$' |
+            ForEach-Object { $_.Matches[0].Groups[3].Value.Trim() })
+    }
+    foreach ($p in $paths) {
+        if ($p -and [IO.Path]::IsPathRooted($p) -and -not (Test-Path -LiteralPath $p)) { return $p }
+    }
+    return $null
+}
+
 function Get-RepoRoot([string]$StartDir) {
     $top = (& git -C $StartDir rev-parse --show-toplevel 2>$null)
     if ($LASTEXITCODE -eq 0 -and $top) { return (Resolve-Path ($top -replace '/', '\')).Path }

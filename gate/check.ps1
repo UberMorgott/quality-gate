@@ -1959,15 +1959,30 @@ function Get-ToolTimeoutSec([string]$Stack, [int]$Default) {
 # shell is needed. The database is a LIST OF FLAGS, not a verdict: the build phase above
 # is still the compiler's answer, this only tells the analysers where to look.
 # No ninja, no clang-cl, or a project that clang-cl cannot configure -> no database, and
-# the phases say so out loud rather than reading as though they had run.
+# the phases say so out loud, WITH the reason, rather than reading as though they had run.
+# A tree whose recorded compiler or ninja is gone is thrown away and configured fresh
+# (see Get-CppStaleTool): the tree is the gate's own, and a failed reconfigure left the
+# previous database behind, naming a compiler that no longer existed. Only a database a
+# configure just succeeded on is returned. { Db; Why } -- Why is set when Db is not.
 function Get-CppCompileDb([string]$Dir, [string]$Build) {
-    if (-not ((Have 'ninja') -and (Have 'clang-cl'))) { return $null }
+    foreach ($t in 'ninja', 'clang-cl') {
+        if (-not (Have $t)) { return @{ Db = $null; Why = "no compile database -- $t not on PATH (needed for the Ninja fallback tree)" } }
+    }
     $out = Join-Path $Build 'qgate-cdb'
-    & cmake -S $Dir -B $out -G Ninja -DCMAKE_CXX_COMPILER=clang-cl -DCMAKE_C_COMPILER=clang-cl `
-        -DCMAKE_BUILD_TYPE=Release -DCMAKE_EXPORT_COMPILE_COMMANDS=ON 2>&1 | Out-Null
+    $gone = Get-CppStaleTool $out
+    if ($gone) { Remove-Item -LiteralPath $out -Recurse -Force -ErrorAction SilentlyContinue }
+    $log = @(& cmake -S $Dir -B $out -G Ninja -DCMAKE_CXX_COMPILER=clang-cl -DCMAKE_C_COMPILER=clang-cl `
+            -DCMAKE_BUILD_TYPE=Release -DCMAKE_EXPORT_COMPILE_COMMANDS=ON 2>&1 | ForEach-Object { "$_" })
+    $code = $LASTEXITCODE
     $db = Join-Path $out 'compile_commands.json'
-    if (Test-Path $db) { return $db }
-    return $null
+    $still = Get-CppStaleTool $out
+    if ($code -eq 0 -and (Test-Path $db) -and -not $still) { return @{ Db = $db; Why = $null } }
+    if ($still) { return @{ Db = $null; Why = "compile database stale -- $still missing" } }
+    $err = @($log | Where-Object { $_.Trim() } | Select-String -Pattern 'CMake Error' -Context 0, 1 | Select-Object -First 1 |
+        ForEach-Object { (@($_.Line) + @($_.Context.PostContext) | ForEach-Object Trim) -join ' ' })
+    $why = if ($gone) { "compile database stale -- $gone missing; a fresh configure failed" } else { 'no compile database -- the Ninja fallback configure failed' }
+    if ($err) { $why += ": $($err[0])" }
+    return @{ Db = $null; Why = $why }
 }
 
 # The fallback tree above is CONFIGURED and never BUILT, and that is the whole hole
@@ -2071,8 +2086,11 @@ function Invoke-CppStack($s) {
 
     $cdb = Join-Path $build 'compile_commands.json'
     $extra = @()
+    $noCdb = 'no compile database'
     if (-not (Test-Path $cdb)) {
-        $cdb = Get-CppCompileDb $s.Dir $build
+        $fallback = Get-CppCompileDb $s.Dir $build
+        $cdb = $fallback.Db
+        if (-not $cdb) { $noCdb = $fallback.Why }
         # Only the fallback tree needs them: a database the main tree wrote describes the
         # tree the build phase built, generated headers and all.
         if ($cdb) { $extra = @(Get-CppGeneratedIncludes $build | ForEach-Object { "--extra-arg=-I$_" }) }
@@ -2102,7 +2120,7 @@ function Invoke-CppStack($s) {
     if (-not (Have 'clang-tidy')) {
         $script:Lines += '[SKIP] tidy -- clang-tidy not found'
     } elseif (-not $cdb) {
-        $script:Lines += '[SKIP] tidy -- no compile database'
+        $script:Lines += "[SKIP] tidy -- $noCdb"
     } else {
         $files = @((Get-Content $cdb -Raw | ConvertFrom-Json).file | Sort-Object -Unique |
             Where-Object { Test-CppOwn $_ $s.Dir })
@@ -2136,7 +2154,7 @@ function Invoke-CppStack($s) {
     if (-not (Have 'cppcheck')) {
         $script:Lines += '[SKIP] cppcheck -- cppcheck not found'
     } elseif (-not $cdb) {
-        $script:Lines += '[SKIP] cppcheck -- no compile database'
+        $script:Lines += "[SKIP] cppcheck -- $noCdb"
     } else {
         Phase 'cppcheck' {
             $o = (& cppcheck --project=$cdb --enable=warning,performance,portability --inline-suppr --error-exitcode=1 2>&1 | Out-String)

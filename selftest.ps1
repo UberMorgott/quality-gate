@@ -3641,6 +3641,71 @@ try {
         ($out -match '\[SKIP\] cppcheck -- cppcheck not found') $out
 } finally { $env:PATH = $priorPath }
 
+# A fallback compile database remembers its compiler by absolute path. Reported from
+# CodeDungeon: LLVM moved, the tree kept naming the old one, and the analysis phases
+# skipped with a bare "no compile database" that said nothing about why.
+$staleTree = Join-Path $tmp 'cpp-stale-tree'
+New-Item -ItemType Directory -Path $staleTree -Force | Out-Null
+$goneCc = Join-Path $tmp 'gone-llvm\bin\clang-cl.exe'
+$liveCc = (Get-Process -Id $PID).Path
+$ccdb = Join-Path $staleTree 'compile_commands.json'
+Set-Content $ccdb (ConvertTo-Json -InputObject @(@{ directory = $staleTree; file = 'a.cpp'; command = "`"$goneCc`" /c a.cpp" }))
+Check 'a compile database whose compiler is gone is stale' ((Get-CppStaleTool $staleTree) -eq $goneCc) (Get-CppStaleTool $staleTree)
+Set-Content $ccdb (ConvertTo-Json -InputObject @(@{ directory = $staleTree; file = 'a.cpp'; arguments = @($goneCc, '/c', 'a.cpp') }))
+Check 'the arguments form of an entry is read too' ((Get-CppStaleTool $staleTree) -eq $goneCc) (Get-CppStaleTool $staleTree)
+Set-Content $ccdb (ConvertTo-Json -InputObject @(@{ directory = $staleTree; file = 'a.cpp'; command = "`"$liveCc`" /c a.cpp" }))
+Check 'a compile database whose compiler exists is not stale' ($null -eq (Get-CppStaleTool $staleTree)) (Get-CppStaleTool $staleTree)
+Set-Content (Join-Path $staleTree 'CMakeCache.txt') "CMAKE_MAKE_PROGRAM:FILEPATH=$($goneCc -replace 'clang-cl', 'ninja')`nCMAKE_CXX_COMPILER:UNINITIALIZED=clang-cl"
+Check 'a cache whose make program is gone is stale' `
+    ((Get-CppStaleTool $staleTree) -eq ($goneCc -replace 'clang-cl', 'ninja')) (Get-CppStaleTool $staleTree)
+
+# ...and when the fallback cannot be built at all, the skip line says why.
+if (Get-Command cppcheck -ErrorAction SilentlyContinue) {
+    $env:PATH = @($priorPath -split $sep | Where-Object {
+            $_ -and -not (Test-Path -LiteralPath (Join-Path $_ 'clang-cl.exe') -ErrorAction SilentlyContinue) -and
+            -not (Test-Path -LiteralPath (Join-Path $_ 'clang-cl') -ErrorAction SilentlyContinue)
+        }) -join $sep
+    try {
+        $out = (& pwsh -NoProfile -File $gate -Root $cppAn -All -Full 2>&1 | Out-String)
+        # Only where the main tree wrote no database of its own -- a Visual Studio one.
+        if (-not (Test-Path (Join-Path $cppAn 'build\compile_commands.json'))) {
+            Check 'a missing compile database names the tool it lacked' `
+                ($out -match '\[SKIP\] cppcheck -- no compile database -- (ninja|clang-cl) not on PATH') $out
+        }
+    } finally { $env:PATH = $priorPath }
+}
+
+# End to end: the fallback tree is configured with a clang-cl reached through a junction,
+# the junction goes away, and the next full run has to rebuild the tree, not analyse
+# with (or silently skip over) the database that names a compiler nobody has any more.
+$cc = Get-Command clang-cl -ErrorAction SilentlyContinue
+if ($IsWindows -and $cc -and (Get-Command ninja -ErrorAction SilentlyContinue) -and (Get-Command clang-tidy -ErrorAction SilentlyContinue)) {
+    $cppStale = Join-Path $tmp 'cpp-stale'
+    Copy-Item (Join-Path $PSScriptRoot 'testdata\cpp-fixture') $cppStale -Recurse
+    Remove-Item (Join-Path $cppStale 'build') -Recurse -Force -ErrorAction SilentlyContinue
+    $oldBin = Join-Path $tmp 'old-llvm-bin'
+    New-Item -ItemType Junction -Path $oldBin -Target (Split-Path $cc.Source) | Out-Null
+    $staleCdb = Join-Path $cppStale 'build\qgate-cdb'
+    $env:PATH = "$oldBin$sep$priorPath"
+    try {
+        & cmake -S $cppStale -B $staleCdb -G Ninja -DCMAKE_CXX_COMPILER=clang-cl -DCMAKE_C_COMPILER=clang-cl `
+            -DCMAKE_BUILD_TYPE=Release -DCMAKE_EXPORT_COMPILE_COMMANDS=ON 2>&1 | Out-Null
+    } finally { $env:PATH = $priorPath }
+    # Directory.Delete without recursion removes the junction, never what it points at.
+    [IO.Directory]::Delete($oldBin, $false)
+    Check 'the fixture tree really names a compiler that is gone' ([bool](Get-CppStaleTool $staleCdb)) (Get-CppStaleTool $staleCdb)
+    $out = (& pwsh -NoProfile -File $gate -Root $cppStale -Only cpp -All -Full 2>&1 | Out-String)
+    if (-not (Test-Path (Join-Path $cppStale 'build\compile_commands.json'))) {
+        Check 'a compile database whose compiler is gone is rebuilt' `
+            (($null -eq (Get-CppStaleTool $staleCdb)) -and ($out -match '\[PASS\] tidy')) "$(Get-CppStaleTool $staleCdb) $out"
+        # ...and a valid one is reused as it is, not thrown away every run.
+        $keep = Join-Path $staleCdb 'qgate-keep.txt'
+        Set-Content $keep 'x'
+        $out = (& pwsh -NoProfile -File $gate -Root $cppStale -Only cpp -All -Full 2>&1 | Out-String)
+        Check 'a valid compile database tree is left in place' ((Test-Path $keep) -and ($out -match '\[PASS\] tidy')) $out
+    }
+}
+
 # The findings themselves, where the tools exist. clang-tidy needs a compile database,
 # and on Windows the default generator is a Visual Studio one, which ignores
 # CMAKE_EXPORT_COMPILE_COMMANDS -- the gate configures a throwaway Ninja tree with
