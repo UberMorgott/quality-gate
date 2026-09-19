@@ -464,9 +464,12 @@ Set-GoFile (Join-Path $pur 'sim\sim_test.go') "package sim`n`nimport `"testing`"
 Check 'a rapid property test or a Fuzz target clears the warning' (-not (Get-GoPropertyGaps $pur $det.Dirs)) "$(Get-GoPropertyGaps $pur $det.Dirs)"
 
 # #103: scheduling-dependent tests, opt-in through qgate.json go.flaky. The fixture's
-# deadline is calibrated against one worker's own serial cost, so it passes wherever
-# several workers run at once and fails under `-cpu 1` on any machine -- the same shape as
-# the reported incident (a tight heartbeat window that only a starved runner missed).
+# deadline is calibrated against one worker's own serial cost, so it fails under `-cpu 1`
+# on any machine -- the same shape as the reported incident (a tight heartbeat window that
+# only a starved runner missed). It is asserted only at GOMAXPROCS <= 2: the gate's own
+# `go test`/`go test -race` phases run this fixture too, and the parallel selftest holds
+# each section to GOMAXPROCS=4 (8 workers = ~2.5 of the 3 units idle), so an armed
+# deadline there failed the rc=0 checks below whenever the machine was busy.
 $flk = Join-Path $tmp 'flaky'
 Copy-Item (Join-Path $PSScriptRoot 'testdata\go-fixture') $flk -Recurse
 New-Item -ItemType Directory -Path (Join-Path $flk 'sched'), (Join-Path $flk 'calm') | Out-Null
@@ -487,12 +490,16 @@ package sched
 
 import (
 	"net"
+	"runtime"
 	"sync"
 	"testing"
 	"time"
 )
 
 func TestWorkersFinishInWindow(t *testing.T) {
+	if runtime.GOMAXPROCS(0) > 2 {
+		t.Skip("the window is only asserted under constrained scheduling")
+	}
 	start := time.Now()
 	if n := Work(30); n < 0 {
 		t.Fatal("impossible")
