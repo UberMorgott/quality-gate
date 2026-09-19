@@ -3321,6 +3321,54 @@ try {
                 ($r.Out -match '\[SKIP\] smoke -- not run: an earlier check failed') -and $runDir -and -not (Test-Path $runDir)) $r.Out
     }
 
+    # A partial commit (`git commit -- file`) hands its hook GIT_INDEX_FILE pointing at a
+    # temporary index, and a custom check that ran git in a NESTED repository inherited it:
+    # `fatal: unable to read <sha>` (CodeDungeon, godot-cpp cache under native/). A real
+    # commit through a real hook, running this checkout's gate. The other half: the
+    # commit's own index is still the gate's -- the partial commit lands exactly a.txt and
+    # leaves b.txt staged, and the concurrency guard, which re-reads that index after the
+    # custom stack, does not fail a commit nobody raced.
+    $hk = Join-Path $tmp 'custom-hook'
+    $hkNested = Join-Path $hk 'native\cache'
+    New-Item -ItemType Directory -Path $hkNested -Force | Out-Null
+    git -C $hk init -q 2>$null
+    git -C $hkNested init -q 2>$null
+    Set-Content (Join-Path $hkNested 'n.txt') 'nested'
+    git -C $hkNested add -A 2>$null
+    git -C $hkNested -c user.email=selftest@local -c user.name=selftest commit -qm n *> $null
+    Set-Content (Join-Path $hk '.gitignore') 'native/'
+    [IO.File]::WriteAllText((Join-Path $hk 'qgate.json'),
+        '{"checks":[{"name":"nested","run":"$o = git -C native/cache status --porcelain 2>&1; if ($LASTEXITCODE -ne 0 -or $o) { $o; exit 1 }","level":"fast"}]}')
+    $hkGate = (Join-Path $PSScriptRoot 'gate\check.ps1') -replace '\\', '/'
+    [IO.File]::WriteAllText((Join-Path $hk '.git\hooks\pre-commit'), "#!/bin/sh`nexec pwsh -NoProfile -File '$hkGate' -Only custom -Full`n")
+    Set-Content (Join-Path $hk 'a.txt') 'a'
+    Set-Content (Join-Path $hk 'b.txt') 'b'
+    git -C $hk add -A 2>$null
+    git -C $hk -c user.email=selftest@local -c user.name=selftest commit -qm base --no-verify *> $null
+    Invoke-Trust $hk | Out-Null
+    Set-Content (Join-Path $hk 'a.txt') 'a2'
+    Set-Content (Join-Path $hk 'b.txt') 'b2'
+    git -C $hk add b.txt 2>$null
+    $hkOut = (git -C $hk -c user.email=selftest@local -c user.name=selftest commit -m partial -- a.txt 2>&1 | Out-String)
+    $hkCode = $LASTEXITCODE
+    Check 'a custom check running git in a nested repo passes inside a partial commit' `
+        (($hkCode -eq 0) -and ($hkOut -match '\[PASS\] nested') -and ($hkOut -notmatch 'unable to read')) "code=$hkCode $hkOut"
+    $hkCommitted = @(git -C $hk diff-tree --no-commit-id --name-only -r HEAD)
+    $hkStaged = @(git -C $hk diff --cached --name-only)
+    Check 'the partial commit still commits only its named file and leaves the rest staged' `
+        ((($hkCommitted -join ',') -eq 'a.txt') -and (($hkStaged -join ',') -eq 'b.txt') -and ($hkOut -notmatch 'staged files changed')) `
+        "committed=$($hkCommitted -join ',') staged=$($hkStaged -join ',') $hkOut"
+    # The guard's true positive through the same door: a check that stages a file while a
+    # plain commit's hook runs changes what that commit would take, and is refused.
+    Set-Content (Join-Path $hk 'c.txt') 'c'
+    [IO.File]::WriteAllText((Join-Path $hk 'qgate.json'), '{"checks":[{"name":"stager","run":"git add c.txt","level":"fast"}]}')
+    Invoke-Trust $hk | Out-Null
+    git -C $hk add qgate.json 2>$null
+    $hkHead = (git -C $hk rev-parse HEAD)
+    $hkOut = (git -C $hk -c user.email=selftest@local -c user.name=selftest commit -m plain 2>&1 | Out-String)
+    Check 'a commit whose staged files a custom check changed is still refused' `
+        (((git -C $hk rev-parse HEAD) -eq $hkHead) -and ($hkOut -match 'staged files changed while the gate was running')) $hkOut
+
     # ...and the two shapes that are simply absence, or every repository that pins a
     # tool version would grow a stack it never asked for.
     [IO.File]::WriteAllText($custJson, '{"tools":{"go":"1.0.0"},"checks":[]}')

@@ -2615,6 +2615,27 @@ function Get-LeakReport([int]$RootPid, [datetime]$NotBefore, [string]$Name) {
     $leak + $(if ($alive) { " -- STILL RUNNING after kill: $($alive.ProcessId -join ',')" } else { ' -- killed' })
 }
 
+# A commit hook exports the COMMITTING repository's git environment (githooks(5)), and a
+# custom command inherited it. detect.ps1 clears GIT_DIR/GIT_WORK_TREE for the whole
+# process but keeps GIT_INDEX_FILE, which the staged-concurrency guard reads. Reported
+# from CodeDungeon: a partial commit (`git commit -- file`) points GIT_INDEX_FILE at a
+# temporary index, and a check that ran git in a NESTED repository (a godot-cpp cache)
+# read the parent's index there -- `fatal: unable to read <sha>`. So the commands run with
+# every variable `git rev-parse --local-env-vars` names unset, which is what githooks(5)
+# prescribes for a hook that runs git elsewhere and how they run from a terminal or CI.
+# Restored afterwards: the guard asks the commit's index again after the last stack.
+# Removed through the env: drive, not [Environment]::SetEnvironmentVariable($v, $null):
+# PowerShell hands a .NET string parameter '' for $null, and that SETS the variable to
+# empty -- measured, the child then saw GIT_DIR='' and git answered `not a git repository: ''`.
+function Invoke-WithoutHookGitEnv([scriptblock]$Body) {
+    $saved = @{}
+    foreach ($v in @(& git rev-parse --local-env-vars 2>$null)) {
+        $item = Get-Item "env:$v" -ErrorAction SilentlyContinue
+        if ($item) { $saved[$v] = $item.Value; Remove-Item "env:$v" }
+    }
+    try { & $Body } finally { foreach ($v in $saved.Keys) { Set-Item "env:$v" $saved[$v] } }
+}
+
 function Invoke-CustomStack($s) {
     $custom = Get-CustomChecks $Root
     if (-not $custom) { return }
@@ -2833,7 +2854,7 @@ foreach ($s in $stacks) {
             'godot' { Invoke-GodotStack $s }
             'dotnet' { Invoke-DotnetStack $s }
             'cpp' { Invoke-CppStack $s }
-            'custom' { Invoke-CustomStack $s }
+            'custom' { Invoke-WithoutHookGitEnv { Invoke-CustomStack $s } }
             'deploy' { Invoke-DeployStack $s }
         }
     } catch {

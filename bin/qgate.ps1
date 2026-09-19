@@ -82,6 +82,9 @@ switch ($cmd) {
         # repository, so this would fast-forward the repository being COMMITTED.
         $env:GIT_DIR = $null
         $env:GIT_WORK_TREE = $null
+        # ...and the hook's index: the pull's fast-forward would write the install's tree
+        # into the index of the commit in progress.
+        $env:GIT_INDEX_FILE = $null
         # #90: one install serves every repo, and agents update it at the same moment.
         # Measured: 8 parallel pulls failed 39/40 (FETCH_HEAD, ref and object writes collide),
         # so the pull is serialized on an exclusive handle in the install's git dir.
