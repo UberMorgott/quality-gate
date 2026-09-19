@@ -3648,6 +3648,10 @@ New-Item -ItemType Directory -Path (Join-Path $cppAn '_deps\vendor') -Force | Ou
 # Leading newline: the fixture's last line has none, and cmake answers an appended
 # command with `Parse error. Expected a newline`.
 Add-Content (Join-Path $cppAn 'CMakeLists.txt') "`ntarget_sources(qgate_fixture PRIVATE src/rounding.cpp _deps/vendor/vendor.cpp)"
+# cppcheck's own finding (uninitMemberVar), in the stack's own source (#106).
+[IO.File]::WriteAllText((Join-Path $cppAn 'src\ck_own.cpp'),
+    "struct qgate_ck_t { int a; int b; qgate_ck_t() : a(0) {} };`nint qgate_ck() { qgate_ck_t c; return c.a; }`n")
+Add-Content (Join-Path $cppAn 'CMakeLists.txt') "target_sources(qgate_fixture PRIVATE src/ck_own.cpp)"
 # ...and a translation unit that includes a header GENERATED AT BUILD TIME (#102): the
 # throwaway Ninja database tree is configured and never built, so the header exists only
 # in the main tree the build phase built. Without the include dirs harvested from that
@@ -3763,6 +3767,7 @@ if ($IsWindows -and $cc -and (Get-Command ninja -ErrorAction SilentlyContinue) -
 # and on Windows the default generator is a Visual Studio one, which ignores
 # CMAKE_EXPORT_COMPILE_COMMANDS -- the gate configures a throwaway Ninja tree with
 # clang-cl to get one, so this needs those two as well.
+$anOut = $null
 $cdbOk = (Get-Command ninja -ErrorAction SilentlyContinue) -and (Get-Command clang-cl -ErrorAction SilentlyContinue)
 if ((Get-Command clang-tidy -ErrorAction SilentlyContinue) -and ($cdbOk -or -not $IsWindows)) {
     $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $cppAn -All -Full 2>&1 | Out-String)
@@ -3782,6 +3787,42 @@ if ((Get-Command clang-tidy -ErrorAction SilentlyContinue) -and ($cdbOk -or -not
         ($out -match 'bugprone-integer-division') $out
     Check 'no translation unit is left unparsed by the analysis tree' `
         ($out -notmatch 'not analysed') $out
+    $anOut = $out
+}
+
+# #106: cppcheck's --project analyses EVERY entry of the database before its findings
+# are filtered -- 1022 godot-cpp units of 1027 on CodeDungeon, 45 minutes. It gets a
+# copy holding only the stack's own entries, each kept whole with its flags.
+$ckTree = Join-Path $tmp 'cpp-owndb'
+$ckOwner = Join-Path $ckTree 'native'
+$ckDb = Join-Path $ckTree 'full.json'
+New-Item -ItemType Directory -Path $ckTree -Force | Out-Null
+Set-Content $ckDb (ConvertTo-Json -Depth 5 -InputObject @(
+        @{ directory = "$ckOwner\build"; file = "$ckOwner\src\a.cpp"; arguments = @('clang-cl', '/DQGATE_OWN=1', '/c', '..\src\a.cpp') },
+        @{ directory = $ckOwner; file = 'test/b.cpp'; command = 'clang-cl /Iinclude /c test/b.cpp' },
+        @{ directory = "$ckOwner\build"; file = "$ckOwner\build\_deps\godotcpp-src\src\x.cpp"; command = 'clang-cl /c x.cpp' },
+        @{ directory = "$ckOwner\build"; file = "$ckTree\sdk\y.cpp"; command = 'clang-cl /c y.cpp' }))
+$ckOwn = Write-CppOwnDb $ckDb $ckOwner (Join-Path $ckTree 'out')
+$ckRows = if ($ckOwn) { @(Get-Content $ckOwn -Raw | ConvertFrom-Json) } else { @() }
+Check 'cppcheck is handed only the stack own translation units' `
+    (($ckRows.Count -eq 2) -and ($ckRows[0].file -like '*\src\a.cpp') -and ($ckRows[1].file -eq 'test/b.cpp')) ($ckRows | ConvertTo-Json -Depth 5)
+Check 'an own translation unit keeps its flags' `
+    (($ckRows[0].arguments -contains '/DQGATE_OWN=1') -and ($ckRows[1].command -eq 'clang-cl /Iinclude /c test/b.cpp') -and
+    ($ckRows[1].directory -eq $ckOwner)) ($ckRows | ConvertTo-Json -Depth 5)
+Set-Content $ckDb (ConvertTo-Json -Depth 5 -InputObject @(
+        @{ directory = "$ckOwner\build"; file = "$ckOwner\build\_deps\godotcpp-src\src\x.cpp"; command = 'clang-cl /c x.cpp' }))
+Check 'a database with no own translation unit gives nothing to analyse' `
+    ($null -eq (Write-CppOwnDb $ckDb $ckOwner (Join-Path $ckTree 'none')))
+
+# ...and end to end: the database cppcheck was handed, and the own finding still reported.
+if ((Get-Command cppcheck -ErrorAction SilentlyContinue) -and ($cdbOk -or -not $IsWindows)) {
+    if (-not $anOut) { $anOut = (& pwsh -NoProfile -File $gate -Root $cppAn -All -Full 2>&1 | Out-String) }
+    $ckPassed = Join-Path $cppAn 'build\qgate-cppcheck\compile_commands.json'
+    $ckFiles = if (Test-Path $ckPassed) { @((Get-Content $ckPassed -Raw | ConvertFrom-Json).file) } else { @() }
+    Check 'cppcheck analyses the own TUs and not the _deps one the build compiles' `
+        (($ckFiles -match 'ck_own\.cpp') -and -not ($ckFiles -match 'vendor\.cpp')) "db: $($ckFiles -join ', ') $anOut"
+    Check 'a cppcheck finding in an own TU is still reported' `
+        ($anOut -match '\[WARN\] cppcheck: \d+ finding\(s\).*uninitMemberVar') $anOut
 }
 
 }

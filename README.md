@@ -211,7 +211,7 @@ Formatting/linting targets changed `.gd` files unless `-All`/`-Full`; `.godot` a
 | `configure` | Full | CMake + build toolchain | Configures the project and requests a compile database to catch invalid build configuration. |
 | `build` | Full | CMake + build toolchain | Builds Release output to catch compiler/linker errors. |
 | `tidy` | Advisory (full) | clang-tidy; skip if missing | Checks project-owned translation units for bug, security, and performance patterns using a compile database. |
-| `cppcheck` | Advisory (full) | cppcheck; skip if missing | Checks project-owned code for warning, performance, and portability issues using a compile database. |
+| `cppcheck` | Advisory (full) | cppcheck; skip if missing | Checks project-owned code for warning, performance, and portability issues; only the project's own translation units from the compile database are analysed (dependency units under `build/`/`_deps` are not). |
 
 Full requires CMake. Analysis skips without a compile database, and the skip line says why (for example `ninja`/`clang-cl` not on PATH). Ninja + clang-cl can generate a fallback database (`build/qgate-cdb`) when the primary generator supplies none; a fallback tree whose recorded compiler or ninja no longer exists is rebuilt from scratch. Tidy/cppcheck findings are advisory, but unexplained tool failures can fail their phases. Nested CMake projects are checked through their parent tree.
 

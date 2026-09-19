@@ -69,6 +69,26 @@ function Test-CppOwn([string]$Path, [string]$Dir) {
     return ($p.Substring($d.Length) -notmatch $script:CppSkipDir)
 }
 
+# The compile database cut down to the stack's own translation units (#106). Filtering
+# cppcheck's FINDINGS afterwards is not enough: `--project` analyses every entry first,
+# and on CodeDungeon 1022 of 1027 were godot-cpp sources under build/_deps -- 45 minutes
+# of one core before the gate threw every one of those findings away. Each kept entry is
+# copied whole, so a TU keeps its own flags, defines and include paths, and headers it
+# reaches outside the stack are still dropped by the Test-CppOwn filter on the output.
+# Written to <Out>\compile_commands.json; $null when no entry is the stack's own.
+function Write-CppOwnDb([string]$Db, [string]$Dir, [string]$Out) {
+    $own = @(Get-Content -LiteralPath $Db -Raw | ConvertFrom-Json | Where-Object {
+            $f = "$($_.file)"
+            if ($f -and -not [IO.Path]::IsPathRooted($f)) { $f = Join-Path "$($_.directory)" $f }
+            Test-CppOwn $f $Dir
+        })
+    if ($own.Count -eq 0) { return $null }
+    New-Item -ItemType Directory -Path $Out -Force | Out-Null
+    $path = Join-Path $Out 'compile_commands.json'
+    [IO.File]::WriteAllText($path, (ConvertTo-Json -InputObject $own -Depth 5), [Text.UTF8Encoding]::new($false))
+    return $path
+}
+
 # The generator a configure of $Build will use, in CMake's own order: the one an
 # existing cache recorded (cmake refuses to switch it), then the CMAKE_GENERATOR
 # environment variable, then the default `cmake --help` marks with `*`. #105: -A is a

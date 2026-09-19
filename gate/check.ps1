@@ -2150,14 +2150,20 @@ function Invoke-CppStack($s) {
     }
 
     # cppcheck over the same database. Same first pass, same reason, and the same path
-    # filter -- its findings arrive from wherever the preprocessor reached.
+    # filter -- its findings arrive from wherever the preprocessor reached. Unlike tidy,
+    # which is handed its file list, `--project` analyses every entry, so it gets a copy
+    # of the database holding only the stack's own translation units (#106).
+    $ownDb = $null
+    if ((Have 'cppcheck') -and $cdb) { $ownDb = Write-CppOwnDb $cdb $s.Dir (Join-Path $build 'qgate-cppcheck') }
     if (-not (Have 'cppcheck')) {
         $script:Lines += '[SKIP] cppcheck -- cppcheck not found'
     } elseif (-not $cdb) {
         $script:Lines += "[SKIP] cppcheck -- $noCdb"
+    } elseif (-not $ownDb) {
+        $script:Lines += '[SKIP] cppcheck -- no sources of this stack in the compile database'
     } else {
         Phase 'cppcheck' {
-            $o = (& cppcheck --project=$cdb --enable=warning,performance,portability --inline-suppr --error-exitcode=1 2>&1 | Out-String)
+            $o = (& cppcheck --project=$ownDb --enable=warning,performance,portability --inline-suppr --error-exitcode=1 2>&1 | Out-String)
             $code = $LASTEXITCODE
             $hits = @([regex]::Matches($o, '(?m)^(.+?):\d+:\d+: [a-z]+: .*\[(\w+)\]\s*$') |
                 Where-Object { Test-CppOwn $_.Groups[1].Value $s.Dir })
