@@ -1,8 +1,8 @@
 {
   "bin/qgate.ps1": {
-    "mtime": 1789822739.8070538,
-    "seen": 1789823360.8665502,
-    "ast_hash": "9794a449a0a536c84bc5dcbf7274a5be",
+    "mtime": 1789987532.8217185,
+    "seen": 1789987937.9407563,
+    "ast_hash": "74b9b629f99a3924e43b738c5bff6300",
     "semantic_hash": ""
   },
   "bootstrap.ps1": {
@@ -30,21 +30,21 @@
     "semantic_hash": ""
   },
   "gate/stop-hook.ps1": {
-    "mtime": 1789822958.5296762,
-    "seen": 1789823360.8665602,
-    "ast_hash": "a533ad3903aadfc3dc9a19aace4de6d0",
+    "mtime": 1789987513.8143134,
+    "seen": 1789987937.9407659,
+    "ast_hash": "0a2269a776ca0c7265747455d57eac64",
     "semantic_hash": ""
   },
   "install.ps1": {
-    "mtime": 1789822014.6148698,
-    "seen": 1789823360.8665628,
-    "ast_hash": "3b3b7ea9bba90e77972fbd16a8767d62",
+    "mtime": 1789987527.990289,
+    "seen": 1789987937.9407685,
+    "ast_hash": "4cc452e245d1ffd015edb22c4e719163",
     "semantic_hash": ""
   },
   "selftest.ps1": {
-    "mtime": 1789978187.6802883,
-    "seen": 1789978252.43271,
-    "ast_hash": "6c9d5b5f2c6fa90eaba55a583a1d4f0f",
+    "mtime": 1789987580.7126245,
+    "seen": 1789987937.9407692,
+    "ast_hash": "329ae09b06c8f17365e1944e5368d1b5",
     "semantic_hash": ""
   },
   "templates/.stylelintrc.json": {
@@ -126,9 +126,9 @@
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1789828227.7079487,
-    "seen": 1789828244.8239415,
-    "ast_hash": "de34b6a6ae8fd7069480544424aaba9f",
+    "mtime": 1789987546.337707,
+    "seen": 1789987937.9407878,
+    "ast_hash": "3fea6533229740440beeb2e577ab711f",
     "semantic_hash": ""
   },
   "templates/.golangci.yml": {
@@ -144,10 +144,10 @@
     "semantic_hash": ""
   },
   "templates/lefthook.yml": {
-    "mtime": 1788572251.3345509,
-    "seen": 1788781201.4389522,
-    "ast_hash": "1ef63c79a316a19f066e47599895544f",
-    "semantic_hash": "1ef63c79a316a19f066e47599895544f"
+    "mtime": 1789987550.6047468,
+    "seen": 1789987937.9407902,
+    "ast_hash": "c8390fb5f9edf9884a5a8a606ee0a14d",
+    "semantic_hash": ""
   },
   "testdata/proto-fixture/buf.yaml": {
     "mtime": 1788292730.575076,

@@ -37,6 +37,7 @@
   "35": "app.ps1",
   "36": "MetadataReader",
   "37": ".Resolve",
+  "38": "quality_gate job anchor shared by both hooks",
   "39": ".Run",
   "40": "gopurity/main.go",
   "41": "Hud",
