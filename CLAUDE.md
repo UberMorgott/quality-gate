@@ -10,7 +10,7 @@
 ## Board
 
 - Finishing work = the YouGile board is reconciled, both directions: add cards for shipped work that was never on the board, mark done what landed, drop stale open cards.
-- Project AGM / "ОСНОВНОЕ", board AGMONDIAG, column "Контроль качества кода" (`99a6f6c9-4b52-4da5-b686-1bccc233f06b`). Titles `[Готово] …` / `[Отложено] …`; cite issue number and `main` commit hash.
+- Project AGM / "ОСНОВНОЕ", board AGMONDIAG, column "Контроль качества кода" (`99a6f6c9-4b52-4da5-b686-1bccc233f06b`). Done = the `completed` checkbox, no `[Готово]` title prefix; deferred cards keep `[Отложено] …`. Cite issue number and `main` commit hash.
 - Use `mcp__yougile-api__*` (key: `[Environment]::GetEnvironmentVariable('YOUGILE_API_KEY','User')`). YouGile strips `<code>` markup on PUT — a shorter description after update is not lost text.
 
 Guardrails — every push lands in every repo's hooks on its next `qgate update`:
