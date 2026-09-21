@@ -1,7 +1,7 @@
 # Graph Report - quality-gate  (2026-09-21)
 
 ## Corpus Check
-- 49 files · ~119,170 words
+- 49 files · ~119,339 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 17 file(s) not represented in the graph (top: (none) 5, .toml 3, .gd 2)
 
@@ -11,7 +11,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `f1c56ffd`
+- Built from commit: `b033d065`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -58,15 +58,15 @@
 
 ## God Nodes (most connected - your core abstractions)
 1. `QGateHarmony` - 78 edges
-2. `Lookups` - 15 edges
-3. `Invoke-DotnetStack()` - 15 edges
+2. `Invoke-DotnetStack()` - 15 edges
+3. `Lookups` - 15 edges
 4. `Invoke-BaseStack()` - 12 edges
 5. `Invoke-SmokeCheck()` - 12 edges
 6. `Invoke-CppStack()` - 11 edges
-7. `Get-PathKey()` - 8 edges
-8. `Invoke-CustomStack()` - 8 edges
-9. `Invoke-GodotStack()` - 8 edges
-10. `Phase()` - 8 edges
+7. `Phase()` - 8 edges
+8. `Invoke-GodotStack()` - 8 edges
+9. `Invoke-CustomStack()` - 8 edges
+10. `Get-PathKey()` - 8 edges
 
 ## Surprising Connections (you probably didn't know these)
 - `Set-OutdatedCache()` --calls--> `Get-PathKey()`  [INFERRED]
