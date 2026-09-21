@@ -242,10 +242,19 @@ Set-Content (Join-Path $nrIn 'notes.txt') 'teh recieve'
 Set-Content (Join-Path $nrIn 'k.txt') ('token = "ghp_' + 'aB3dE5gH7jK9mN1pQ3sT5vX7zA9cE1gI3kM5"')
 Set-Content (Join-Path $nr 'ignored\go.mod') 'module example.com/ign'
 [IO.File]::WriteAllText((Join-Path $nr 'ignored\bad.go'), "package ign`r`n`r`nfunc  Bad()  {}`r`n")
+# #107: a go.mod under testdata/ of the root module is a test fixture the go tool never
+# enters, not a stack (it was, and a library-only fixture turned the repo red).
+New-Item -ItemType Directory -Path (Join-Path $nr 'testdata\fixture\pkg') -Force | Out-Null
+Set-Content (Join-Path $nr 'testdata\fixture\go.mod') 'module example.com/fixture'
+[IO.File]::WriteAllText((Join-Path $nr 'testdata\fixture\pkg\p.go'), "package pkg`n")
 $nrStacks = @(Get-Stacks $nr | Where-Object { $_.Stack -ne 'base' })
-Check 'a nested repository and a gitignored dir are not stacks' `
+Check 'a nested repository, a gitignored dir and a testdata/ fixture module are not stacks' `
     ((($nrStacks | ForEach-Object { "$($_.Stack):$($_.Rel)" }) -join ',') -eq 'go:') `
     (($nrStacks | ForEach-Object { "$($_.Stack):$($_.Rel)" }) -join ',')
+# ...but only under a Go module: this repo's own testdata/go-fixture has no go.mod above
+# it and is gated as a stack on every commit here.
+Check 'a testdata/ go.mod with no Go module above it is still a stack' `
+    (@(Get-Stacks $PSScriptRoot | Where-Object { $_.Stack -eq 'go' } | ForEach-Object Rel) -contains 'testdata/go-fixture')
 Check 'the nested repository is named' ((@(Get-NestedRepos $nr) -join ',') -eq 'deep/inner')
 $r = Invoke-Gate $nr
 Check 'a red nested repository does not fail the outer gate' `
@@ -331,6 +340,22 @@ $r = Invoke-Gate $go
 Check 'template .golangci.yml passes' ($r.Code -eq 0) $r.Out
 Check 'no warning once config present' ($r.Out -notmatch 'WARN') $r.Out
 $script:tplOut = $r.Out
+# #107: a module with no main package. `go build -o <dir> ./...` exits 1 there ("no
+# main packages to build"), and the failed phase skipped vet, lint and test. A compile
+# error in the same module must still fail the build phase.
+$golib = Join-Path $tmp 'go-lib'
+New-Item -ItemType Directory -Path (Join-Path $golib 'lib') -Force | Out-Null
+Copy-Item (Join-Path $PSScriptRoot 'templates\.golangci.yml') $golib
+[IO.File]::WriteAllText((Join-Path $golib 'go.mod'), "module example.com/lib`n`ngo $((Get-Content (Join-Path $go 'go.mod') -Raw | Select-String '(?m)^go\s+(\S+)').Matches[0].Groups[1].Value)`n")
+[IO.File]::WriteAllText((Join-Path $golib 'lib\lib.go'), "package lib`n`n// F is a library function.`nfunc F() int { return 1 }`n")
+$r = Invoke-Gate $golib
+Check 'a library-only module (no package main) passes go build' `
+    (($r.Code -eq 0) -and ($r.Out -match '\[PASS\] go build') -and ($r.Out -notmatch 'no main packages')) $r.Out
+Check 'a library-only module still reaches vet and test' (($r.Out -match '\[PASS\] go vet') -and ($r.Out -match '\[PASS\] go test')) $r.Out
+[IO.File]::WriteAllText((Join-Path $golib 'lib\lib.go'), "package lib`n`n// F is a library function.`nfunc F() int { return undefinedName }`n")
+$r = Invoke-Gate $golib
+Check 'a compile error in a library-only module still fails go build' `
+    (($r.Code -ne 0) -and ($r.Out -match '\[FAIL\] go build') -and ($r.Out -match 'undefinedName')) $r.Out
 # #52: the template must satisfy golangci-lint's own schema (embedded, offline), and so
 # must its commented-out formatters block once a repo uncomments it. The negative half:
 # a bare `rules:` (YAML null) is what the schema rejected before, so it must still fail.

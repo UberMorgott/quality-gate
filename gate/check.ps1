@@ -653,9 +653,18 @@ function Invoke-GoStack($s) {
     # machine, forever. Directories written by older versions do not have the process
     # suffix and are left alone rather than swept up -- deleting files this run did not
     # create is not the gate's business.
+    #
+    # Only when there is something to link (#107): on a module with no main package
+    # `go build -o <dir> ./...` exits 1 with "no main packages to build", so every
+    # library-only module failed here and lost vet, lint and test. A bare
+    # `go build ./...` on such a module is green and writes nothing -- the go tool only
+    # keeps the output of a main package. `go list` failing (broken go.mod, syntax
+    # error) leaves $hasMain false and lets the build report the real error.
+    $hasMain = @(& go list -f '{{.Name}}' ./... 2>$null) -contains 'main'
+    $global:LASTEXITCODE = 0
     $outDir = Join-Path ([IO.Path]::GetTempPath()) "quality-gate-build-$(Get-PathKey $s.Dir)-$PID"
     New-Item -ItemType Directory -Path $outDir -Force | Out-Null
-    try { Phase 'go build' { go build -o $outDir ./... } }
+    try { Phase 'go build' { if ($hasMain) { go build -o $outDir ./... } else { go build ./... } } }
     finally { Remove-Item $outDir -Recurse -Force -ErrorAction SilentlyContinue }
     Phase 'go vet' { go vet ./... }
     # The `go` directive, not the `toolchain` one: it is what both tools compare

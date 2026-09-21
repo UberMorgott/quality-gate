@@ -1169,8 +1169,19 @@ function Get-Stacks([string]$Root) {
         $stacks += [pscustomobject]@{ Stack = 'base'; Dir = $Root; Rel = ''; Marker = 'git work tree'; Implemented = $true; Warn = '' }
     }
 
-    foreach ($m in Find-Marker $Root @('go.mod')) {
+    # A go.mod under testdata/ of an enclosing Go module is a fixture of that module's
+    # tests, not a module of its own (#107): the go tool never enters testdata, so
+    # `go build ./...` from the parent is silent about it, and gating it separately
+    # turned a green repo red over a library-only fixture. Only with a go.mod above it:
+    # this gate's own testdata/go-fixture sits under no Go module and must stay a stack.
+    $goMods = @(Find-Marker $Root @('go.mod'))
+    $goModDirs = @($goMods | ForEach-Object { $_.DirectoryName.TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar })
+    foreach ($m in $goMods) {
         $dir = $m.DirectoryName
+        if ($dir.Substring($Root.Length) -match '(^|[\\/])testdata([\\/]|$)' -and
+            ($goModDirs | Where-Object { $_.Length -lt $dir.Length + 1 -and $dir.StartsWith($_, [StringComparison]::OrdinalIgnoreCase) })) {
+            continue
+        }
         $warn = ''
         if (-not (Test-Path (Join-Path $dir '.golangci.yml')) -and -not (Test-Path (Join-Path $dir '.golangci.yaml'))) {
             $warn = 'no .golangci.yml -- running golangci-lint on its defaults; copy templates/.golangci.yml'
