@@ -2556,8 +2556,18 @@ function Invoke-BaseStack($s) {
     # group is one advisory, `ids` plus `aliases` every name it goes by.
     if ($osvCode -eq 1 -and (Test-VulnAcks)) {
         $oj = try { & osv-scanner scan source -r --format json @osvEx $Root 2>$null | Out-String | ConvertFrom-Json } catch { $null }
-        $found = @(foreach ($g in @($oj.results.packages.groups)) { , @(@($g.ids) + @($g.aliases) | Where-Object { $_ } | Select-Object -Unique) })
-        if ($found) {
+        # #109: Go call analysis lands per group in `experimental_analysis` ({id: {called,
+        # unimportant}}). osv-scanner's own table and exit code already hide a group that
+        # nothing in the module calls (`called:false` on every id) or that is unimportant
+        # on every id; the JSON lists them all. Judging the JSON verbatim made one real
+        # acknowledgement drag every unreachable advisory into "not acknowledged". A group
+        # with no analysis (non-Go ecosystems) is judged as before.
+        $found = @(foreach ($g in @($oj.results.packages.groups)) {
+                $an = @(if ($g.experimental_analysis) { $g.experimental_analysis.PSObject.Properties.Value })
+                if ($an -and -not ($an | Where-Object { $_.called -eq $true })) { continue }
+                if ($an -and -not ($an | Where-Object { $_.unimportant -ne $true })) { continue }
+                , @(@($g.ids) + @($g.aliases) | Where-Object { $_ } | Select-Object -Unique) })
+        if ($oj) {
             $left = @(Get-UnackedVulns 'vuln' $found)
             if ($left) { $osvOut = (@($osvOut) + $left) -join "`n" } else { $osvCode = 0 }
         }

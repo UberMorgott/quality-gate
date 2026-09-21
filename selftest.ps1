@@ -4032,7 +4032,10 @@ try {
     # acknowledgement; a new id, an expired entry or an invalid one still fails.
     $osvShim = Join-Path $tmp 'osv-shim'
     New-VulnShim $osvShim 'osv-scanner' '--format json' `
-        '{"results":[{"packages":[{"groups":[{"ids":["GHSA-q7pp-wcgr-pffx"],"aliases":["GHSA-q7pp-wcgr-pffx","CVE-2026-0001"]}]}]},{"packages":[{"groups":[{"ids":["GO-2026-5932"],"aliases":["GO-2026-5932"]}]}]}]}' `
+        ('{"results":[{"packages":[{"groups":[{"ids":["GHSA-q7pp-wcgr-pffx"],"aliases":["GHSA-q7pp-wcgr-pffx","CVE-2026-0001"]}]}]},' +
+        '{"packages":[{"groups":[{"ids":["GO-2026-5932"],"aliases":["GO-2026-5932"],"experimental_analysis":{"GO-2026-5932":{"called":true,"unimportant":false}}},' +
+        '{"ids":["GO-2026-9001"],"aliases":["GO-2026-9001"],"experimental_analysis":{"GO-2026-9001":{"called":false,"unimportant":false}}},' +
+        '{"ids":["GO-2026-9002"],"aliases":["GO-2026-9002"],"experimental_analysis":{"GO-2026-9002":{"called":true,"unimportant":true}}}]}]}]}') `
         'shimtable GHSA-q7pp-wcgr-pffx GO-2026-5932' 1
     $env:PATH = "$osvShim$sep$env:PATH"
     $ackFile = Join-Path $baseRepo 'qgate.deferrals.json'
@@ -4043,6 +4046,10 @@ try {
         (($code -eq 0) -and ($out -match '\[PASS\] vuln') -and ($out -notmatch '\[FAIL\]') -and
         ($out -match '\[WARN\] qgate\.deferrals\.json: vuln CVE-2026-0001 acknowledged until 2099-01-01 -- no fixed version') -and
         ($out -match '\[WARN\] qgate\.deferrals\.json: vuln GO-2026-5932 acknowledged until 2099-01-01 -- latest release')) "code=$code $out"
+    # #109: a group osv-scanner's call analysis marks uncalled (or unimportant) on every
+    # id is not a finding, so it needs no acknowledgement; the called one above still does.
+    Check 'vuln: an uncalled or unimportant advisory needs no acknowledgement' `
+        (($code -eq 0) -and ($out -notmatch 'GO-2026-900[12]')) "code=$code $out"
     $out = (& pwsh -NoProfile -File $gate -Root $baseRepo -Only base -Full -Quiet 2>&1 | Out-String)
     Check 'vuln: an acknowledgement is printed under -Quiet too' ($out -match 'vuln GO-2026-5932 acknowledged until') $out
     & $ack @(@{ id = 'GO-2026-5932'; until = '2099-01-01'; reason = 'latest release' })
