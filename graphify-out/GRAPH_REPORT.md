@@ -1,7 +1,7 @@
 # Graph Report - quality-gate  (2026-09-21)
 
 ## Corpus Check
-- 49 files · ~118,974 words
+- 49 files · ~119,170 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 17 file(s) not represented in the graph (top: (none) 5, .toml 3, .gd 2)
 
@@ -11,7 +11,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `c476f608`
+- Built from commit: `f1c56ffd`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -58,15 +58,15 @@
 
 ## God Nodes (most connected - your core abstractions)
 1. `QGateHarmony` - 78 edges
-2. `Invoke-DotnetStack()` - 15 edges
-3. `Lookups` - 15 edges
+2. `Lookups` - 15 edges
+3. `Invoke-DotnetStack()` - 15 edges
 4. `Invoke-BaseStack()` - 12 edges
 5. `Invoke-SmokeCheck()` - 12 edges
 6. `Invoke-CppStack()` - 11 edges
-7. `Phase()` - 8 edges
-8. `Invoke-GodotStack()` - 8 edges
-9. `Invoke-CustomStack()` - 8 edges
-10. `Get-PathKey()` - 8 edges
+7. `Get-PathKey()` - 8 edges
+8. `Invoke-CustomStack()` - 8 edges
+9. `Invoke-GodotStack()` - 8 edges
+10. `Phase()` - 8 edges
 
 ## Surprising Connections (you probably didn't know these)
 - `Set-OutdatedCache()` --calls--> `Get-PathKey()`  [INFERRED]
@@ -179,7 +179,7 @@ Cohesion: 0.07
 Nodes (30): "Gate is wrong" issue template, cherry-pick and revert cannot be covered cheaply, Deliberately chosen boundaries (not TODOs), GIT_INDEX_FILE marks that we are inside a commit, Measured git hook coverage matrix (git 2.53), Incoming agent reports: symptom right, cause wrong half the time, Parallel commits in one worktree swallow each other's staged files, git add --renormalize + checkout is a no-op for CRLF (+22 more)
 
 ## Knowledge Gaps
-- **38 isolated node(s):** `stylelint-config-standard-scss`, `stylelint-config-recommended-vue/scss`, `ignoreFiles`, `net8.0`, `Microsoft.NET.Sdk` (+33 more)
+- **38 isolated node(s):** `Constructor`, `Enumerator`, `Getter`, `Normal`, `Setter` (+33 more)
   These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 199 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
 - **28 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
@@ -194,7 +194,7 @@ _Questions this graph is uniquely positioned to answer:_
   _High betweenness centrality (0.022) - this node is a cross-community bridge._
 - **Are the 4 inferred relationships involving `Invoke-BaseStack()` (e.g. with `Get-GitIgnoredSet()` and `Get-NestedRepos()`) actually correct?**
   _`Invoke-BaseStack()` has 4 INFERRED edges - model-reasoned connections that need verification._
-- **What connects `stylelint-config-standard-scss`, `stylelint-config-recommended-vue/scss`, `ignoreFiles` to the rest of the system?**
+- **What connects `Constructor`, `Enumerator`, `Getter` to the rest of the system?**
   _38 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `harmony.cs` be split into smaller, more focused modules?**
   _Cohesion score 0.05398110661268556 - nodes in this community are weakly interconnected._

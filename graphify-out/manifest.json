@@ -18,9 +18,9 @@
     "semantic_hash": ""
   },
   "gate/detect.ps1": {
-    "mtime": 1789978147.3424945,
-    "seen": 1789978252.4327013,
-    "ast_hash": "2adf84b36d02b6450f3dbbed060159ef",
+    "mtime": 1789992707.8001916,
+    "seen": 1789992714.554178,
+    "ast_hash": "f8bee693a0fcb57afcd1172793c335a2",
     "semantic_hash": ""
   },
   "gate/outdated.ps1": {
@@ -42,9 +42,9 @@
     "semantic_hash": ""
   },
   "selftest.ps1": {
-    "mtime": 1789987580.7126245,
-    "seen": 1789987937.9407692,
-    "ast_hash": "329ae09b06c8f17365e1944e5368d1b5",
+    "mtime": 1789992499.4633892,
+    "seen": 1789992714.554187,
+    "ast_hash": "24fdf68f5a0f14f6768fcf43a141fe61",
     "semantic_hash": ""
   },
   "templates/.stylelintrc.json": {
@@ -174,9 +174,9 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1789634714.0360723,
-    "seen": 1789634719.0685918,
-    "ast_hash": "295b9d88626b227db9928931ac332296",
+    "mtime": 1789989100.868075,
+    "seen": 1789992714.5542037,
+    "ast_hash": "fd977ccdbb0a7537861a3f6b7cc435f7",
     "semantic_hash": ""
   },
   "gate/trust.ps1": {
