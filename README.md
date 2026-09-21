@@ -1,6 +1,6 @@
 # qgate
 
-qgate is a stack-detecting quality gate: one command runs the applicable checks in a repository and returns a failing exit code when an enforced check fails. Git hooks gate commits and merges; a Claude Code Stop hook checks agent work before a turn ends. This guarantees enforcement of the checks actually run, not complete coverage: optional tools, advisory findings, explicit skips, and the Stop hook's retry limit are described below.
+qgate is a stack-detecting quality gate: one command runs the applicable checks in a repository and returns a failing exit code when an enforced check fails. Git hooks gate commits and merges; run `qgate` yourself before handing off uncommitted work. An opt-in Claude Code Stop hook (`qgate.json` `"stopHook": true`) can also check agent work before a turn ends. This guarantees enforcement of the checks actually run, not complete coverage: optional tools, advisory findings, explicit skips, and the Stop hook's retry limit are described below.
 
 ## Install / update
 
@@ -20,7 +20,7 @@ qgate wire
 qgate where
 ```
 
-`update` runs `git pull --ff-only` in the installation. Re-running bootstrap also updates it. `wire` runs [install.ps1](install.ps1): it adds stack configs, Git hooks, `.claude/settings.json` Stop wiring, and completion instructions in `AGENTS.md` and `CLAUDE.md`, then runs `-All -Full`. Existing tool configs and foreign hooks are preserved; read any integration warnings. A failed initial gate is reported but does not make `wire` itself fail. `qgate wire -CI` also adds the GitHub Actions workflow.
+`update` runs `git pull --ff-only` in the installation. Re-running bootstrap also updates it. `wire` runs [install.ps1](install.ps1): it adds stack configs, Git hooks, `.claude/settings.json` Stop wiring (only with `"stopHook": true`), and completion instructions in `AGENTS.md` and `CLAUDE.md`, then runs `-All -Full`. Existing tool configs and foreign hooks are preserved; read any integration warnings. A failed initial gate is reported but does not make `wire` itself fail. `qgate wire -CI` also adds the GitHub Actions workflow.
 
 ## Adopting on an existing codebase
 
@@ -43,7 +43,7 @@ Run from the repository or pass `-Root <path>`. Stack discovery uses marker file
 | `qgate wire` | Wire a project; `-Target <path>` (alias `-Root`), `-NoHook` skips Git hooks only, `-NoRun` skips the initial gate, `-CI` adds CI. |
 | `qgate trust` | Print and immediately authorize custom checks on this machine; `-Root <path>`, `-Remove` revokes trust. |
 | `qgate outdated` | Advisory dependency/toolchain update report; `-Root <path>`, `-Summary` for a short report cached for a day; the explicit detailed report queries afresh. |
-| `qgate stop-hook` | Claude Code Stop entry point; reads hook JSON from stdin and uses `CLAUDE_PROJECT_DIR` or the current Git root. |
+| `qgate stop-hook` | Claude Code Stop entry point; reads hook JSON from stdin and uses `CLAUDE_PROJECT_DIR` or the current Git root. Exits 0 without running the gate unless that root's `qgate.json` has `"stopHook": true`. |
 | `qgate hold [on\|off\|status]` | Pause the Stop hook for a background writer; default `on`, `-Minutes 1..120` (default 15), `-Root <path>`. |
 | `qgate release` | Alias for `hold off`; accepts the same flags. |
 | `qgate global [on\|off\|status]` | Manage global `core.hooksPath`; default `status`, refuses to replace another global hook directory. |
@@ -78,7 +78,8 @@ Self-test sections: `detect`, `go`, `go2`, `core`, `wiring`, `rust`, `dotnet`, `
 The fast lane runs local checks and shorter Go tests. Full adds race/vulnerability checks, generation drift, heavier builds/tests, and configured full checks. Bare `qgate` does **not** enable full-only checks, but does run web bundling when a build script exists; use `-Fast` to omit bundling. Root-level changes or changes outside a stack directory select all stacks; proto changes also widen selection because generated code crosses stacks.
 
 - Pre-commit and pre-merge-commit run `qgate -All -Full -Quiet` (`qgate.cmd` under Git's Windows shell), through Lefthook when available or direct hooks otherwise. Git cherry-pick/revert do not invoke these hooks.
-- Only Claude Code gets an enforcing Stop hook. Codex and other agents get only the `AGENTS.md` instruction block; nothing enforces that block. The Claude Code Stop hook runs `-Fast -Quiet`, adding `-All` when HEAD has no matching last-green record. It blocks three consecutive failures, then allows the next stop with a warning; a passing run resets the counter. It is not an unconditional completion lock.
+- Commits are the enforcement point: pre-commit already runs `-All -Full`, so uncommitted work is checked only when you run `qgate` (do so before handing it off). Agents get the `AGENTS.md`/`CLAUDE.md` instruction block; nothing enforces that block.
+- The Claude Code Stop hook is **opt-in**: `"stopHook": true` in `qgate.json`, then `qgate wire`. Absent, `false`, or a malformed `qgate.json` means off: `wire` removes its Stop entry (foreign Stop hooks stay) and an already-wired `qgate stop-hook` exits 0 without running the gate. When on, it runs `-Fast -Quiet`, adding `-All` when HEAD has no matching last-green record. It blocks three consecutive failures, then allows the next stop with a warning; a passing run resets the counter. It is not an unconditional completion lock.
 - `hold` or `QGATE_HOLD=1`, `true`, or `yes` skips the Stop gate while a background writer works; `release` ends the hold. Commits remain gated.
 - No hold needed when Claude Code lists a running `subagent`, `teammate`, or `workflow` in the Stop input's `background_tasks`: a failure is then reported, not blocking. The first stop with none still running is gated. Background `shell`/`monitor` tasks do not count.
 - Global hooks run full checks: a repository with `qgate.json` is enforced; an unwired repository without it is advisory. The dispatcher first runs the repository's own `.git/hooks/<name>` or, if absent, `.husky/<name>`. A repo-local `core.hooksPath` (e.g. husky or `.githooks`) bypasses the global dispatcher entirely. `.qgate-off` or `enabled: false` opts out of the global dispatcher only.
@@ -96,7 +97,6 @@ Place one optional `qgate.json` at the repository root. Tool-specific rules rema
 
 ```json
 {
-  "stopHook": true,
   "checks": [
     { "name": "integration", "run": "go test -tags=integration ./...", "level": "full", "timeoutSec": 600 }
   ]
@@ -110,7 +110,7 @@ Place one optional `qgate.json` at the repository root. Tool-specific rules rema
 | `tools` | Exact version pins for `go`, `golangci-lint`, `cargo`, `node`, `buf`, `gdformat`, `gdlint`, `gdtoolkit`, `godot`; mismatches warn in fast and fail in full. |
 | `strictSkips` | Opt-in, full level only (hooks included): `true` fails the run on any `[SKIP]`; an array (`["typos", "vuln", "tidy"]`) fails only skips whose line starts with a listed check name. Skips caused by an earlier failure are not counted. |
 | `strict` | Opt-in, full level only (hooks included): `true` fails the run on any advisory `[WARN]` (qgate.json warnings included) and on any `[SKIP]` (implies `strictSkips: true`), naming each in one `[FAIL] strict` block. A live `qgate.deferrals.json` acknowledgement and the dependency-update note do not count. The fast lane only warns. |
-| `stopHook` | `false` makes `wire` omit/remove its Claude Code Stop hook; re-run `wire` after changing it. |
+| `stopHook` | Opt-in, default off: only `true` makes `wire` add the Claude Code Stop hook and lets `qgate stop-hook` run the gate; anything else makes `wire` remove it. Re-run `wire` after changing it. |
 | `enabled` | `false` disables the global hook dispatcher for this repository. |
 | `timeouts.godot` | Positive per-process timeout in seconds; default 600. |
 | `go.lintGoos` | Array of extra GOOS targets for full vet/lint; host target is omitted and cross-target runs disable cgo. |

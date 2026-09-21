@@ -1,4 +1,5 @@
-# Claude Code `Stop` hook wrapper: runs the fast level on every agent turn.
+# Claude Code `Stop` hook wrapper: runs the fast level on every agent turn -- only in a
+# repo that opts in with qgate.json {"stopHook": true}; everywhere else it exits 0.
 #
 # Exit 2 => the agent is prevented from ending the turn and stderr becomes the
 # blocking reason fed back to the model. See https://code.claude.com/docs/en/hooks
@@ -25,6 +26,21 @@ function Exit-Advisory([string]$Message) {
 # The gate lives outside the repo it checks, so $PSScriptRoot says nothing about
 # which repo this is: the project directory comes from Claude Code, cwd otherwise.
 $root = if ($env:CLAUDE_PROJECT_DIR) { $env:CLAUDE_PROJECT_DIR } else { Get-RepoRoot (Get-Location).Path }
+
+# Opt-in: only qgate.json {"stopHook": true} turns the per-turn gate on. Pre-commit
+# already runs -All -Full on every commit, so a default-on Stop hook duplicated it on
+# every turn (talk-only turns included, and -All after each commit because the green
+# mark moved) and blocked mid-work. Absent key, absent or malformed qgate.json, or
+# false => off, silently, before stdin, the TEMP sweep or any gate run. Checked here
+# rather than only in `wire`, so repos wired under the old default go quiet on
+# `qgate update` without a rewire.
+$optIn = $false
+$qj = Join-Path $root 'qgate.json'
+if (Test-Path -LiteralPath $qj) {
+    # A JSON boolean only: `"true" -eq $true` and `1 -eq $true` are both true in PowerShell.
+    try { $v = (Get-Content -LiteralPath $qj -Raw | ConvertFrom-Json).stopHook; $optIn = ($v -is [bool]) -and $v } catch { $optIn = $false }
+}
+if (-not $optIn) { exit 0 }
 
 # The counter is keyed by session as well as repo: several sessions can share one
 # working tree, and a counter left behind by one of them must not eat another

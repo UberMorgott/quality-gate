@@ -2092,8 +2092,12 @@ if (Want 'hooks') {
 # 12. The agent contract: `qgate stop-hook` must reach Claude Code as exit code 2
 # with the reason on stderr, through the .cmd shim it is actually invoked by.
 # Anything less and a failing gate silently lets the agent declare victory.
+# The Stop hook is opt-in (qgate.json {"stopHook": true}); every repo below that tests
+# the hook's gating opts in, in its first commit so the file is not a change of its own.
+function Enable-StopHook([string]$Repo) { Set-Content (Join-Path $Repo 'qgate.json') '{"stopHook": true}' }
 $hookRepo = Join-Path $tmp 'hook'
 Copy-Item (Join-Path $PSScriptRoot 'testdata\go-fixture') $hookRepo -Recurse
+Enable-StopHook $hookRepo
 git -C $hookRepo init -q 2>$null
 git -C $hookRepo add -A 2>$null   # silences the CRLF-conversion warnings
 git -C $hookRepo -c user.email=selftest@local -c user.name=selftest commit -qm init 2>$null
@@ -2126,6 +2130,7 @@ New-Item -ItemType Directory -Path (Join-Path $swRepo '.claude') -Force | Out-Nu
 git -C $swRepo init -q 2>$null
 $swFile = Join-Path $swRepo '.claude\settings.json'
 Set-Content $swFile '{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"echo mine"}]},{"hooks":[{"type":"command","command":"qgate stop-hook"}]}]}}'
+Enable-StopHook $swRepo
 & pwsh -NoProfile -File $installer -Target $swRepo -NoRun -NoHook *> $null
 & pwsh -NoProfile -File $installer -Target $swRepo -NoRun -NoHook *> $null
 $swCmds = @((Get-Content $swFile -Raw | ConvertFrom-Json).hooks.Stop.hooks.command)
@@ -2145,6 +2150,17 @@ $soJson = Get-Content $soFile -Raw | ConvertFrom-Json
 $soCmds = @($soJson.hooks.Stop.hooks.command)
 Check 'stopHook: false removes our Stop hook, keeps the user''s hooks, and stays off on rewire' `
     (($soCmds -join '|') -eq 'echo mine' -and (@($soJson.hooks.PreToolUse.hooks.command) -join '|') -eq 'echo pre') ($soJson | ConvertTo-Json -Depth 10)
+# Opt-in is the default now: a repo wired under the old default-on contract, with no
+# stopHook key at all, loses our entry on the next wire and keeps the foreign one.
+$saRepo = Join-Path $tmp 'stopabsent'
+New-Item -ItemType Directory -Path (Join-Path $saRepo '.claude') -Force | Out-Null
+git -C $saRepo init -q 2>$null
+$saFile = Join-Path $saRepo '.claude\settings.json'
+Set-Content $saFile '{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"echo mine"}]},{"hooks":[{"type":"command","command":"qgate stop-hook"}]}]}}'
+$saOut = (& pwsh -NoProfile -File $installer -Target $saRepo -NoRun -NoHook 2>&1 | Out-String)
+$saCmds = @((Get-Content $saFile -Raw | ConvertFrom-Json).hooks.Stop.hooks.command)
+Check 'wire without stopHook: true removes our Stop entry and keeps a foreign Stop hook' `
+    ((($saCmds -join '|') -eq 'echo mine') -and ($saOut -match 'opt in with qgate\.json stopHook: true')) "$($saCmds -join ' | ') $saOut"
 $gitRoot = Split-Path (Split-Path (Split-Path (Split-Path (& git --exec-path))))
 $bashExe = @((Join-Path $gitRoot 'bin\bash.exe'), (Get-Command bash -ErrorAction SilentlyContinue).Source) |
     Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
@@ -2172,6 +2188,7 @@ if ($bashExe) {
 # prove nothing about the case that matters.
 $hook2 = Join-Path $tmp 'hook2'
 Copy-Item (Join-Path $PSScriptRoot 'testdata\go-fixture') $hook2 -Recurse
+Enable-StopHook $hook2
 git -C $hook2 init -q 2>$null
 git -C $hook2 add -A 2>$null
 git -C $hook2 -c user.email=selftest@local -c user.name=selftest commit -qm init 2>$null
@@ -2197,6 +2214,32 @@ git -C $hook2 -c user.email=selftest@local -c user.name=selftest commit -qm viol
 $h = Invoke-StopHook $hook2 $sid
 Check 'stop-hook blocks a violation that was committed on a clean tree' ($h.Code -eq 2) "code=$($h.Code) $($h.Err)"
 
+# 12d. The Stop hook is opt-in. Pre-commit already gates every commit at -All -Full; a
+# default-on per-turn hook duplicated it. A repo without qgate.json stopHook: true --
+# key absent, false, a string, or a broken file -- gets exit 0 and no gate run at all,
+# even on a failing tree, so old wiring goes quiet on `qgate update`. The true-positive
+# side: the same tree with stopHook: true still blocks.
+$optRepo = Join-Path $tmp 'hookoptin'
+Copy-Item (Join-Path $PSScriptRoot 'testdata\go-fixture') $optRepo -Recurse
+git -C $optRepo init -q 2>$null
+git -C $optRepo add -A 2>$null
+git -C $optRepo -c user.email=selftest@local -c user.name=selftest commit -qm init 2>$null
+Set-GoFile (Join-Path $optRepo 'bad.go') "package main`nfunc  Bad() {}"
+$optJson = Join-Path $optRepo 'qgate.json'
+$h = Invoke-StopHook $optRepo ([guid]::NewGuid())
+Check 'stop-hook without qgate.json is off: exit 0, silent, on a failing tree' `
+    (($h.Code -eq 0) -and -not $h.Err -and -not $h.Out) "code=$($h.Code) $($h.Err) $($h.Out)"
+foreach ($c in @(@('{"checks": []}', 'key absent'), @('{"stopHook": false}', 'false'), @('{"stopHook": "true"}', 'a string'), @('{"stopHook": ', 'malformed'))) {
+    Set-Content $optJson $c[0]
+    $h = Invoke-StopHook $optRepo ([guid]::NewGuid())
+    Check "stop-hook with stopHook $($c[1]) is off: exit 0, silent" `
+        (($h.Code -eq 0) -and -not $h.Err -and -not $h.Out) "code=$($h.Code) $($h.Err) $($h.Out)"
+}
+Set-Content $optJson '{"stopHook": true}'
+$h = Invoke-StopHook $optRepo ([guid]::NewGuid())
+Check 'stop-hook with stopHook: true still blocks the failing tree (exit 2)' `
+    (($h.Code -eq 2) -and ($h.Err -match 'Quality gate failed')) "code=$($h.Code) $($h.Err)"
+
 # 12c (#98). A background subagent still writing this checkout fails the gate on purpose
 # -- a red TDD phase does not compile -- and the FAIL lands on the LEAD agent, which must
 # not touch those files (two writers on one file lose edits). `qgate hold` says a writer
@@ -2208,6 +2251,7 @@ function Invoke-Qgate([string[]]$Argv) {
 }
 $holdRepo = Join-Path $tmp 'hold'
 Copy-Item (Join-Path $PSScriptRoot 'testdata\go-fixture') $holdRepo -Recurse
+Enable-StopHook $holdRepo
 git -C $holdRepo init -q 2>$null
 git -C $holdRepo add -A 2>$null
 git -C $holdRepo -c user.email=selftest@local -c user.name=selftest commit -qm init 2>$null

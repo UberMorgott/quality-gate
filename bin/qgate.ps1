@@ -6,7 +6,7 @@
 #   qgate wire            wire the current repo: agent hooks, configs, CI
 #   qgate trust           allow this repo's own qgate.json checks to run here
 #   qgate outdated        dependencies and toolchains with a newer release
-#   qgate stop-hook       Claude Code `Stop` hook entry (reads stdin JSON)
+#   qgate stop-hook       Claude Code `Stop` hook entry (reads stdin JSON), opt-in via qgate.json stopHook: true
 #   qgate hold/release    background writer active: pause the Stop hook (#98)
 #   qgate global on|off   opt-in: gate every repo via global core.hooksPath (#86)
 #   qgate update          git pull in the install directory
@@ -31,8 +31,10 @@ qgate -- one quality gate for every stack in the repository
   qgate trust           print this repo's qgate.json "checks" and allow them to run here
                         (-Root <path> for another repo, -Remove to forget them)
   qgate outdated        dependencies and toolchains with a newer release
-  qgate stop-hook       Claude Code `Stop` hook entry (reads stdin JSON)
-  qgate hold            a background subagent is still writing: Stop hook off for 15 min
+  qgate stop-hook       Claude Code `Stop` hook entry (reads stdin JSON); opt-in:
+                        off unless qgate.json has "stopHook": true -- commits are
+                        gated by pre-commit, run `qgate` before handing off uncommitted work
+  qgate hold           a background subagent is still writing: Stop hook off for 15 min
                         (-Minutes 1..120, `hold status`; `qgate release` ends it early)
                         commits stay gated -- this only affects the per-turn Stop hook
   qgate release         end the hold

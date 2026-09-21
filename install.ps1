@@ -9,7 +9,7 @@
 # Nothing is copied into the repo except configuration: the gate itself stays in
 # one place per machine and is reached through `qgate` on PATH. What lands in the
 # repo is a .golangci.yml per go.mod, lefthook.yml, the agent Stop hook in
-# .claude/settings.json, an AGENTS.md section for agents that have no hooks, and
+# .claude/settings.json (opt-in: qgate.json stopHook: true), an AGENTS.md section for agents that have no hooks, and
 # optionally a CI workflow. Existing files are never overwritten silently.
 [CmdletBinding()]
 param(
@@ -166,14 +166,15 @@ if ($stacks | Where-Object { $_.Stack -eq 'go' -and $_.Implemented }) {
 function Set-StopHook {
     $file = Join-Path $root '.claude\settings.json'
     $cmd = 'qgate stop-hook'
-    # Opt-out, persisted in the repo so a later wire/update does not put it back:
-    # qgate.json {"stopHook": false}. The hook runs the gate on every turn end, which
-    # misfires while background subagents are still mid-edit.
+    # Opt-in, persisted in the repo: qgate.json {"stopHook": true}. Pre-commit already
+    # runs -All -Full on every commit; a per-turn hook duplicated it, cost every
+    # talk-only turn and blocked mid-work. Anything but a JSON true (absent key, absent
+    # or malformed qgate.json, false) removes our entry left by an older wire.
     $qj = Join-Path $root 'qgate.json'
-    $optOut = $false
-    if (Test-Path $qj) { try { $optOut = (Get-Content $qj -Raw | ConvertFrom-Json).stopHook -eq $false } catch { } }
-    if ($optOut) {
-        if (-not (Test-Path $file)) { Write-Output 'stop-hook -- skipped (qgate.json stopHook: false)'; return }
+    $optIn = $false
+    if (Test-Path $qj) { try { $v = (Get-Content $qj -Raw | ConvertFrom-Json).stopHook; $optIn = ($v -is [bool]) -and $v } catch { } }
+    if (-not $optIn) {
+        if (-not (Test-Path $file)) { Write-Output 'stop-hook -- off (opt in with qgate.json stopHook: true)'; return }
         $settings = Get-Content $file -Raw | ConvertFrom-Json -AsHashtable
         $before = @($settings.hooks.Stop | Where-Object { $_ }) | ConvertTo-Json -Depth 10
         if ($settings.hooks -and $settings.hooks.ContainsKey('Stop')) {
@@ -187,9 +188,9 @@ function Set-StopHook {
         }
         if ((@($settings.hooks.Stop | Where-Object { $_ }) | ConvertTo-Json -Depth 10) -ne $before) {
             Set-Content -Path $file -Value ($settings | ConvertTo-Json -Depth 10) -Encoding utf8
-            Write-Output "stop-hook -- removed from $file (qgate.json stopHook: false)"
+            Write-Output "stop-hook -- removed from $file (off; opt in with qgate.json stopHook: true)"
         } else {
-            Write-Output 'stop-hook -- skipped (qgate.json stopHook: false)'
+            Write-Output 'stop-hook -- off (opt in with qgate.json stopHook: true)'
         }
         return
     }
@@ -226,6 +227,8 @@ $agentDoc = @'
 
 After changing files, run `qgate` from the repository root. Use `qgate -All` when
 dependencies, build configuration, generated files or several stacks changed.
+Commits are gated by the pre-commit hook; uncommitted work is not, so run `qgate`
+before handing it off.
 
 Exit code 0 means done. Anything else means NOT done: the output names the exact
 failures -- fix them and run it again. Do not report completion while the gate is

@@ -74,4 +74,4 @@ pre-merge-commit:
 # exits 1 on failure -- but Claude Code only blocks the turn on exit **2**, so
 # the generated wiring runs the gate and then lets the agent finish anyway. It
 # also has no retry cap. `qgate stop-hook` does both, and `qgate wire` puts it
-# into .claude/settings.json for you.
+# into .claude/settings.json for you when qgate.json has "stopHook": true (opt-in).
