@@ -2269,6 +2269,15 @@ Check 'qgate hold status reports an active hold' ((Invoke-Qgate @('hold', 'statu
 $h = Invoke-StopHook $holdRepo ([guid]::NewGuid())
 Check 'a held tree is not gated on the agent''s turn' `
     (($h.Code -eq 0) -and ($h.Err -match 'qgate hold is active')) "code=$($h.Code) $($h.Err)"
+# #108: Claude Code hands the hook CLAUDE_PROJECT_DIR as `E:/DEV/Repo` while the hold
+# was set from a shell that spelled it `E:\DEV\Repo`; the two keys named two marker
+# files and the hook gated a held tree. Same hold, the hook's spelling of the root.
+$h = Invoke-StopHook ($holdRepo -replace '\\', '/') ([guid]::NewGuid())
+Check '#108: the hook sees the hold when CLAUDE_PROJECT_DIR uses forward slashes' `
+    (($h.Code -eq 0) -and ($h.Err -match 'qgate hold is active')) "code=$($h.Code) $($h.Err)"
+$h = Invoke-StopHook "$holdRepo\" ([guid]::NewGuid())
+Check '#108: the hook sees the hold when CLAUDE_PROJECT_DIR has a trailing separator' `
+    (($h.Code -eq 0) -and ($h.Err -match 'qgate hold is active')) "code=$($h.Code) $($h.Err)"
 # A harness that can only set an environment variable gets the same hold.
 $env:QGATE_HOLD = '1'
 $h = Invoke-StopHook $holdRepo ([guid]::NewGuid())

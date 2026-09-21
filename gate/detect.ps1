@@ -278,10 +278,17 @@ function Find-Marker([string]$Root, [string[]]$Names, [int]$Depth = 3) {
 
 # Stable short key for a path: names per-repo temp files and build directories so
 # two repos (or two agents in different worktrees) never share one.
+#
+# #108: one repo, two spellings. Claude Code hands the Stop hook CLAUDE_PROJECT_DIR as
+# `E:/DEV/Repo` (forward slashes, even on Windows) while `qgate hold` run from a shell
+# resolves the same tree to `E:\DEV\Repo`, and the two keys named two different marker
+# files -- so an active hold was invisible to the hook. Separators and a trailing one
+# are normalised before hashing; case already was.
 function Get-PathKey([string]$Text) {
+    $norm = ($Text -replace '/', '\') -replace '(?<=.)\\+$', ''
     [BitConverter]::ToString(
         [Security.Cryptography.MD5]::HashData(
-            [Text.Encoding]::UTF8.GetBytes($Text.ToLowerInvariant()))).Replace('-', '')
+            [Text.Encoding]::UTF8.GetBytes($norm.ToLowerInvariant()))).Replace('-', '')
 }
 
 # The `qgate hold` marker for a repo: the expiry it was set with, or $null when no hold
