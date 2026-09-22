@@ -617,6 +617,7 @@ function Test-VulnAcks { [bool]@(Read-Deferrals $Root 'vulnerabilities' 'id').Co
 
 # --- stack runners ---------------------------------------------------------
 $script:PhaseSuffix = ''
+$script:GoTagSets = @()
 
 # quality-gate#111: with qgate.json go.tags, every Go phase runs once per build-tag set.
 # GOFLAGS, not a -tags argument per command: go build/vet/test/list, golangci-lint and
@@ -626,13 +627,14 @@ function Invoke-GoStack($s) {
     if ($gt.Error) { Fail $gt.Error; return }
     if (-not $gt) { Invoke-GoStackOnce $s; return }
     $prev = $env:GOFLAGS
+    $script:GoTagSets = @($gt.Sets)
     try {
         foreach ($set in $gt.Sets) {
             $env:GOFLAGS = "$prev -tags=$set".Trim()
             $script:PhaseSuffix = " [tags=$set]"
             Invoke-GoStackOnce $s
         }
-    } finally { $env:GOFLAGS = $prev; $script:PhaseSuffix = '' }
+    } finally { $env:GOFLAGS = $prev; $script:PhaseSuffix = ''; $script:GoTagSets = @() }
 }
 
 function Invoke-GoStackOnce($s) {
@@ -832,8 +834,11 @@ function Invoke-GoStackOnce($s) {
                 $script:Lines += '[SKIP] deadcode -- not on PATH (go install golang.org/x/tools/cmd/deadcode@latest)'
             } elseif ($stale = Test-GoToolStale 'deadcode' $modGo 'go install golang.org/x/tools/cmd/deadcode@latest') {
                 $script:Lines += "[SKIP] $stale"
-            } else {
+            } elseif (-not $script:GoTagSets) {
                 $script:Warnings += @(Get-GoDeadcode $s.Dir)
+            } elseif ($script:PhaseSuffix -eq " [tags=$($script:GoTagSets[-1])]") {
+                # #112: once, on the last set, judged across every set (see Get-GoDeadcode).
+                $script:Warnings += @(Get-GoDeadcode $s.Dir $script:GoTagSets)
             }
         }
     } else {

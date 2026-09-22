@@ -449,6 +449,18 @@ if ((Get-Command deadcode -ErrorAction SilentlyContinue) -and -not (Test-GoToolS
     Check 'an unreferenced function beside a cgo //export is still dead code' `
         (($dw -match 'unreachable func: orphanC') -and ($dw -match 'unreachable func: orphan\b')) $dw
     Remove-Item $cl -Recurse -Force
+    # #112: main behind build tags. Each set is analyzed with -tags; only what every set
+    # leaves unreachable is reported (OnlyB is live in set b), and a truly dead func still is.
+    $dt = Join-Path $tmp 'deadcode-tags'
+    New-Item -ItemType Directory -Force $dt | Out-Null
+    Set-GoFile (Join-Path $dt 'go.mod') "module example.com/tags`n`ngo 1.22"
+    Set-GoFile (Join-Path $dt 'main_a.go') "//go:build a`n`npackage main`n`nfunc main() { used() }"
+    Set-GoFile (Join-Path $dt 'main_b.go') "//go:build b`n`npackage main`n`nfunc main() { used(); onlyB() }"
+    Set-GoFile (Join-Path $dt 'lib.go') "package main`n`nfunc used() {}`n`nfunc onlyB() {}`n`nfunc orphanT() {}"
+    $dw = (Get-GoDeadcode $dt @('a', 'b')) -join "`n"
+    Check 'deadcode analyzes each go.tags set and reports only what all sets leave unreachable' `
+        (($dw -match '^\[WARN\] deadcode: 1 unreachable') -and ($dw -match 'unreachable func: orphanT') -and ($dw -notmatch 'onlyB|used')) $dw
+    Check 'deadcode without tags on a tag-only main has no program to report on' (-not (Get-GoDeadcode $dt)) "$(Get-GoDeadcode $dt)"
     Set-GoFile (Join-Path $dc 'main.go') "// Package lib is a library.`npackage lib`n`n// Add returns the sum of a and b.`nfunc Add(a, b int) int { return a + b }"
     Get-ChildItem $dc -Filter '*.go' | Where-Object Name -ne 'main.go' | Remove-Item
     Check 'a module with no main package is not a deadcode warning' (-not (Get-GoDeadcode $dc)) "$(Get-GoDeadcode $dc)"

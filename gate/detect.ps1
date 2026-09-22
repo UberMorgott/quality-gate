@@ -610,16 +610,27 @@ function Get-GoCgoExportLive([string]$PkgDir) {
 # tests is analyzed too. It exits 0 with findings, so the verdict is the output. A module
 # with neither main nor tests has no program to walk (`deadcode: no main packages`,
 # exit 1): nothing to say. Any other error is named once, never raised: this check is advisory.
-function Get-GoDeadcode([string]$Dir) {
-    $prev = $global:LASTEXITCODE
-    Push-Location $Dir
-    try { $out = @(& deadcode -test ./... 2>&1 | ForEach-Object { "$_" }); $code = $LASTEXITCODE }
-    finally { Pop-Location; $global:LASTEXITCODE = $prev }
-    if ($code -ne 0) {
-        if ($out -match 'no main packages') { return }
-        return "[WARN] deadcode could not analyze this module -- $(@($out | Select-Object -Last 1))"
+# quality-gate#112: $Tags = the qgate.json go.tags sets. deadcode passes its own `-tags=`
+# (empty by default) to the package loader, which overrides GOFLAGS (measured), so each set
+# goes on its command line; a function is reported only if every set that has a program
+# finds it unreachable -- one binary's code is not dead because another binary skips it.
+function Get-GoDeadcode([string]$Dir, [string[]]$Tags = @('')) {
+    $hits = @(); $ran = $false
+    foreach ($t in $Tags) {
+        $tagArg = @(if ($t) { "-tags=$t" })
+        $prev = $global:LASTEXITCODE
+        Push-Location $Dir
+        try { $out = @(& deadcode -test @tagArg ./... 2>&1 | ForEach-Object { "$_" }); $code = $LASTEXITCODE }
+        finally { Pop-Location; $global:LASTEXITCODE = $prev }
+        if ($code -ne 0) {
+            if ($out -match 'no main packages') { continue }
+            return "[WARN] deadcode$(if ($t) { " (tags=$t)" }) could not analyze this module -- $(@($out | Select-Object -Last 1))"
+        }
+        $set = @($out | Where-Object { $_ -match 'unreachable func' })
+        $hits = if (-not $ran) { $set } else { @($hits | Where-Object { $_ -in $set }) }
+        $ran = $true
     }
-    $hits = @($out | Where-Object { $_ -match 'unreachable func' })
+    $hits = @($hits | Where-Object { $_ })
     $live = @{}
     $hits = @($hits | Where-Object {
         if ($_ -notmatch '^(?<file>.+\.go):\d+:\d+: unreachable func: (?<name>\S+)') { return $true }
@@ -631,7 +642,7 @@ function Get-GoDeadcode([string]$Dir) {
     if (-not $hits) { return }
     "[WARN] deadcode: $($hits.Count) unreachable function(s) -- advisory, not a failure"
     $hits | Select-Object -First 20 | ForEach-Object { "       $_" }
-    if ($hits.Count -gt 20) { "       ... $($hits.Count - 20) more: run deadcode -test ./..." }
+    if ($hits.Count -gt 20) { "       ... $($hits.Count - 20) more: run deadcode -test$(if ($Tags[0]) { " -tags=$($Tags[0])" }) ./..." }
 }
 
 # quality-gate#97: a .csproj that no solution lists and no other project references is a
