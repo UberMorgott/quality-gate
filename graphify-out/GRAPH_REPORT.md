@@ -1,24 +1,24 @@
-# Graph Report - quality-gate  (2026-09-21)
+# Graph Report - quality-gate  (2026-09-22)
 
 ## Corpus Check
-- 49 files · ~119,339 words
+- 49 files · ~120,016 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 17 file(s) not represented in the graph (top: (none) 5, .toml 3, .gd 2)
 
 ## Summary
-- 473 nodes · 701 edges · 50 communities (22 shown, 28 thin omitted)
-- Extraction: 93% EXTRACTED · 7% INFERRED · 0% AMBIGUOUS · INFERRED: 50 edges (avg confidence: 0.85)
+- 475 nodes · 705 edges · 50 communities (22 shown, 28 thin omitted)
+- Extraction: 93% EXTRACTED · 7% INFERRED · 0% AMBIGUOUS · INFERRED: 51 edges (avg confidence: 0.85)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `b033d065`
+- Built from commit: `ff4268a4`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
 ## Community Hubs (Navigation)
 - harmony.cs
 - detect.ps1
-- GitHub Actions quality-gate workflow
+- A right outcome does not prove the right cause (§0.1)
 - .Scan
 - Lookups
 - selftest.ps1
@@ -47,12 +47,12 @@
 - Mod.csproj
 - MetadataReader
 - .Resolve
-- quality_gate job anchor shared by both hooks
+- .golangci.yml template
 - .Run
 - gopurity/main.go
 - Hud
 - .Callee
-- .golangci.yml template
+- qgate wire (repo wiring, config only)
 - hooks/pre-commit
 - pre-merge-commit
 
@@ -64,9 +64,9 @@
 5. `Invoke-SmokeCheck()` - 12 edges
 6. `Invoke-CppStack()` - 11 edges
 7. `Phase()` - 8 edges
-8. `Invoke-GodotStack()` - 8 edges
-9. `Invoke-CustomStack()` - 8 edges
-10. `Get-PathKey()` - 8 edges
+8. `Fail()` - 8 edges
+9. `Invoke-GodotStack()` - 8 edges
+10. `Invoke-CustomStack()` - 8 edges
 
 ## Surprising Connections (you probably didn't know these)
 - `Set-OutdatedCache()` --calls--> `Get-PathKey()`  [INFERRED]
@@ -75,10 +75,10 @@
   templates/ci.yml → README.md
 - `QG_REF tag pin (v1), never main` --semantically_similar_to--> `qgate.json toolchain pinning`  [INFERRED] [semantically similar]
   templates/ci.yml → README.md
+- `Cancellability findings (context propagation)` --conceptually_related_to--> `.golangci.yml template`  [INFERRED]
+  PLAYBOOK.md → templates/.golangci.yml
 - `Incoming agent reports: symptom right, cause wrong half the time` --semantically_similar_to--> `Second-engine review`  [INFERRED] [semantically similar]
   HANDOFF.md → PLAYBOOK.md
-- `.golangci.yml template` --references--> `Vulnerability phase (govulncheck / npm audit)`  [EXTRACTED]
-  templates/.golangci.yml → README.md
 
 ## Import Cycles
 - None detected.
@@ -96,11 +96,11 @@ Nodes (29): Attribute, Fixture, HarmonyLib, system, system_collections_generic, 
 
 ### Community 1 - "detect.ps1"
 Cohesion: 0.06
-Nodes (29): Find-Marker(), Get-ChecksHash(), Get-CMakeGenerator(), Get-CppStaleTool(), Get-CustomChecks(), Get-DefaultTrustStore(), Get-DeployEntries(), Get-GitIgnoredSet() (+21 more)
+Nodes (30): Find-Marker(), Get-ChecksHash(), Get-CMakeGenerator(), Get-CppStaleTool(), Get-CustomChecks(), Get-DefaultTrustStore(), Get-DeployEntries(), Get-GitIgnoredSet() (+22 more)
 
-### Community 2 - "GitHub Actions quality-gate workflow"
-Cohesion: 0.08
-Nodes (28): git check-ignore exit codes; --stdin batch unusable on Windows, GOTOOLCHAIN=auto unpacking races produce 'missing std package', Selftest counts 121 online / 115 offline, Coverage measures happy paths; a green suite proves nothing, Mutation check of existing tests, PowerShell reads an empty value as absence, Red-then-green verification, A right outcome does not prove the right cause (§0.1) (+20 more)
+### Community 2 - "A right outcome does not prove the right cause (§0.1)"
+Cohesion: 0.20
+Nodes (11): git check-ignore exit codes; --stdin batch unusable on Windows, Selftest counts 121 online / 115 offline, PowerShell reads an empty value as absence, Red-then-green verification, A right outcome does not prove the right cause (§0.1), Negative check asserts outcome + applied cause + absent cause, Fail closed invariant (no check phase ran), Godot stack phases (+3 more)
 
 ### Community 3 - ".Scan"
 Cohesion: 0.17
@@ -127,8 +127,8 @@ Cohesion: 0.29
 Nodes (6): name, private, scripts, build-only, type-check, type
 
 ### Community 9 - "check.ps1"
-Cohesion: 0.11
-Nodes (38): Fail(), Get-ChangedPaths(), Get-CppCompileDb(), Get-CppGeneratedIncludes(), Get-Descendants(), Get-DotnetChangedCs(), Get-DotnetEval(), Get-DotnetSharedFormat() (+30 more)
+Cohesion: 0.10
+Nodes (39): Fail(), Get-ChangedPaths(), Get-CppCompileDb(), Get-CppGeneratedIncludes(), Get-Descendants(), Get-DotnetChangedCs(), Get-DotnetEval(), Get-DotnetSharedFormat() (+31 more)
 
 ### Community 10 - ".Get"
 Cohesion: 0.35
@@ -158,9 +158,9 @@ Nodes (4): MetadataReader, TypeDefinitionHandle, TypeReferenceHandle, TypeSpecif
 Cohesion: 0.20
 Nodes (5): CustomAttribute, CustomAttributeHandleCollection, Target, MethodDefinition, Target
 
-### Community 38 - "quality_gate job anchor shared by both hooks"
-Cohesion: 0.17
-Nodes (12): Three rules for a machine-readable deferral file, Suppression needs a named reason; stale suppressions flagged, qgate.deferrals.json (dated deferrals), qgate outdated, -Quiet (silent only on green), Vulnerability phase (govulncheck / npm audit), exhaustive with default-signifies-exhaustive, nolintlint: no bare or dead suppressions (+4 more)
+### Community 38 - ".golangci.yml template"
+Cohesion: 0.10
+Nodes (20): git add --renormalize + checkout is a no-op for CRLF, Three rules for a machine-readable deferral file, Suppression needs a named reason; stale suppressions flagged, Taint rules report one finding at a time and are inter-package, Unchecked errors: propagate, log-and-degrade, or join, qgate.deferrals.json (dated deferrals), Go stack phases, qgate outdated (+12 more)
 
 ### Community 40 - "gopurity/main.go"
 Cohesion: 0.18
@@ -174,9 +174,9 @@ Nodes (7): Hud, Health, IDamageable, Player, Unit, AssignablePatch, HealthPatch
 Cohesion: 0.17
 Nodes (7): Gen, IEnumerable, ImmutableArray, MethodSignature, Name, Parent, Sig
 
-### Community 44 - ".golangci.yml template"
-Cohesion: 0.07
-Nodes (30): "Gate is wrong" issue template, cherry-pick and revert cannot be covered cheaply, Deliberately chosen boundaries (not TODOs), GIT_INDEX_FILE marks that we are inside a commit, Measured git hook coverage matrix (git 2.53), Incoming agent reports: symptom right, cause wrong half the time, Parallel commits in one worktree swallow each other's staged files, git add --renormalize + checkout is a no-op for CRLF (+22 more)
+### Community 44 - "qgate wire (repo wiring, config only)"
+Cohesion: 0.06
+Nodes (39): "Gate is wrong" issue template, cherry-pick and revert cannot be covered cheaply, Deliberately chosen boundaries (not TODOs), GIT_INDEX_FILE marks that we are inside a commit, GOTOOLCHAIN=auto unpacking races produce 'missing std package', Measured git hook coverage matrix (git 2.53), Incoming agent reports: symptom right, cause wrong half the time, Parallel commits in one worktree swallow each other's staged files (+31 more)
 
 ## Knowledge Gaps
 - **38 isolated node(s):** `Constructor`, `Enumerator`, `Getter`, `Normal`, `Setter` (+33 more)
@@ -187,7 +187,7 @@ Nodes (30): "Gate is wrong" issue template, cherry-pick and revert cannot be cov
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `QGateHarmony` connect `QGateHarmony` to `harmony.cs`, `.Scan`, `MetadataReader`, `.Resolve`, `.Run`, `.Get`, `.Callee`?**
-  _High betweenness centrality (0.112) - this node is a cross-community bridge._
+  _High betweenness centrality (0.111) - this node is a cross-community bridge._
 - **Why does `Get-PathKey()` connect `check.ps1` to `detect.ps1`, `selftest.ps1`?**
   _High betweenness centrality (0.025) - this node is a cross-community bridge._
 - **Why does `Lookups` connect `Lookups` to `harmony.cs`?**
@@ -199,4 +199,4 @@ _Questions this graph is uniquely positioned to answer:_
 - **Should `harmony.cs` be split into smaller, more focused modules?**
   _Cohesion score 0.05398110661268556 - nodes in this community are weakly interconnected._
 - **Should `detect.ps1` be split into smaller, more focused modules?**
-  _Cohesion score 0.05697278911564626 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.05551020408163265 - nodes in this community are weakly interconnected._
