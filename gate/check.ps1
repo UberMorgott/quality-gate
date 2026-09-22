@@ -494,6 +494,8 @@ function Phase {
     # fork skipped build, analyzers, vuln and every other dotnet stack, and the build was
     # where the real bug was.
     param([string]$Name, [scriptblock]$Body, [switch]$FailIfOutput, [double]$Elapsed = -1, [string]$Time, [switch]$Soft)
+    # Set while one stack runs its phases more than once (Go build-tag sets, #111).
+    $Name += $script:PhaseSuffix
     # A phase the run never reached must not vanish. Reported from the field: a file with a
     # whitespace nit AND a compile error printed `[FAIL] format` and no `build` line at all,
     # so the report read as "the only thing wrong here is whitespace". Same rule the stack
@@ -614,7 +616,26 @@ function Get-UnackedVulns([string]$Tool, [object[]]$Found) {
 function Test-VulnAcks { [bool]@(Read-Deferrals $Root 'vulnerabilities' 'id').Count }
 
 # --- stack runners ---------------------------------------------------------
+$script:PhaseSuffix = ''
+
+# quality-gate#111: with qgate.json go.tags, every Go phase runs once per build-tag set.
+# GOFLAGS, not a -tags argument per command: go build/vet/test/list, golangci-lint and
+# govulncheck all load packages through the go command, which reads it (measured).
 function Invoke-GoStack($s) {
+    $gt = Get-GoTags $Root
+    if ($gt.Error) { Fail $gt.Error; return }
+    if (-not $gt) { Invoke-GoStackOnce $s; return }
+    $prev = $env:GOFLAGS
+    try {
+        foreach ($set in $gt.Sets) {
+            $env:GOFLAGS = "$prev -tags=$set".Trim()
+            $script:PhaseSuffix = " [tags=$set]"
+            Invoke-GoStackOnce $s
+        }
+    } finally { $env:GOFLAGS = $prev; $script:PhaseSuffix = '' }
+}
+
+function Invoke-GoStackOnce($s) {
     Set-Location $s.Dir
     # quality-gate#44: -Fix rewrites first, then the unchanged phases below judge the
     # result. Only an explicit `qgate -Fix` does this -- hooks and CI never pass it, so
@@ -748,6 +769,7 @@ function Invoke-GoStack($s) {
             $checks = Get-CustomChecks $Root
             $covered = if ($checks -and -not $checks.Error) { ($checks.Checks.Run -join "`n") } else { '' }
             $covered += "`n" + ((@((Get-GoLintGoos $Root $goEnv[0]).Goos) | Where-Object { $_ } | ForEach-Object { "GOOS=$_" }) -join "`n")
+            $covered += "`n" + ((@((Get-GoTags $Root).Sets) | Where-Object { $_ } | ForEach-Object { "-tags=$_`n-tags $_" }) -join "`n")
             $script:Warnings += @(Get-CiGoGaps $Root $goEnv[0] $goEnv[1] $covered)
         }
         # The race detector catches a bug class go vet and golangci-lint structurally

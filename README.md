@@ -113,6 +113,7 @@ Place one optional `qgate.json` at the repository root. Tool-specific rules rema
 | `stopHook` | Opt-in, default off: only `true` makes `wire` add the Claude Code Stop hook and lets `qgate stop-hook` run the gate; anything else makes `wire` remove it. Re-run `wire` after changing it. |
 | `enabled` | `false` disables the global hook dispatcher for this repository. |
 | `timeouts.godot` | Positive per-process timeout in seconds; default 600. |
+| `go.tags` | Array of build-tag sets (`["valheim", "windrose"]`; `"a,b"` = both at once); every Go phase runs once per set via `GOFLAGS=-tags=<set>`, for tag-per-binary modules. |
 | `go.lintGoos` | Array of extra GOOS targets for full vet/lint; host target is omitted and cross-target runs disable cgo. |
 | `go.deterministic` | Array of root-relative package directories for purity/property-test advisories. |
 | `go.flaky` | `true` or options: `count` (20; 1..500), `budget` seconds (180; 10..3600), `cpu` (`"1,2"`), `race` (true), `fail` (false), `packages` (root-relative directories; otherwise changed test packages). |

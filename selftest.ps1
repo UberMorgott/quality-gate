@@ -650,6 +650,32 @@ $xOut = (Invoke-WithGoos $otherOs { go vet ./... 2>&1 } | Out-String); $xVet = $
 Pop-Location
 Check 'a clean other-GOOS file passes cross vet' ($xVet -eq 0) $xOut
 
+# #111: qgate.json go.tags -- a main package entirely behind build tags (one binary per
+# tag) runs every Go phase once per tag set. Without the key it cannot build; with it a
+# defect in one tag's file fails that set, and the clean module passes both.
+$tg = Join-Path $tmp 'go-tags'
+New-Item -ItemType Directory $tg -Force | Out-Null
+[IO.File]::WriteAllText((Join-Path $tg 'go.mod'), "module example.com/tags`n`ngo 1.22`n")
+Set-GoFile (Join-Path $tg 'main.go') "//go:build alpha || beta`n`npackage main`n`nfunc main() { run() }"
+Set-GoFile (Join-Path $tg 'run_alpha.go') "//go:build alpha`n`npackage main`n`nimport `"fmt`"`n`nfunc run() {`n`tfmt.Printf(`"%d`", `"not an int`")`n}"
+Set-GoFile (Join-Path $tg 'run_beta.go') "//go:build beta`n`npackage main`n`nfunc run() {}"
+Check 'no qgate.json go.tags key is no tag set' ($null -eq (Get-GoTags $tg))
+[IO.File]::WriteAllText((Join-Path $tg 'qgate.json'), '{"go": {"tags": "alpha"}}')
+Check 'a non-array go.tags is a named config error' ((Get-GoTags $tg).Error -match 'must be an array')
+[IO.File]::WriteAllText((Join-Path $tg 'qgate.json'), '{"go": {"tags": ["alpha beta"]}}')
+Check 'a malformed go.tags set is a named config error' ((Get-GoTags $tg).Error -match "'alpha beta' is not a build-tag set")
+$r = (& pwsh -NoProfile -File $gate -Root $tg -All 2>&1 | Out-String)
+Check 'a bad go.tags fails the gate by name' (($LASTEXITCODE -ne 0) -and ($r -match 'go\.tags')) $r
+[IO.File]::WriteAllText((Join-Path $tg 'qgate.json'), '{"go": {"tags": ["alpha", "beta", "alpha"]}}')
+Check 'go.tags keeps each set once' ((@((Get-GoTags $tg).Sets) -join '|') -eq 'alpha|beta')
+$r =(& pwsh -NoProfile -File $gate -Root $tg -All 2>&1 | Out-String)
+Check 'go.tags fails the set whose file has the defect' `
+    (($LASTEXITCODE -ne 0) -and ($r -match '\[PASS\] go build \[tags=alpha\]') -and ($r -match '\[FAIL\] go vet \[tags=alpha\]')) $r
+Set-GoFile (Join-Path $tg 'run_alpha.go') "//go:build alpha`n`npackage main`n`nimport `"fmt`"`n`nfunc run() {`n`tfmt.Println(`"ok`")`n}"
+$r = (& pwsh -NoProfile -File $gate -Root $tg -All 2>&1 | Out-String)
+Check 'a clean tag-only main package passes every tag set' `
+    (($LASTEXITCODE -eq 0) -and ($r -match '\[PASS\] go vet \[tags=alpha\]') -and ($r -match '\[PASS\] go test \[tags=beta\]')) $r
+
 # #44: -Fix rewrites what is fixable and the same run's gate passes; an unfixable defect
 # still fails it.
 $fx = Join-Path $tmp 'fix'

@@ -746,6 +746,28 @@ function Get-GoLintGoos([string]$Root, [string]$HostGoos) {
     [pscustomobject]@{ Goos = $goos; Error = '' }
 }
 
+# quality-gate#111: qgate.json {"go": {"tags": ["valheim", "windrose"]}} -- build-tag sets.
+# A repo whose main package lives entirely behind tags (one binary per tag) could never be
+# green, and its tagged files were never vetted or linted. Each entry is one set, as
+# `-tags` takes it ("a,b" = both at once); the Go stack runs once per set. Same contract as
+# Get-GoLintGoos: $null, or .Sets and .Error.
+function Get-GoTags([string]$Root) {
+    $file = Join-Path $Root 'qgate.json'
+    if (-not (Test-Path $file)) { return $null }
+    $json = try { Get-Content $file -Raw | ConvertFrom-Json } catch { $null }
+    if ($null -eq $json -or $null -eq $json.go -or $json.go.PSObject.Properties.Name -notcontains 'tags') { return $null }
+    $raw = $json.go.tags
+    $bad = { param($m) [pscustomobject]@{ Sets = @(); Error = $m } }
+    if ($raw -isnot [Array]) { return (& $bad 'qgate.json "go.tags" must be an array of build-tag sets, e.g. ["valheim", "windrose"]') }
+    $sets = @()
+    foreach ($e in $raw) {
+        if ($e -isnot [string] -or $e -notmatch '^[\w.]+(,[\w.]+)*$') { return (& $bad "qgate.json go.tags '$e' is not a build-tag set (tag names, comma-separated)") }
+        if ($e -notin $sets) { $sets += $e }
+    }
+    if (-not $sets) { return $null }
+    [pscustomobject]@{ Sets = $sets; Error = '' }
+}
+
 # quality-gate#103: qgate.json {"go": {"flaky": true}} -- re-run the CHANGED test packages
 # under constrained scheduling, where a test that treats a short wall-clock window as a
 # verdict ("no pong in 100ms" = "the client is dead") stops passing. Reported from the
