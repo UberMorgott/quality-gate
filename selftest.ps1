@@ -3795,6 +3795,39 @@ try {
     }
 } finally { $env:CMAKE_GENERATOR = $priorGen }
 
+# #113: inside a commit hook FetchContent's clone inherited the caller's GIT_INDEX_FILE
+# and checked the dependency out against it -- `_deps/<dep>-src` came back with every
+# file staged as deleted and none on disk (cmake 4.3.2, exit 0). A cold clone from a
+# local repository, run with the app's index exported the way git exports it to a hook.
+if ((Get-Command cmake -ErrorAction SilentlyContinue) -and (Get-Command git -ErrorAction SilentlyContinue)) {
+    $fcDep = Join-Path $tmp 'cpp-fc-dep'
+    $fcApp = Join-Path $tmp 'cpp-fc-app'
+    New-Item -ItemType Directory -Path $fcDep, $fcApp -Force | Out-Null
+    [IO.File]::WriteAllText((Join-Path $fcDep 'CMakeLists.txt'), "cmake_minimum_required(VERSION 3.20)`nproject(qgate_dep NONE)`n")
+    [IO.File]::WriteAllText((Join-Path $fcDep 'payload.txt'), "dep`n")
+    git -C $fcDep init -q -b main 2>$null
+    git -C $fcDep add -A 2>$null
+    git -C $fcDep -c user.email=qgate@test -c user.name=qgate commit -qm dep 2>$null
+    $fcSha = (git -C $fcDep rev-parse HEAD)
+    $fcUrl = 'file:///' + ($fcDep -replace '\\', '/')
+    [IO.File]::WriteAllText((Join-Path $fcApp 'CMakeLists.txt'), "cmake_minimum_required(VERSION 3.20)`nproject(qgate_app NONE)`n" +
+        "include(FetchContent)`nFetchContent_Declare(qgate_dep GIT_REPOSITORY $fcUrl GIT_TAG $fcSha)`nFetchContent_MakeAvailable(qgate_dep)`n")
+    git -C $fcApp init -q -b main 2>$null
+    git -C $fcApp add -A 2>$null
+    git -C $fcApp -c user.email=qgate@test -c user.name=qgate commit -qm app 2>$null
+    [IO.File]::WriteAllText((Join-Path $fcApp 'staged.txt'), "staged`n")
+    git -C $fcApp add staged.txt 2>$null
+    $fcBefore = (git -C $fcApp write-tree)
+    $priorIndex = $env:GIT_INDEX_FILE
+    $env:GIT_INDEX_FILE = Join-Path $fcApp '.git\index'
+    try { $out = (& pwsh -NoProfile -File $gate -Root $fcApp -Only cpp -All -Full 2>&1 | Out-String) }
+    finally { $env:GIT_INDEX_FILE = $priorIndex }
+    $fcAfter = (git -C $fcApp write-tree)
+    Check "a FetchContent clone in a commit hook does not check out against the caller's index" `
+        ((Test-Path (Join-Path $fcApp 'build\_deps\qgate_dep-src\payload.txt')) -and ($out -match '\[PASS\] configure')) $out
+    Check "cmake configure leaves the committing hook's index alone" ($fcBefore -eq $fcAfter) "before=$fcBefore after=$fcAfter"
+}
+
 # The two static-analysis phases read their file list out of a compile database, which
 # is CMake's answer: it names every translation unit the BUILD compiles, dependencies
 # included, and the findings arrive from wherever the preprocessor reached. Both

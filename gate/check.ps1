@@ -2121,27 +2121,37 @@ function Invoke-CppStack($s) {
     # cache recorded, or the one CMake would pick. Every other generator is single-config,
     # so the build type is a configure-time answer there.
     $vs = $IsWindows -and ((Get-CMakeGenerator $build) -like 'Visual Studio*')
-    Phase 'configure' {
-        # CMAKE_EXPORT_COMPILE_COMMANDS is what the two analysis phases below are
-        # driven by; it costs nothing where it works and is ignored where it does not.
-        if ($vs) { cmake -S $s.Dir -B $build -A x64 -DCMAKE_EXPORT_COMPILE_COMMANDS=ON }
-        else { cmake -S $s.Dir -B $build -DCMAKE_BUILD_TYPE=Release -DCMAKE_EXPORT_COMPILE_COMMANDS=ON }
-    }
-    # --config on both platforms: a multi-config generator needs it and a single-config
-    # one ignores it, so one code path covers the two.
-    Phase 'build' { cmake --build $build --config Release }
+    # GIT_INDEX_FILE is cleared for every cmake call below (#113), the same isolation
+    # buf breaking got in #38: inside a commit hook FetchContent's clone of a dependency
+    # inherits the CALLER's index, and its checkout runs against it -- measured with
+    # cmake 4.3.2 and git 2.53: configure exits 0 and leaves `_deps/<dep>-src` with every
+    # file staged as deleted and none on disk; a pinned godot-cpp aborts on "local
+    # changes" instead. Restored in finally: the staged-concurrency guard still needs it.
+    $priorIndex = $env:GIT_INDEX_FILE
+    $env:GIT_INDEX_FILE = $null
+    try {
+        Phase 'configure' {
+            # CMAKE_EXPORT_COMPILE_COMMANDS is what the two analysis phases below are
+            # driven by; it costs nothing where it works and is ignored where it does not.
+            if ($vs) { cmake -S $s.Dir -B $build -A x64 -DCMAKE_EXPORT_COMPILE_COMMANDS=ON }
+            else { cmake -S $s.Dir -B $build -DCMAKE_BUILD_TYPE=Release -DCMAKE_EXPORT_COMPILE_COMMANDS=ON }
+        }
+        # --config on both platforms: a multi-config generator needs it and a single-config
+        # one ignores it, so one code path covers the two.
+        Phase 'build' { cmake --build $build --config Release }
 
-    $cdb = Join-Path $build 'compile_commands.json'
-    $extra = @()
-    $noCdb = 'no compile database'
-    if (-not (Test-Path $cdb)) {
-        $fallback = Get-CppCompileDb $s.Dir $build
-        $cdb = $fallback.Db
-        if (-not $cdb) { $noCdb = $fallback.Why }
-        # Only the fallback tree needs them: a database the main tree wrote describes the
-        # tree the build phase built, generated headers and all.
-        if ($cdb) { $extra = @(Get-CppGeneratedIncludes $build | ForEach-Object { "--extra-arg=-I$_" }) }
-    }
+        $cdb = Join-Path $build 'compile_commands.json'
+        $extra = @()
+        $noCdb = 'no compile database'
+        if (-not (Test-Path $cdb)) {
+            $fallback = Get-CppCompileDb $s.Dir $build
+            $cdb = $fallback.Db
+            if (-not $cdb) { $noCdb = $fallback.Why }
+            # Only the fallback tree needs them: a database the main tree wrote describes the
+            # tree the build phase built, generated headers and all.
+            if ($cdb) { $extra = @(Get-CppGeneratedIncludes $build | ForEach-Object { "--extra-arg=-I$_" }) }
+        }
+    } finally { $env:GIT_INDEX_FILE = $priorIndex }
 
     # clang-tidy, driven by that database. Every finding is a [WARN] and none of them
     # fails the phase -- the same first pass the Roslyn analyzers got in 379f39d: the
