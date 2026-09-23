@@ -132,6 +132,24 @@ function Get-CppStaleTool([string]$Tree) {
     return $null
 }
 
+# The target a GCC-built database has to be analysed for (#114). clang-tidy takes the
+# compiler out of each entry, but not the target: clang on Windows defaults to
+# x86_64-pc-windows-msvc, so a MinGW database is parsed against the MSVC STL -- or, with
+# no Visual Studio installed, against nothing ("'string' file not found"). Told the
+# MinGW triple GCC itself reports, clang finds that toolchain's libstdc++ next to the
+# compiler the entry names. $null for anything but a GCC whose target is Windows-GNU:
+# elsewhere clang's default already is the build's target.
+function Get-CppTidyTarget([string]$Db) {
+    $e = try { @(Get-Content -LiteralPath $Db -Raw | ConvertFrom-Json)[0] } catch { $null }
+    $cc = if ($e.arguments) { "$($e.arguments[0])" }
+    elseif ("$($e.command)" -match '^\s*(?:"([^"]+)"|(\S+))') { "$($Matches[1])$($Matches[2])" }
+    if (-not $cc -or (Split-Path $cc -Leaf) -notmatch '(?i)^([\w.]+-)?(gcc|g\+\+|c\+\+|cc)(-[\d.]+)?(\.exe)?$') { return $null }
+    if (-not (Get-Command $cc -ErrorAction SilentlyContinue)) { return $null }
+    $t = "$(& $cc -dumpmachine 2>$null)".Trim()
+    if ($LASTEXITCODE -ne 0 -or $t -notmatch '(?i)mingw|windows-gnu|cygwin') { return $null }
+    return $t
+}
+
 function Get-RepoRoot([string]$StartDir) {
     $top = (& git -C $StartDir rev-parse --show-toplevel 2>$null)
     if ($LASTEXITCODE -eq 0 -and $top) { return (Resolve-Path ($top -replace '/', '\')).Path }

@@ -2184,16 +2184,32 @@ function Invoke-CppStack($s) {
         if ($files.Count -eq 0) {
             $script:Lines += '[SKIP] tidy -- no sources of this stack in the compile database'
         } else {
+            $target = Get-CppTidyTarget $cdb
+            if ($target) { $extra = @("--extra-arg-before=--target=$target") + $extra }
             Phase 'tidy' {
                 $o = (& clang-tidy -p (Split-Path $cdb) --quiet "--checks=$checks" @extra @files 2>&1 | Out-String)
                 $code = $LASTEXITCODE
+                # #114: a GCC-only flag (godot-cpp's -fno-gnu-unique under MinGW) is a
+                # driver error that drops the whole translation unit before a line of it
+                # is parsed. Those flags change code generation, not what the source
+                # means, so the run is repeated without them -- whole, because the unknown
+                # argument names no unit and a partial rerun would count the rest twice --
+                # where clang-tidy can remove an argument at all.
+                $unknown = @([regex]::Matches($o, "(?m)error: unknown argument: '([^']+)'") | ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique)
+                if ($unknown -and ((& clang-tidy --help 2>&1 | Out-String) -match '--removed-arg')) {
+                    $removed = @($unknown | ForEach-Object { "--removed-arg=$_" })
+                    $o = (& clang-tidy -p (Split-Path $cdb) --quiet "--checks=$checks" @removed @extra @files 2>&1 | Out-String)
+                    $code = $LASTEXITCODE
+                    $unknown = @([regex]::Matches($o, "(?m)error: unknown argument: '([^']+)'") | ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique)
+                }
+                if ($unknown) { $script:Lines += "[WARN] tidy: translation unit(s) not analysed -- clang rejects $($unknown -join ', ') and this clang-tidy cannot --removed-arg it" }
                 $hits = @([regex]::Matches($o, '(?m)^(.+?):\d+:\d+: warning: .*\[([a-z0-9-]+)\]\s*$') |
                     Where-Object { Test-CppOwn $_.Groups[1].Value $s.Dir })
                 # A translation unit clang could not parse produced no findings and is not
                 # therefore clean. It is also not a verdict on the code: the file compiles,
                 # with the compiler the build phase used. Counted and named, never silent.
                 $errs = @([regex]::Matches($o, '(?m)^.+?:\d+:\d+: error: ')).Count
-                if ($code -ne 0 -and $hits.Count -eq 0 -and $errs -eq 0) { $o; return }
+                if ($code -ne 0 -and $hits.Count -eq 0 -and $errs -eq 0 -and -not $unknown) { $o; return }
                 if ($Baseline) { $hits = @(Select-BaselineHits $hits 'tidy' $s.Dir) }
                 if ($hits.Count) {
                     $top = (@($hits | Group-Object { $_.Groups[2].Value } | Sort-Object Count, Name -Descending |

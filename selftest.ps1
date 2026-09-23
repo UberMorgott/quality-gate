@@ -3999,6 +3999,31 @@ if ((Get-Command clang-tidy -ErrorAction SilentlyContinue) -and ($cdbOk -or -not
     $anOut = $out
 }
 
+# #114: a MinGW database. clang-tidy has to be told GCC's Windows-GNU target (its default
+# on Windows is MSVC, whose STL is not the build's -- or absent), and a GCC-only flag
+# clang rejects must not drop the unit unparsed. The defect is the proof it was parsed.
+$gxx = Get-Command c++ -ErrorAction SilentlyContinue
+$mingw = $IsWindows -and $gxx -and ("$(& $gxx.Source -dumpmachine 2>$null)" -match 'mingw') -and
+    (Get-Command ninja -ErrorAction SilentlyContinue) -and (Get-Command clang-tidy -ErrorAction SilentlyContinue) -and
+    ((& clang-tidy --help 2>&1 | Out-String) -match '--removed-arg')
+if ($mingw) {
+    $gnuDb = Join-Path $tmp 'cpp-gnu-db.json'
+    Set-Content $gnuDb (ConvertTo-Json -InputObject @(@{ directory = $tmp; file = 'a.cpp'; arguments = @($gxx.Source, '-c', 'a.cpp') }))
+    Check 'a MinGW GCC database is analysed for its own target' ((Get-CppTidyTarget $gnuDb) -match 'mingw') (Get-CppTidyTarget $gnuDb)
+    Set-Content $gnuDb (ConvertTo-Json -InputObject @(@{ directory = $tmp; file = 'a.cpp'; command = 'clang-cl /c a.cpp' }))
+    Check 'a clang-cl database keeps clang''s own target' ($null -eq (Get-CppTidyTarget $gnuDb)) (Get-CppTidyTarget $gnuDb)
+
+    $cppGnu = Join-Path $tmp 'cpp-gnu'
+    New-Item -ItemType Directory -Path (Join-Path $cppGnu 'src') -Force | Out-Null
+    Set-Content (Join-Path $cppGnu 'CMakeLists.txt') "cmake_minimum_required(VERSION 3.16)`nproject(qgate_gnu CXX)`nadd_library(qgate_gnu STATIC src/a.cpp)`ntarget_compile_options(qgate_gnu PRIVATE -fno-gnu-unique)"
+    [IO.File]::WriteAllText((Join-Path $cppGnu 'src\a.cpp'),
+        "#include <string>`ndouble qgate_gnu(const std::string& s, int b) { return (double)((int)s.size() / b); }`n")
+    & cmake -S $cppGnu -B (Join-Path $cppGnu 'build') -G Ninja "-DCMAKE_CXX_COMPILER=$($gxx.Source)" 2>&1 | Out-Null
+    $out = (& pwsh -NoProfile -File $gate -Root $cppGnu -Only cpp -All -Full 2>&1 | Out-String)
+    Check 'a MinGW translation unit with a GCC-only flag is analysed' `
+        (($out -match 'bugprone-integer-division') -and ($out -notmatch 'not analysed') -and ($out -match '\[PASS\] tidy')) $out
+}
+
 # #106: cppcheck's --project analyses EVERY entry of the database before its findings
 # are filtered -- 1022 godot-cpp units of 1027 on CodeDungeon, 45 minutes. It gets a
 # copy holding only the stack's own entries, each kept whole with its flags.
