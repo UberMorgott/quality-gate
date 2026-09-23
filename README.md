@@ -118,6 +118,7 @@ Place one optional `qgate.json` at the repository root. Tool-specific rules rema
 | `go.deterministic` | Array of root-relative package directories for purity/property-test advisories. |
 | `go.flaky` | `true` or options: `count` (20; 1..500), `budget` seconds (180; 10..3600), `cpu` (`"1,2"`), `race` (true), `fail` (false), `packages` (root-relative directories; otherwise changed test packages). |
 | `dotnet` | `sonar: true` enables cached Sonar analyzers; `inspectcode: true` enables JetBrains inspection; `testRunner: "fail"` makes executable test-runner failures blocking. |
+| `web.buildDrift` | `"fail"` makes the web `build drift` advisory (committed bundle differs from a fresh build) blocking. |
 | `harmony.assemblies` | Additional assembly path/glob array, with `%VAR%` expansion and recursive `**`; findings in these other assemblies are advisory. |
 | `deploy` | Array of `{ "built": "path", "deployed": "path" }` pairs; root-relative or absolute paths with `%VAR%` expansion, compared in full runs without trust. |
 
@@ -228,6 +229,7 @@ Detected by `package.json` plus `vite.config.*`, `next.config.*`, `webpack.confi
 | `knip` | Advisory (`-All`/full) | Local Knip; skip if missing/unconfigured | Reports unused files, dependencies, and exports to expose dead project code. |
 | `type-check` | Fast | npm script or local vue-tsc/tsc | Runs `type-check`, otherwise checks `tsconfig.json` without emitting; missing compiler with a tsconfig fails. |
 | `build` | Full and default; skipped by `-Fast` alone | npm + project bundler | Runs `build-only` or `build` when declared to catch bundling failures. |
+| `build drift` | Advisory, with `build`; blocking with `web.buildDrift: "fail"` | Git | When the build output directory (vite `outDir` if written literally, else `dist`) has tracked files, reports committed output the build newly changed/deleted and new untracked output, so a committed bundle matches its sources; changed files are restored afterwards. |
 | `test` | Full | npm + project test runner | Runs the declared test script with `CI=1`, a 600-second timeout, and child-process leak detection to catch failed or hanging tests. |
 | `npm audit` | Full | npm | Rejects high/critical dependency vulnerabilities; skips without `package-lock.json` or `npm-shrinkwrap.json`. |
 

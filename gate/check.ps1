@@ -1574,6 +1574,49 @@ function Invoke-DotnetStack($s) {
     else { $script:Lines += '[SKIP] vuln -- no package references' }
 }
 
+# quality-gate#115: the bundle a repository COMMITS (dist/ embedded by Go, served as-is)
+# when any file under the build output directory is tracked. `outDir` from the vite config
+# if it names one literally, else `dist`. $null when the output is not in the index --
+# an untracked or ignored bundle is nobody's committed truth -- or outside the work tree.
+function Get-WebBuildOut($s) {
+    $top = (& git -C $s.Dir rev-parse --show-toplevel 2>$null)
+    if ($LASTEXITCODE -ne 0 -or -not $top) { return $null }
+    $top = $top -replace '/', '\'
+    $out = 'dist'
+    $cfg = Get-ChildItem $s.Dir -File -Filter 'vite.config.*' -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($cfg -and (Get-Content -LiteralPath $cfg.FullName -Raw) -match '\boutDir\s*:\s*[''"`]([^''"`]+)[''"`]') { $out = $Matches[1] }
+    $rel = [IO.Path]::GetRelativePath($top, [IO.Path]::GetFullPath((Join-Path $s.Dir $out))) -replace '\\', '/'
+    if ($rel -eq '.' -or $rel -like '../*' -or $rel -eq '..' -or [IO.Path]::IsPathRooted($rel)) { return $null }
+    if (-not (& git -C $top ls-files -- $rel | Select-Object -First 1)) { return $null }
+    [pscustomobject]@{ Top = $top; Rel = $rel }
+}
+
+# After the build: committed output the build changed or deleted, and output it made that
+# was never committed. Advisory unless qgate.json {"web": {"buildDrift": "fail"}}. Changed
+# files are put back, as `buf generate drift` does -- a check must not leave the tree modified.
+function Test-WebBuildDrift($Drift, $WasDirty, $WasNew, [string]$Script, $s) {
+    $top = $Drift.Top
+    $dirty = @(& git -C $top diff --name-only -- $Drift.Rel | Where-Object { $_ -and $WasDirty -notcontains $_ })
+    $new = @(& git -C $top ls-files --others --exclude-standard -- $Drift.Rel | Where-Object { $_ -and $WasNew -notcontains $_ })
+    if ($dirty) { & git -C $top checkout -- @dirty *>&1 | Out-Null }
+    $where = if ($s.Rel) { $s.Rel } else { '.' }
+    $detail = @(foreach ($p in $dirty) { "changed by the build: $p" }) + @(foreach ($p in $new) { "built but never committed: $p" })
+    $fix = "fix: run ``npm run $Script`` in $where and commit $($Drift.Rel)/"
+    $cfg = $null
+    $f = Join-Path $Root 'qgate.json'
+    if (Test-Path -LiteralPath $f) { try { $cfg = (Get-Content -LiteralPath $f -Raw | ConvertFrom-Json).web } catch { $cfg = $null } }
+    if ($cfg -and $cfg.buildDrift -eq 'fail') {
+        Phase 'build drift' {
+            if ($detail) { $detail; $fix; $global:LASTEXITCODE = 1 }
+        }
+    } elseif ($detail) {
+        $script:Warnings += @("[WARN] build drift: committed $($Drift.Rel)/ does not match a fresh ``npm run $Script`` ($($detail.Count) file(s)) -- advisory; qgate.json {`"web`": {`"buildDrift`": `"fail`"}} makes it a failure") +
+            @($detail | ForEach-Object { "       $_" }) + "       $fix"
+    } else {
+        Phase 'build drift' { }
+    }
+}
+
 function Invoke-WebStack($s) {
     Set-Location $s.Dir
     $bin = Join-Path $s.Dir 'node_modules\.bin'
@@ -1635,7 +1678,17 @@ function Invoke-WebStack($s) {
     # The expensive one (bundling): full level only.
     if (-not ($Fast -and -not $Full)) {
         $buildScript = @('build-only', 'build') | Where-Object { $scripts -contains $_ } | Select-Object -First 1
-        if ($buildScript) { Phase 'build' { npm run $buildScript } }
+        if ($buildScript) {
+            $drift = Get-WebBuildOut $s
+            if ($drift) {
+                # Snapshotted first, as `buf generate drift` does: an edit already in the
+                # tree is the user's, not the build's.
+                $wasDirty = @(& git -C $drift.Top diff --name-only -- $drift.Rel)
+                $wasNew = @(& git -C $drift.Top ls-files --others --exclude-standard -- $drift.Rel)
+            }
+            Phase 'build' { npm run $buildScript }
+            if ($drift -and -not $script:Failed) { Test-WebBuildDrift $drift $wasDirty $wasNew $buildScript $s }
+        }
     }
     # The repository's own declared test script, full level only -- the same split
     # `build` above uses, and for the same reason: the fast lane runs on every agent

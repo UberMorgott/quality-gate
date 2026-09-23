@@ -4837,6 +4837,53 @@ Check 'knip findings are an advisory warning, not a failure' `
 $out = (& pwsh -NoProfile -File $gate -Root $wc -Only 'web' -Fast 2>&1 | Out-String)
 Check 'the fast lane does not run knip' ($out -notmatch 'knip:') $out
 
+# #115: a repository that commits its bundle (dist/ embedded by Go) went green with a stale
+# dist/ -- the build ran and nobody looked at what it changed. The stand-in build writes
+# dist/app.js and dist/chunk-<src>.js from src.txt, so editing src.txt drifts both.
+if (Get-Command node -ErrorAction SilentlyContinue) {
+    $wd = Join-Path $tmp 'webdrift'
+    New-Item -ItemType Directory -Path (Join-Path $wd 'node_modules\.bin'), (Join-Path $wd 'dist') -Force | Out-Null
+    [IO.File]::WriteAllText((Join-Path $wd 'package.json'), '{"name":"webdrift","private":true,"scripts":{"build":"node build.js"}}')
+    [IO.File]::WriteAllText((Join-Path $wd 'build.js'),
+        "const fs = require('fs'); const v = fs.readFileSync('src.txt', 'utf8').trim(); fs.writeFileSync('dist/app.js', v + '\n'); fs.writeFileSync('dist/chunk-' + v + '.js', v + '\n');`n")
+    Set-Content (Join-Path $wd 'vite.config.js') 'export default {}'
+    Set-Content (Join-Path $wd '.gitignore') 'node_modules/'
+    [IO.File]::WriteAllText((Join-Path $wd 'src.txt'), "v1`n")
+    [IO.File]::WriteAllText((Join-Path $wd 'dist\app.js'), "v1`n")
+    [IO.File]::WriteAllText((Join-Path $wd 'dist\chunk-v1.js'), "v1`n")
+    git -C $wd init -q -b main 2>&1 | Out-Null
+    git -C $wd config core.autocrlf false
+    git -C $wd add -A 2>&1 | Out-Null
+    git -C $wd -c user.email=selftest@local -c user.name=selftest commit -qm base --no-verify *> $null
+    $out = (& pwsh -NoProfile -File $gate -Root $wd -Only 'web' -Full 2>&1 | Out-String); $wdCode = $LASTEXITCODE
+    Check 'a build that reproduces the committed dist/ is no drift' `
+        (($wdCode -eq 0) -and ($out -match '(?m)^\[PASS\] build drift') -and ($out -notmatch '\[WARN\] build drift')) "code=$wdCode $out"
+    [IO.File]::WriteAllText((Join-Path $wd 'src.txt'), "v2`n")
+    $out = (& pwsh -NoProfile -File $gate -Root $wd -Only 'web' -Full 2>&1 | Out-String); $wdCode = $LASTEXITCODE
+    Check 'a stale committed dist/ is an advisory warning naming the paths and the fix' `
+        (($wdCode -eq 0) -and ($out -match '\[WARN\] build drift: committed dist/ does not match') -and
+            ($out -match 'changed by the build: dist/app\.js') -and ($out -match 'built but never committed: dist/chunk-v2\.js') -and
+            ($out -match 'fix: run `npm run build` in \. and commit dist/') -and ($out -notmatch '\[FAIL\] build drift')) "code=$wdCode $out"
+    Check 'the drift check puts the committed files back' (-not (& git -C $wd diff --name-only -- dist)) (& git -C $wd status --short | Out-String)
+    Remove-Item (Join-Path $wd 'dist\chunk-v2.js')
+    Set-Content (Join-Path $wd 'qgate.json') '{"web": {"buildDrift": "fail"}}'
+    $out = (& pwsh -NoProfile -File $gate -Root $wd -Only 'web' -Full 2>&1 | Out-String); $wdCode = $LASTEXITCODE
+    Check 'qgate.json web.buildDrift "fail" makes a stale dist/ a failure' `
+        (($wdCode -ne 0) -and ($out -match '(?m)^\[FAIL\] build drift') -and ($out -match 'changed by the build: dist/app\.js') -and
+            ($out -notmatch '\[WARN\] build drift')) "code=$wdCode $out"
+    Remove-Item (Join-Path $wd 'dist\chunk-v2.js')
+    # An untracked, ignored bundle is nobody's committed truth: no check at all.
+    git -C $wd rm -r -q --cached dist 2>&1 | Out-Null
+    Add-Content (Join-Path $wd '.gitignore') 'dist/'
+    git -C $wd add -A 2>&1 | Out-Null
+    git -C $wd -c user.email=selftest@local -c user.name=selftest commit -qm untrack --no-verify *> $null
+    $out = (& pwsh -NoProfile -File $gate -Root $wd -Only 'web' -Full 2>&1 | Out-String); $wdCode = $LASTEXITCODE
+    Check 'an untracked dist/ gets no drift check' `
+        (($wdCode -eq 0) -and ($out -match '(?m)^\[PASS\] build') -and ($out -notmatch 'build drift')) "code=$wdCode $out"
+} else {
+    Write-Output '[skip] node not on PATH -- the web build drift check cannot be judged here'
+}
+
 }
 
 if (Want 'bootstrap') {
