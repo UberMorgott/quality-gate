@@ -4864,14 +4864,13 @@ if (Get-Command node -ErrorAction SilentlyContinue) {
         (($wdCode -eq 0) -and ($out -match '\[WARN\] build drift: committed dist/ does not match') -and
             ($out -match 'changed by the build: dist/app\.js') -and ($out -match 'built but never committed: dist/chunk-v2\.js') -and
             ($out -match 'fix: run `npm run build` in \. and commit dist/') -and ($out -notmatch '\[FAIL\] build drift')) "code=$wdCode $out"
-    Check 'the drift check puts the committed files back' (-not (& git -C $wd diff --name-only -- dist)) (& git -C $wd status --short | Out-String)
-    Remove-Item (Join-Path $wd 'dist\chunk-v2.js')
+    Check 'the drift check puts the committed files back and removes new output' `
+        ((-not (& git -C $wd diff --name-only -- dist)) -and -not (Test-Path (Join-Path $wd 'dist\chunk-v2.js'))) (& git -C $wd status --short | Out-String)
     Set-Content (Join-Path $wd 'qgate.json') '{"web": {"buildDrift": "fail"}}'
     $out = (& pwsh -NoProfile -File $gate -Root $wd -Only 'web' -Full 2>&1 | Out-String); $wdCode = $LASTEXITCODE
     Check 'qgate.json web.buildDrift "fail" makes a stale dist/ a failure' `
         (($wdCode -ne 0) -and ($out -match '(?m)^\[FAIL\] build drift') -and ($out -match 'changed by the build: dist/app\.js') -and
             ($out -notmatch '\[WARN\] build drift')) "code=$wdCode $out"
-    Remove-Item (Join-Path $wd 'dist\chunk-v2.js')
     # An untracked, ignored bundle is nobody's committed truth: no check at all.
     git -C $wd rm -r -q --cached dist 2>&1 | Out-Null
     Add-Content (Join-Path $wd '.gitignore') 'dist/'

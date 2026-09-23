@@ -1593,12 +1593,14 @@ function Get-WebBuildOut($s) {
 
 # After the build: committed output the build changed or deleted, and output it made that
 # was never committed. Advisory unless qgate.json {"web": {"buildDrift": "fail"}}. Changed
-# files are put back, as `buf generate drift` does -- a check must not leave the tree modified.
+# files are put back and new output removed -- a check must not leave the tree modified.
 function Test-WebBuildDrift($Drift, $WasDirty, $WasNew, [string]$Script, $s) {
     $top = $Drift.Top
     $dirty = @(& git -C $top diff --name-only -- $Drift.Rel | Where-Object { $_ -and $WasDirty -notcontains $_ })
     $new = @(& git -C $top ls-files --others --exclude-standard -- $Drift.Rel | Where-Object { $_ -and $WasNew -notcontains $_ })
     if ($dirty) { & git -C $top checkout -- @dirty *>&1 | Out-Null }
+    # New hashed chunks next to a restored index.html would be orphans a `git add -A` commits.
+    foreach ($p in $new) { Remove-Item -LiteralPath (Join-Path $top $p) -Force -ErrorAction SilentlyContinue }
     $where = if ($s.Rel) { $s.Rel } else { '.' }
     $detail = @(foreach ($p in $dirty) { "changed by the build: $p" }) + @(foreach ($p in $new) { "built but never committed: $p" })
     $fix = "fix: run ``npm run $Script`` in $where and commit $($Drift.Rel)/"
