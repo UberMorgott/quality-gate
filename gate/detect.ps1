@@ -541,8 +541,42 @@ function Get-GoleakGaps([string]$Dir) {
 # it -- the gate would have turned its own warning into a verdict. So a file this run
 # created is printed into the warning (enough to re-create it) and removed.
 # ponytail: sequential; targets beyond the budget are skipped, not rotated between runs.
-function Invoke-GoFuzz([string]$Dir, [int]$PerTargetSec = 10, [int]$BudgetSec = 60) {
+# quality-gate#118: `go test -fuzz` starts GOMAXPROCS workers, each its own pkg.test
+# process -- dozens on a many-core box, enough to exhaust RAM and the paging file. So
+# -parallel is capped (half the cores, 1..4) and every worker gets a GOMEMLIMIT soft cap.
+# qgate.json go.fuzzParallel / go.fuzzMemLimit override; an inherited GOMEMLIMIT is kept.
+function Get-GoFuzzLimits([string]$Root) {
+    $cfg = [pscustomobject]@{
+        Parallel = [Math]::Max(1, [Math]::Min(4, [Math]::Floor([Environment]::ProcessorCount / 2)))
+        MemLimit = if ($env:GOMEMLIMIT) { $env:GOMEMLIMIT } else { '2GiB' }
+        Error    = ''
+    }
+    $file = Join-Path $Root 'qgate.json'
+    if (-not (Test-Path $file)) { return $cfg }
+    $json = try { Get-Content $file -Raw | ConvertFrom-Json } catch { $null }
+    if ($null -eq $json -or $null -eq $json.go) { return $cfg }
+    $names = $json.go.PSObject.Properties.Name
+    if ($names -contains 'fuzzParallel') {
+        $v = $json.go.fuzzParallel
+        if (($v -isnot [int] -and $v -isnot [long]) -or $v -lt 1 -or $v -gt 256) { $cfg.Error = 'qgate.json "go.fuzzParallel" must be a number of fuzz workers between 1 and 256' }
+        else { $cfg.Parallel = [int]$v }
+    }
+    if ($names -contains 'fuzzMemLimit') {
+        $v = $json.go.fuzzMemLimit
+        if ($v -isnot [string] -or $v -notmatch '^\d+(B|KiB|MiB|GiB|TiB)?$') { $cfg.Error = 'qgate.json "go.fuzzMemLimit" must be a GOMEMLIMIT value like "2GiB"' }
+        else { $cfg.MemLimit = $v }
+    }
+    $cfg
+}
+
+function Get-GoFuzzArgs([string]$Pkg, [string]$Name, [int]$PerTargetSec, [int]$Parallel) {
+    @('test', '-run=^$', "-fuzz=^$Name$", "-fuzztime=$($PerTargetSec)s", "-parallel=$Parallel", $Pkg)
+}
+
+function Invoke-GoFuzz([string]$Dir, [int]$PerTargetSec = 10, [int]$BudgetSec = 60, $Limits = (Get-GoFuzzLimits $Dir)) {
     $prev = $global:LASTEXITCODE
+    $prevMem = $env:GOMEMLIMIT
+    $env:GOMEMLIMIT = $Limits.MemLimit
     Push-Location $Dir
     $res = [pscustomobject]@{ Ran = 0; Warn = @() }
     try {
@@ -563,7 +597,8 @@ function Invoke-GoFuzz([string]$Dir, [int]$PerTargetSec = 10, [int]$BudgetSec = 
             # The outermost directory the run may create: removed whole if it did.
             $created = @('testdata', 'testdata/fuzz', "testdata/fuzz/$($t.Name)") | ForEach-Object { Join-Path $pkgDir[$t.Pkg] $_ } |
                 Where-Object { -not (Test-Path $_) } | Select-Object -First 1
-            $out = (& go test -run='^$' "-fuzz=^$($t.Name)$" "-fuzztime=$($PerTargetSec)s" $t.Pkg 2>&1 | Out-String)
+            $goArgs = Get-GoFuzzArgs $t.Pkg $t.Name $PerTargetSec $Limits.Parallel
+            $out = (& go @goArgs 2>&1 | Out-String)
             $res.Ran++
             if ($LASTEXITCODE -eq 0) { continue }
             $new = @(Get-ChildItem $corpus -File -ErrorAction SilentlyContinue | Where-Object { $_.FullName -notin $before })
@@ -577,7 +612,7 @@ function Invoke-GoFuzz([string]$Dir, [int]$PerTargetSec = 10, [int]$BudgetSec = 
             if ($created -and (Test-Path $created)) { Remove-Item $created -Recurse -Force -ErrorAction SilentlyContinue }
         }
         if ($skipped) { $res.Warn += "[WARN] go fuzz: budget ${BudgetSec}s spent -- not run: $($skipped -join ', ')" }
-    } finally { Pop-Location; $global:LASTEXITCODE = $prev }
+    } finally { Pop-Location; $global:LASTEXITCODE = $prev; $env:GOMEMLIMIT = $prevMem }
     $res
 }
 

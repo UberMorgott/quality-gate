@@ -458,6 +458,25 @@ $fr = Invoke-GoFuzz $fz 2 60
 Check 'a fuzz target that holds runs and warns nothing' (($fr.Ran -eq 1) -and -not $fr.Warn) ($fr.Warn -join "`n")
 $fr = Invoke-GoFuzz $fz 2 1
 Check 'a fuzz target past the budget is named, not dropped' (($fr.Ran -eq 0) -and (($fr.Warn -join ' ') -match 'budget 1s spent -- not run: FuzzAdd')) ($fr.Warn -join "`n")
+# #118: fuzz workers are capped (half the cores, 1..4) and get a GOMEMLIMIT; qgate.json
+# overrides both, a bad value is named, and the caller's GOMEMLIMIT is restored after.
+$memPrev = $env:GOMEMLIMIT; $env:GOMEMLIMIT = $null
+$fzl = Get-GoFuzzLimits $fz
+$fzWant = [Math]::Max(1, [Math]::Min(4, [Math]::Floor([Environment]::ProcessorCount / 2)))
+Check 'fuzz workers default to half the cores, capped at 4, and 2GiB' (($fzl.Parallel -eq $fzWant) -and ($fzl.Parallel -le 4) -and ($fzl.MemLimit -eq '2GiB') -and -not $fzl.Error) "$($fzl | ConvertTo-Json -Compress)"
+Check 'the go fuzz command passes -parallel' ((Get-GoFuzzArgs 'm/p' 'FuzzAdd' 5 3) -contains '-parallel=3') "$(Get-GoFuzzArgs 'm/p' 'FuzzAdd' 5 3)"
+$env:GOMEMLIMIT = '512MiB'
+Check 'an inherited GOMEMLIMIT is kept' ((Get-GoFuzzLimits $fz).MemLimit -eq '512MiB')
+[IO.File]::WriteAllText((Join-Path $fz 'qgate.json'), '{"go": {"fuzzParallel": 2, "fuzzMemLimit": "1GiB"}}')
+$fzl = Get-GoFuzzLimits $fz
+Check 'qgate.json overrides fuzz workers and memory limit' (($fzl.Parallel -eq 2) -and ($fzl.MemLimit -eq '1GiB') -and -not $fzl.Error) "$($fzl | ConvertTo-Json -Compress)"
+$fr = Invoke-GoFuzz $fz 1 60
+Check 'fuzzing restores the caller GOMEMLIMIT' (($fr.Ran -eq 1) -and ($env:GOMEMLIMIT -eq '512MiB')) "GOMEMLIMIT=$env:GOMEMLIMIT $($fr.Warn -join "`n")"
+[IO.File]::WriteAllText((Join-Path $fz 'qgate.json'), '{"go": {"fuzzParallel": 0, "fuzzMemLimit": "lots"}}')
+$fzl = Get-GoFuzzLimits $fz
+Check 'a bad fuzz limit is named and the default kept' (($fzl.Error -match 'go\.fuzz') -and ($fzl.Parallel -eq $fzWant) -and ($fzl.MemLimit -eq '512MiB')) "$($fzl | ConvertTo-Json -Compress)"
+Remove-Item (Join-Path $fz 'qgate.json')
+$env:GOMEMLIMIT = $memPrev
 
 # #51: an unreachable function is warned; the clean fixture, a helper only its tests call,
 # and a module with no main package and no tests (no program to walk) are not.

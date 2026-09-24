@@ -117,6 +117,8 @@ Place one optional `qgate.json` at the repository root. Tool-specific rules rema
 | `go.lintGoos` | Array of extra GOOS targets for full vet/lint; host target is omitted and cross-target runs disable cgo. |
 | `go.deterministic` | Array of root-relative package directories for purity/property-test advisories. |
 | `go.flaky` | `true` or options: `count` (20; 1..500), `budget` seconds (180; 10..3600), `cpu` (`"1,2"`), `race` (true), `fail` (false), `packages` (root-relative directories; otherwise changed test packages). |
+| `go.fuzzParallel` | Fuzz worker processes per target (`go test -parallel`); default half the cores, 1..4; allowed 1..256. |
+| `go.fuzzMemLimit` | `GOMEMLIMIT` for fuzz runs (`"2GiB"`); default an inherited `GOMEMLIMIT`, else `2GiB`. |
 | `dotnet` | `sonar: true` enables cached Sonar analyzers; `inspectcode: true` enables JetBrains inspection; `testRunner: "fail"` makes executable test-runner failures blocking. |
 | `web.buildDrift` | `"fail"` makes the web `build drift` advisory (committed bundle differs from a fresh build) blocking. |
 | `harmony.assemblies` | Additional assembly path/glob array, with `%VAR%` expansion and recursive `**`; findings in these other assemblies are advisory. |
@@ -178,7 +180,7 @@ The runner also validates requested stacks/revisions and tool pins, rejects an u
 | `purity` | Advisory (full, opt-in) | Go + bundled checker; golangci-lint for API bans | Examines deterministic packages for nondeterministic APIs and constructs that can cause divergent results. |
 | `property tests` | Advisory (full, opt-in) | None | Flags deterministic packages without property/fuzz tests to identify missing invariant coverage. |
 | `flaky tests` | Advisory (full, opt-in); blocking with `fail: true` | Go; gcc for race mode | Scans fragile test deadlines and reruns selected packages under constrained scheduling to expose timing failures. |
-| `go fuzz` | Advisory (full) | Go | Exercises fuzz targets for 10 seconds each within a 60-second module budget to find unexpected inputs. |
+| `go fuzz` | Advisory (full) | Go | Exercises fuzz targets for 10 seconds each within a 60-second module budget to find unexpected inputs; workers and memory are capped (`go.fuzzParallel`, `go.fuzzMemLimit`). |
 | `deadcode` | Advisory (full) | deadcode; skip if missing/stale | Reports unreachable functions so unused implementation can be reviewed. cgo `//export` functions (a c-shared/c-archive C ABI) and same-package functions they reach are treated as live. With `go.tags`, runs once per set (`-tags <set>`) and reports only functions unreachable in every set. |
 | `gremlins` | Advisory (`-Mutate`) | gremlins; skip if missing/stale | Mutates Go code and reports surviving mutants to reveal weak assertions. |
 

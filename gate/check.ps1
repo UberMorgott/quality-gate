@@ -850,7 +850,9 @@ function Invoke-GoStackOnce($s) {
                 }
             }
             $fsw = [Diagnostics.Stopwatch]::StartNew()
-            $fuzz = Invoke-WithoutHookGitEnv { Invoke-GoFuzz $s.Dir }
+            $fzl = Get-GoFuzzLimits $Root
+            if ($fzl.Error) { $script:Warnings += "[WARN] $($fzl.Error)" }
+            $fuzz = Invoke-WithoutHookGitEnv { Invoke-GoFuzz $s.Dir -Limits $fzl }
             if ($fuzz.Ran) { $script:Lines += "$(if ($fuzz.Warn -match ' failed -- ') { '[WARN]' } else { '[PASS]' }) go fuzz $($fuzz.Ran) target(s) ($($fsw.Elapsed.TotalSeconds.ToString('0.0', [Globalization.CultureInfo]::InvariantCulture))s)" }
             $script:Warnings += @($fuzz.Warn)
             if (-not (Have 'deadcode')) {
