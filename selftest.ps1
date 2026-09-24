@@ -2491,6 +2491,24 @@ Set-GoFile (Join-Path $track 'server\main.go') ((Get-Content (Join-Path $track '
 $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $track 2>&1 | Out-String)
 Check 'a tracked edit narrows to its own stack' (($out -match '\[PASS\] go server/') -and ($out -notmatch 'proto')) $out
 
+# 21b (#117). go.mod at the repository root gives the go stack Rel '', which owned
+# no path prefix: every .go edit in the most common Go layout "belonged to no stack"
+# and widened the run. A root stack claims its own source files; a root README still
+# belongs to nobody and must still widen.
+$rootGo = Join-Path $tmp 'rootgo'
+Copy-Item (Join-Path $PSScriptRoot 'testdata\go-fixture') $rootGo -Recurse
+Copy-Item (Join-Path $PSScriptRoot 'testdata\python-fixture') (Join-Path $rootGo 'tools') -Recurse
+git -C $rootGo init -q 2>$null
+git -C $rootGo add -A 2>$null
+git -C $rootGo -c user.email=selftest@local -c user.name=selftest commit -qm init 2>$null
+Set-GoFile (Join-Path $rootGo 'main_test.go') ((Get-Content (Join-Path $rootGo 'main_test.go') -Raw) + "`n// a tracked edit`n")
+$out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $rootGo 2>&1 | Out-String)
+Check 'a _test.go under a root go.mod narrows to go' (($out -match '\[PASS\] go') -and ($out -notmatch 'belongs to no stack') -and ($out -notmatch 'python')) $out
+git -C $rootGo checkout -- . 2>$null
+[IO.File]::WriteAllText((Join-Path $rootGo 'README.md'), "a root file, owned by no stack`n")
+$out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $rootGo 2>&1 | Out-String)
+Check 'a non-source root file beside a root go.mod still widens' ($out -match 'README\.md belongs to no stack') $out
+
 }
 
 if (Want 'hooks') {

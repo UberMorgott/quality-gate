@@ -378,11 +378,29 @@ if ($ParallelStacks) {
         # ever select it -- it is added back below rather than left out of every
         # narrowed run, which is every agent turn.
         $baseStack = @($stacks | Where-Object { $_.Stack -eq 'base' })
+        # #117: a stack whose marker sits at the repository root (go.mod next to
+        # .git) has Rel '' and so owns no directory prefix -- every file of the
+        # most common Go layout "belonged to no stack" and widened the run. A root
+        # stack instead claims a path by its own source files; anything else at
+        # the root (CI config, scripts, README) still widens.
+        $rootOwns = @{
+            go     = '(\.go|(^|/)go\.(mod|sum|work))$'
+            rust   = '(\.rs|(^|/)Cargo\.(toml|lock))$'
+            web    = '\.(js|jsx|mjs|cjs|ts|tsx|mts|cts|vue|svelte|css|scss)$'
+            dotnet = '\.(cs|csproj)$'
+            cpp    = '\.(c|cc|cpp|cxx|h|hh|hpp|hxx)$'
+            proto  = '\.proto$'
+            godot  = '\.(gd|tscn|tres)$'
+        }
         foreach ($p in $changed) {
             # Longest match wins: with nested modules a/go.mod and a/b/go.mod, a
             # file under a/b belongs to a/b alone.
             $owner = $stacks | Where-Object { $_.Rel -and $p.StartsWith("$($_.Rel)/") } |
                 Sort-Object { $_.Rel.Length } -Descending | Select-Object -First 1
+            if (-not $owner) {
+                $owner = $stacks | Where-Object { -not $_.Rel -and $rootOwns[$_.Stack] -and $p -match $rootOwns[$_.Stack] } |
+                    Select-Object -First 1
+            }
             # A path outside every stack directory (CI config, build scripts, root
             # files) can affect any of them -> run everything.
             if (-not $owner) { $selected = $stacks; $widenedBy = $p; break }
