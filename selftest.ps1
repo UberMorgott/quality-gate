@@ -356,6 +356,41 @@ Check 'a library-only module still reaches vet and test' (($r.Out -match '\[PASS
 $r = Invoke-Gate $golib
 Check 'a compile error in a library-only module still fails go build' `
     (($r.Code -ne 0) -and ($r.Out -match '\[FAIL\] go build') -and ($r.Out -match 'undefinedName')) $r.Out
+# #116: inside a commit hook `go test` inherited the committing repo's GIT_INDEX_FILE, so a
+# test that `git init`s a scratch repo in t.TempDir() and commits there built its trees from
+# the caller's index -- "invalid object ... Error building trees". Run with another repo's
+# index exported the way git exports it to a hook; the other half: a test that genuinely
+# fails still fails the phase.
+if (Get-Command git -ErrorAction SilentlyContinue) {
+    $gogit = Join-Path $tmp 'go-nested-git'
+    $gogitIdx = Join-Path $tmp 'go-nested-git-caller'
+    New-Item -ItemType Directory -Path (Join-Path $gogit 'lib'), $gogitIdx -Force | Out-Null
+    Copy-Item (Join-Path $golib 'go.mod') $gogit
+    [IO.File]::WriteAllText((Join-Path $gogit 'lib\lib.go'), "package lib`n`n// F is a library function.`nfunc F() int { return 1 }`n")
+    $goGitTest = "package lib`n`nimport (`n`t`"os`"`n`t`"os/exec`"`n`t`"path/filepath`"`n`t`"testing`"`n)`n`n" +
+        "func TestScratchRepo(t *testing.T) {`n`td := t.TempDir()`n" +
+        "`tif err := os.WriteFile(filepath.Join(d, `"f.txt`"), []byte(`"x`"), 0o600); err != nil {`n`t`tt.Fatal(err)`n`t}`n" +
+        "`tfor _, a := range [][]string{{`"init`", `"-q`"}, {`"add`", `"f.txt`"}, {`"-c`", `"user.email=q@t`", `"-c`", `"user.name=q`", `"commit`", `"-qm`", `"x`"}} {`n" +
+        "`t`tc := exec.Command(`"git`", a...)`n`t`tc.Dir = d`n" +
+        "`t`tif out, err := c.CombinedOutput(); err != nil {`n`t`t`tt.Fatalf(`"git %v: %v %s`", a, err, out)`n`t`t}`n`t}`n}`n"
+    [IO.File]::WriteAllText((Join-Path $gogit 'lib\lib_test.go'), $goGitTest)
+    git -C $gogitIdx init -q 2>$null
+    [IO.File]::WriteAllText((Join-Path $gogitIdx 'caller.txt'), "caller`n")
+    git -C $gogitIdx add caller.txt 2>$null
+    $gogitBefore = (git -C $gogitIdx write-tree)
+    $priorIndex = $env:GIT_INDEX_FILE
+    $env:GIT_INDEX_FILE = Join-Path $gogitIdx '.git\index'
+    try { $r = Invoke-Gate $gogit } finally { $env:GIT_INDEX_FILE = $priorIndex }
+    $gogitAfter = (git -C $gogitIdx write-tree)
+    Check "a go test that commits in a scratch repo passes under a hook's GIT_INDEX_FILE" `
+        (($r.Code -eq 0) -and ($r.Out -match '\[PASS\] go test')) $r.Out
+    Check "go test leaves the committing hook's index alone" ($gogitBefore -eq $gogitAfter) "before=$gogitBefore after=$gogitAfter"
+    [IO.File]::WriteAllText((Join-Path $gogit 'lib\lib_test.go'), ($goGitTest -replace '(?s)\}\r?\n$', "`tt.Fatal(`"genuine failure`")`n}`n"))
+    $env:GIT_INDEX_FILE = Join-Path $gogitIdx '.git\index'
+    try { $r = Invoke-Gate $gogit } finally { $env:GIT_INDEX_FILE = $priorIndex }
+    Check 'a genuinely failing go test still fails under a scrubbed hook env' `
+        (($r.Code -ne 0) -and ($r.Out -match '\[FAIL\] go test') -and ($r.Out -match 'genuine failure')) $r.Out
+}
 # #52: the template must satisfy golangci-lint's own schema (embedded, offline), and so
 # must its commented-out formatters block once a repo uncomments it. The negative half:
 # a bare `rules:` (YAML null) is what the schema rejected before, so it must still fail.

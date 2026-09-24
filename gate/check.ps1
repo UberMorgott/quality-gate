@@ -758,9 +758,14 @@ function Invoke-GoStackOnce($s) {
             }
         }
     }
+    # Every `go test` below runs the repository's own test code, and inside a commit hook
+    # that code inherited the committing repo's GIT_INDEX_FILE (#116): a test that `git
+    # init`s a scratch repo in t.TempDir() and commits there built its trees from the
+    # CALLER's index -- "invalid object ... Error building trees". Scrubbed per call the
+    # way custom checks are (Invoke-WithoutHookGitEnv); the guard still needs it after.
     if ($Full) {
         # A trustworthy verdict: no cache, and shuffled so order dependence surfaces.
-        Phase 'go test' { go test -count=1 -failfast -shuffle=on -timeout=10m ./... }
+        Invoke-WithoutHookGitEnv { Phase 'go test' { go test -count=1 -failfast -shuffle=on -timeout=10m ./... } }
         # Report-level, not a stack line: -Quiet drops a green stack's lines, and the
         # commit hook runs -Quiet -- the one place this warning has to be seen.
         if ($script:Lines[-1] -like '`[PASS`]*') { $script:Warnings += @(Get-SlowGoPackages $script:PhaseOut 600) }
@@ -777,7 +782,7 @@ function Invoke-GoStackOnce($s) {
         # The race detector catches a bug class go vet and golangci-lint structurally
         # cannot. It needs a cgo toolchain, so its absence is a warning, not a failure.
         if ($env:CGO_ENABLED -ne '0' -and (Have 'gcc')) {
-            Phase 'go test -race' { go test -race -short -failfast -timeout=15m ./... }
+            Invoke-WithoutHookGitEnv { Phase 'go test -race' { go test -race -short -failfast -timeout=15m ./... } }
         } else {
             $script:Lines += '[WARN] no cgo toolchain (gcc) -- go test -race skipped'
         }
@@ -814,7 +819,7 @@ function Invoke-GoStackOnce($s) {
                     $script:Lines += '[SKIP] flaky tests -- no changed test packages (qgate.json go.flaky "packages" runs a fixed set)'
                 } else {
                     $lsw = [Diagnostics.Stopwatch]::StartNew()
-                    $fr = Invoke-GoFlakyTests $s.Dir $fl $mine
+                    $fr = Invoke-WithoutHookGitEnv { Invoke-GoFlakyTests $s.Dir $fl $mine }
                     $secs = $lsw.Elapsed.TotalSeconds.ToString('0.0', [Globalization.CultureInfo]::InvariantCulture)
                     if ($fr.Failed -eq 0) {
                         $script:Lines += "[PASS] flaky tests ($($fr.Ran) package(s), -count=$($fl.Count) -cpu=$($fl.Cpu)$(if ($fl.Race) { ' -race' })) (${secs}s)"
@@ -827,7 +832,7 @@ function Invoke-GoStackOnce($s) {
                 }
             }
             $fsw = [Diagnostics.Stopwatch]::StartNew()
-            $fuzz = Invoke-GoFuzz $s.Dir
+            $fuzz = Invoke-WithoutHookGitEnv { Invoke-GoFuzz $s.Dir }
             if ($fuzz.Ran) { $script:Lines += "$(if ($fuzz.Warn -match ' failed -- ') { '[WARN]' } else { '[PASS]' }) go fuzz $($fuzz.Ran) target(s) ($($fsw.Elapsed.TotalSeconds.ToString('0.0', [Globalization.CultureInfo]::InvariantCulture))s)" }
             $script:Warnings += @($fuzz.Warn)
             if (-not (Have 'deadcode')) {
@@ -845,7 +850,7 @@ function Invoke-GoStackOnce($s) {
         # Both -count=1 and -shuffle=on defeat the Go test cache, so the fast lane
         # re-ran every package on every agent turn. -short lets a repo park its slow
         # suites behind testing.Short() instead of paying for them each turn.
-        Phase 'go test' { go test -short -failfast -timeout=10m ./... }
+        Invoke-WithoutHookGitEnv { Phase 'go test' { go test -short -failfast -timeout=10m ./... } }
     }
     # Mutation testing is minutes, not seconds: only when asked for, never from a hook.
     if ($Mutate -and -not $script:Failed) {
@@ -903,7 +908,7 @@ function Invoke-RustStack($s) {
     # clippy compiles as it lints, so a separate `cargo build` would only pay the
     # same cost twice. --all-targets covers tests and benches, not just the binary.
     Phase 'cargo clippy' { cargo clippy --all-targets --quiet -- -D warnings }
-    Phase 'cargo test' { cargo test --quiet }
+    Invoke-WithoutHookGitEnv { Phase 'cargo test' { cargo test --quiet } }
 }
 
 # --- dotnet: one format pass over a temporary solution ---------------------
