@@ -12,9 +12,9 @@
     "semantic_hash": ""
   },
   "gate/check.ps1": {
-    "mtime": 1790203044.7217138,
-    "seen": 1790203063.2812634,
-    "ast_hash": "466d7998976865ca3d345d0f86b7d466",
+    "mtime": 1790237471.798628,
+    "seen": 1790237487.7892342,
+    "ast_hash": "9407e14666b9b5804d17c8f9b4288fa6",
     "semantic_hash": ""
   },
   "gate/detect.ps1": {
@@ -42,9 +42,9 @@
     "semantic_hash": ""
   },
   "selftest.ps1": {
-    "mtime": 1790203047.7156038,
-    "seen": 1790203063.2812734,
-    "ast_hash": "27e427ce1589a714433c08dd100fed53",
+    "mtime": 1790237321.9866734,
+    "seen": 1790237487.7892435,
+    "ast_hash": "c60d5cc2b6c6281377732f04effb629e",
     "semantic_hash": ""
   },
   "templates/.stylelintrc.json": {

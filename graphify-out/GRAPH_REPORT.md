@@ -1,17 +1,17 @@
 # Graph Report - quality-gate  (2026-09-24)
 
 ## Corpus Check
-- 49 files · ~122,435 words
+- 49 files · ~122,856 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 17 file(s) not represented in the graph (top: (none) 5, .toml 3, .gd 2)
 
 ## Summary
-- 478 nodes · 710 edges · 50 communities (22 shown, 28 thin omitted)
-- Extraction: 93% EXTRACTED · 7% INFERRED · 0% AMBIGUOUS · INFERRED: 52 edges (avg confidence: 0.85)
+- 479 nodes · 721 edges · 50 communities (22 shown, 28 thin omitted)
+- Extraction: 92% EXTRACTED · 8% INFERRED · 0% AMBIGUOUS · INFERRED: 58 edges (avg confidence: 0.85)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `b7d5a9b3`
+- Built from commit: `9abf697d`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -47,12 +47,12 @@
 - Mod.csproj
 - MetadataReader
 - .Resolve
-- .golangci.yml template
+- quality_gate job anchor shared by both hooks
 - .Run
 - gopurity/main.go
 - Hud
 - .Callee
-- qgate wire (repo wiring, config only)
+- .golangci.yml template
 - hooks/pre-commit
 - pre-merge-commit
 
@@ -63,10 +63,10 @@
 4. `Invoke-CppStack()` - 12 edges
 5. `Invoke-BaseStack()` - 12 edges
 6. `Invoke-SmokeCheck()` - 12 edges
-7. `Phase()` - 9 edges
-8. `Fail()` - 8 edges
-9. `Invoke-GodotStack()` - 8 edges
-10. `Invoke-CustomStack()` - 8 edges
+7. `Invoke-GoStackOnce()` - 11 edges
+8. `Phase()` - 10 edges
+9. `Fail()` - 9 edges
+10. `Get-PathKey()` - 9 edges
 
 ## Surprising Connections (you probably didn't know these)
 - `Set-OutdatedCache()` --calls--> `Get-PathKey()`  [INFERRED]
@@ -96,7 +96,7 @@ Nodes (29): Attribute, Fixture, HarmonyLib, system, system_collections_generic, 
 
 ### Community 1 - "detect.ps1"
 Cohesion: 0.05
-Nodes (31): Find-Marker(), Get-ChecksHash(), Get-CMakeGenerator(), Get-CppStaleTool(), Get-CppTidyTarget(), Get-CustomChecks(), Get-DefaultTrustStore(), Get-DeployEntries() (+23 more)
+Nodes (34): Find-Marker(), Get-ChecksHash(), Get-CMakeGenerator(), Get-CppStaleTool(), Get-CppTidyTarget(), Get-CustomChecks(), Get-DefaultTrustStore(), Get-DeployEntries() (+26 more)
 
 ### Community 2 - "A right outcome does not prove the right cause (§0.1)"
 Cohesion: 0.17
@@ -128,7 +128,7 @@ Nodes (6): name, private, scripts, build-only, type-check, type
 
 ### Community 9 - "check.ps1"
 Cohesion: 0.10
-Nodes (40): Fail(), Get-ChangedPaths(), Get-CppCompileDb(), Get-CppGeneratedIncludes(), Get-Descendants(), Get-DotnetChangedCs(), Get-DotnetEval(), Get-DotnetSharedFormat() (+32 more)
+Nodes (41): Fail(), Get-ChangedPaths(), Get-CppCompileDb(), Get-CppGeneratedIncludes(), Get-Descendants(), Get-DotnetChangedCs(), Get-DotnetEval(), Get-DotnetSharedFormat() (+33 more)
 
 ### Community 10 - ".Get"
 Cohesion: 0.35
@@ -158,9 +158,9 @@ Nodes (4): MetadataReader, TypeDefinitionHandle, TypeReferenceHandle, TypeSpecif
 Cohesion: 0.20
 Nodes (5): CustomAttribute, CustomAttributeHandleCollection, Target, MethodDefinition, Target
 
-### Community 38 - ".golangci.yml template"
-Cohesion: 0.08
-Nodes (26): Incoming agent reports: symptom right, cause wrong half the time, git add --renormalize + checkout is a no-op for CRLF, Cancellability findings (context propagation), Three rules for a machine-readable deferral file, Final-write timeout created too early, Second-engine review, Security findings (path traversal, middleware order, body limits), Suppression needs a named reason; stale suppressions flagged (+18 more)
+### Community 38 - "quality_gate job anchor shared by both hooks"
+Cohesion: 0.17
+Nodes (12): Three rules for a machine-readable deferral file, Suppression needs a named reason; stale suppressions flagged, qgate.deferrals.json (dated deferrals), qgate outdated, -Quiet (silent only on green), Vulnerability phase (govulncheck / npm audit), exhaustive with default-signifies-exhaustive, nolintlint: no bare or dead suppressions (+4 more)
 
 ### Community 40 - "gopurity/main.go"
 Cohesion: 0.18
@@ -174,13 +174,13 @@ Nodes (7): Hud, Health, IDamageable, Player, Unit, AssignablePatch, HealthPatch
 Cohesion: 0.17
 Nodes (7): Gen, IEnumerable, ImmutableArray, MethodSignature, Name, Parent, Sig
 
-### Community 44 - "qgate wire (repo wiring, config only)"
-Cohesion: 0.08
-Nodes (31): "Gate is wrong" issue template, cherry-pick and revert cannot be covered cheaply, Deliberately chosen boundaries (not TODOs), GIT_INDEX_FILE marks that we are inside a commit, GOTOOLCHAIN=auto unpacking races produce 'missing std package', Measured git hook coverage matrix (git 2.53), Parallel commits in one worktree swallow each other's staged files, A signature-changing commit must carry its callers (+23 more)
+### Community 44 - ".golangci.yml template"
+Cohesion: 0.05
+Nodes (45): "Gate is wrong" issue template, cherry-pick and revert cannot be covered cheaply, Deliberately chosen boundaries (not TODOs), GIT_INDEX_FILE marks that we are inside a commit, GOTOOLCHAIN=auto unpacking races produce 'missing std package', Measured git hook coverage matrix (git 2.53), Incoming agent reports: symptom right, cause wrong half the time, Parallel commits in one worktree swallow each other's staged files (+37 more)
 
 ## Knowledge Gaps
 - **38 isolated node(s):** `Constructor`, `Enumerator`, `Getter`, `Normal`, `Setter` (+33 more)
-  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 200 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
+  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 197 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
 - **28 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
