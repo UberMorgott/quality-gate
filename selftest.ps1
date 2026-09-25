@@ -4632,6 +4632,44 @@ if (Get-Command typos -ErrorAction SilentlyContinue) {
     Check "the repository's own _typos.toml still applies with the gate's config passed" `
         (($LASTEXITCODE -eq 0) -and ($thOut -notmatch 'plan\.md')) "code=$LASTEXITCODE $thOut"
 
+    # #121: a mod calls a closed game API whose names are misspelled and cannot be renamed.
+    # Every config name typos reads is honoured beside the gate's, extend-identifiers
+    # included; the allowlisted name alone is red without one, and a real typo is still red
+    # with one. The identifier is assembled so it is never a literal finding in THIS repo.
+    $api = 'GeoSite' + 'Insta' + 'ceData'
+    $tapi = Join-Path $tmp 'typos-api'
+    New-Item -ItemType Directory -Path $tapi | Out-Null
+    git -C $tapi init -q 2>$null
+    [IO.File]::WriteAllText((Join-Path $tapi 'Mod.cs'), "var s = $api.Get();`n")
+    $out = (& pwsh -NoProfile -File $gate -Root $tapi -Only base -Full 2>&1 | Out-String)
+    Check 'a misspelled external API name is a typos finding without a project allowlist' `
+        (($LASTEXITCODE -ne 0) -and ($out -match '\[FAIL\] typos') -and ($out -match 'Mod\.cs') -and
+            ($out -match 'extend-identifiers')) "code=$LASTEXITCODE $out"
+    foreach ($tcfg in '_typos.toml', 'typos.toml', '.typos.toml') {
+        Get-ChildItem $tapi -Filter '*typos.toml' -Force | Remove-Item -Force
+        [IO.File]::WriteAllText((Join-Path $tapi $tcfg), "[default.extend-identifiers]`n$api = `"$api`"`n")
+        $out = (& pwsh -NoProfile -File $gate -Root $tapi -Only base -Full 2>&1 | Out-String)
+        Check "a project $tcfg extend-identifiers allowlist is merged with the gate's typos config" `
+            (($LASTEXITCODE -eq 0) -and ($out -notmatch 'Mod\.cs')) "code=$LASTEXITCODE $out"
+    }
+    [IO.File]::WriteAllText((Join-Path $tapi 'Mod.cs'), "var s = $api.Get(); // you will $typo it`n")
+    $out = (& pwsh -NoProfile -File $gate -Root $tapi -Only base -Full 2>&1 | Out-String)
+    Check 'a real typo beside an allowlisted API name is still caught' `
+        (($LASTEXITCODE -ne 0) -and ($out -match '\[FAIL\] typos') -and ($out -match $typo) -and ($out -notmatch 'should be `Instance`')) `
+        "code=$LASTEXITCODE $out"
+
+    # #121: a typos failure fails the run but must not skip the build stacks after it --
+    # the compile error behind it is the finding that matters. Red run, go judged.
+    $tgo = Join-Path $tmp 'typos-then-go'
+    Copy-Item (Join-Path $PSScriptRoot 'testdata\go-fixture') $tgo -Recurse
+    git -C $tgo init -q 2>$null
+    [IO.File]::WriteAllText((Join-Path $tgo 'notes.txt'), "you will $typo this`n")
+    Set-GoFile (Join-Path $tgo 'main.go') "package main`n`nfunc main() { undefinedName() }"
+    $out = (& pwsh -NoProfile -File $gate -Root $tgo -Full 2>&1 | Out-String)
+    Check 'a typos failure does not skip the build stack after it' `
+        (($LASTEXITCODE -ne 0) -and ($out -match '\[FAIL\] typos') -and ($out -match '\[FAIL\] go') -and
+            ($out -match 'undefinedName') -and ($out -notmatch 'an earlier stack failed')) "code=$LASTEXITCODE $out"
+
     # #76: LOD (level of detail, Unity LODGroup) is a term of art, not a typo of `load`.
     # Both sides: the acronym passes, a real typo beside it is still red.
     $tlod = Join-Path $tmp 'typos-lod'

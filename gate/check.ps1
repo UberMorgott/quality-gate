@@ -2514,6 +2514,11 @@ function Invoke-BaseStack($s) {
             # total at all. Twenty SORTED lines plus the real totals say strictly more, and
             # the rest is one command away -- which the last line names, because nobody can
             # guess the --config path this phase runs with.
+            #
+            # -Soft (#121): spelling is not a reason to leave the build unjudged. A mod
+            # repository whose findings were a closed game API's own misspellings got
+            # [FAIL] typos and every dotnet stack `[SKIP] ... an earlier stack failed`, so
+            # a compile error behind it was never reported. The run is still red.
             $tsw = [Diagnostics.Stopwatch]::StartNew()
             $tOut = (& typos @targs @paths 2>&1 | Out-String)
             $tCode = $LASTEXITCODE
@@ -2534,8 +2539,13 @@ function Invoke-BaseStack($s) {
                     "full list: typos --format brief --config $cfg ."
                 }
                 else { $tOut.TrimEnd() }
+                # #121: a name the repository cannot rename (a closed game API it calls) is
+                # answered in its own config, which typos merges with the gate's -- say where.
+                if ($tCode -ne 0 -and $hits) {
+                    'not a typo (e.g. an external API name)? allow it in the repo''s _typos.toml: [default.extend-identifiers] for a whole name, [default.extend-words] for a word'
+                }
                 if ($tCode -ne 0) { $global:LASTEXITCODE = 1 }
-            } -Elapsed $tsw.Elapsed.TotalSeconds
+            } -Elapsed $tsw.Elapsed.TotalSeconds -Soft
         }
     }
 
