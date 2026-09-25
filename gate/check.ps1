@@ -401,6 +401,14 @@ if ($ParallelStacks) {
                 $owner = $stacks | Where-Object { -not $_.Rel -and $rootOwns[$_.Stack] -and $p -match $rootOwns[$_.Stack] } |
                     Select-Object -First 1
             }
+            # #123: prose outside every stack directory builds nothing, so it is left to
+            # base (typos, secrets). Measured on the reporting repo: a commit of one
+            # docs/*.md widened to the full Go phase, 441s. Unless tracked source names
+            # it -- include_str!("../README.md"), a //go:embed -- then it widens as before.
+            if (-not $owner -and $p -match '(?i)\.(md|markdown|rst|adoc)$') {
+                & git -C $Root grep -q -F -e ($p -split '/')[-1] -- '*.go' '*.rs' '*.cs' '*.csproj' '*.js' '*.jsx' '*.mjs' '*.cjs' '*.ts' '*.tsx' '*.c' '*.cc' '*.cpp' '*.h' '*.hpp' '*.gd' 2>$null
+                if ($LASTEXITCODE -eq 1) { continue }
+            }
             # A path outside every stack directory (CI config, build scripts, root
             # files) can affect any of them -> run everything.
             if (-not $owner) { $selected = $stacks; $widenedBy = $p; break }

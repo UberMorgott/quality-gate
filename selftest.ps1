@@ -2557,12 +2557,12 @@ Check 'a clean tree reports no changes' (($selCode -eq 0) -and ($out -match 'no 
 Check 'a clean git tree is not called a non-git directory' ($out -notmatch 'not a git repository') $out
 # A root-level file belongs to no stack, so everything runs -- but the reason the
 # gate printed was 'proto changed', with no .proto in the change set.
-[IO.File]::WriteAllText((Join-Path $sel 'README.md'), "a root file, owned by no stack`n")
+[IO.File]::WriteAllText((Join-Path $sel 'Makefile'), "# a root file, owned by no stack`n")
 $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $sel 2>&1 | Out-String)
-Check 'a path outside every stack gives the reason that applied' ($out -match 'README\.md belongs to no stack') $out
+Check 'a path outside every stack gives the reason that applied' ($out -match 'Makefile belongs to no stack') $out
 Check 'a path outside every stack is not blamed on proto' ($out -notmatch 'proto changed') $out
 # ...and the proto rule itself must still fire when a .proto really did change.
-Remove-Item (Join-Path $sel 'README.md')
+Remove-Item (Join-Path $sel 'Makefile')
 $pf = Join-Path $sel 'schema\example\v1\greeting.proto'
 [IO.File]::WriteAllText($pf, ([IO.File]::ReadAllText($pf) -replace '(?m)^(syntax)', "// touched by the self-test`n`$1"))
 $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $sel 2>&1 | Out-String)
@@ -2601,9 +2601,22 @@ Set-GoFile (Join-Path $rootGo 'main_test.go') ((Get-Content (Join-Path $rootGo '
 $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $rootGo 2>&1 | Out-String)
 Check 'a _test.go under a root go.mod narrows to go' (($out -match '\[PASS\] go') -and ($out -notmatch 'belongs to no stack') -and ($out -notmatch 'python')) $out
 git -C $rootGo checkout -- . 2>$null
-[IO.File]::WriteAllText((Join-Path $rootGo 'README.md'), "a root file, owned by no stack`n")
+[IO.File]::WriteAllText((Join-Path $rootGo 'Makefile'), "# a root file, owned by no stack`n")
 $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $rootGo 2>&1 | Out-String)
-Check 'a non-source root file beside a root go.mod still widens' ($out -match 'README\.md belongs to no stack') $out
+Check 'a non-source root file beside a root go.mod still widens' ($out -match 'Makefile belongs to no stack') $out
+Remove-Item (Join-Path $rootGo 'Makefile')
+# #123: prose builds nothing -- a docs-only change runs base alone, not the Go phase...
+New-Item -ItemType Directory -Path (Join-Path $rootGo 'docs') | Out-Null
+[IO.File]::WriteAllText((Join-Path $rootGo 'docs\inbox.md'), "notes, owned by no stack`n")
+$out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $rootGo 2>&1 | Out-String)
+Check 'a docs-only change does not widen to every stack' (($out -notmatch 'belongs to no stack') -and ($out -notmatch '\] go') -and ($out -notmatch 'python')) $out
+# ...unless tracked source names the file (an embed): then it widens as before.
+Set-GoFile (Join-Path $rootGo 'embed.go') "package main`n`n// inbox.md is embedded by the release build.`n"
+git -C $rootGo add embed.go 2>$null
+$out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $rootGo 2>&1 | Out-String)
+Check 'a doc file named by tracked source still widens' ($out -match 'belongs to no stack') $out
+git -C $rootGo rm -q --cached embed.go 2>$null
+Remove-Item (Join-Path $rootGo 'embed.go'), (Join-Path $rootGo 'docs') -Recurse
 
 }
 
