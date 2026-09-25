@@ -1,24 +1,24 @@
 # Graph Report - quality-gate  (2026-09-25)
 
 ## Corpus Check
-- 51 files · ~124,387 words
+- 51 files · ~125,348 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 17 file(s) not represented in the graph (top: (none) 5, .toml 3, .gd 2)
 
 ## Summary
-- 490 nodes · 732 edges · 51 communities (22 shown, 29 thin omitted)
+- 493 nodes · 736 edges · 58 communities (26 shown, 32 thin omitted)
 - Extraction: 92% EXTRACTED · 8% INFERRED · 0% AMBIGUOUS · INFERRED: 58 edges (avg confidence: 0.85)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `0af9599a`
+- Built from commit: `4401bdd0`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
 ## Community Hubs (Navigation)
 - harmony.cs
 - detect.ps1
-- GitHub Actions quality-gate workflow
+- qgate wire (repo wiring, config only)
 - .Scan
 - Lookups
 - selftest.ps1
@@ -47,6 +47,7 @@
 - Mod.csproj
 - MetadataReader
 - .Resolve
+- install.ps1
 - .Run
 - gopurity/main.go
 - Hud
@@ -56,6 +57,12 @@
 - pre-merge-commit
 - Box.cs
 - Bcl.csproj
+- Test-GitIgnored
+- Get-TrustedHash
+- Get-Stacks
+- Test-GoToolStale
+- Get-GoFuzzArgs
+- Test-CppOwn
 
 ## God Nodes (most connected - your core abstractions)
 1. `QGateHarmony` - 78 edges
@@ -89,19 +96,19 @@
 - **Measured lefthook-on-Windows traps behind one run: line** — templates_lefthook_exit_code_trap, templates_lefthook_cmd_shim, templates_lefthook_command_v_trap, templates_lefthook_quote_stripping_trap, templates_lefthook_quality_gate_job [EXTRACTED 1.00]
 - **Commit-path coverage and the staged-index guard** — handoff_hook_coverage_matrix, handoff_cherry_pick_revert_uncovered, handoff_parallel_commit_race, handoff_git_index_file_marker, readme_staged_index_guard, templates_lefthook_quality_gate_job [INFERRED 0.95]
 
-## Communities (51 total, 29 thin omitted)
+## Communities (58 total, 32 thin omitted)
 
 ### Community 0 - "harmony.cs"
 Cohesion: 0.05
 Nodes (29): Attribute, Fixture, HarmonyLib, system, system_collections_generic, system_collections_immutable, system_io, system_linq (+21 more)
 
 ### Community 1 - "detect.ps1"
-Cohesion: 0.05
-Nodes (36): Find-Marker(), Get-ChecksHash(), Get-CMakeGenerator(), Get-CppStaleTool(), Get-CppTidyTarget(), Get-CustomChecks(), Get-DefaultTrustStore(), Get-DeployEntries() (+28 more)
-
-### Community 2 - "GitHub Actions quality-gate workflow"
 Cohesion: 0.08
-Nodes (28): git check-ignore exit codes; --stdin batch unusable on Windows, GOTOOLCHAIN=auto unpacking races produce 'missing std package', Selftest counts 121 online / 115 offline, Coverage measures happy paths; a green suite proves nothing, Mutation check of existing tests, PowerShell reads an empty value as absence, Red-then-green verification, A right outcome does not prove the right cause (§0.1) (+20 more)
+Nodes (13): Get-CMakeGenerator(), Get-CppStaleTool(), Get-CppTidyTarget(), Get-DirBytes(), Get-GitIgnoredSet(), Get-GoCgoExportLive(), Get-GoDeadcode(), Get-GolangciFloorGaps() (+5 more)
+
+### Community 2 - "qgate wire (repo wiring, config only)"
+Cohesion: 0.05
+Nodes (44): "Gate is wrong" issue template, git check-ignore exit codes; --stdin batch unusable on Windows, cherry-pick and revert cannot be covered cheaply, Deliberately chosen boundaries (not TODOs), GIT_INDEX_FILE marks that we are inside a commit, GOTOOLCHAIN=auto unpacking races produce 'missing std package', Measured git hook coverage matrix (git 2.53), Selftest counts 121 online / 115 offline (+36 more)
 
 ### Community 3 - ".Scan"
 Cohesion: 0.17
@@ -159,6 +166,10 @@ Nodes (4): MetadataReader, TypeDefinitionHandle, TypeReferenceHandle, TypeSpecif
 Cohesion: 0.20
 Nodes (5): CustomAttribute, CustomAttributeHandleCollection, Target, MethodDefinition, Target
 
+### Community 38 - "install.ps1"
+Cohesion: 0.33
+Nodes (3): Test-AnyFile(), Install-WebConfigs(), Test-UsesTailwind()
+
 ### Community 40 - "gopurity/main.go"
 Cohesion: 0.18
 Nodes (9): go_pkg_fmt, go_pkg_go_ast, go_pkg_go_build, go_pkg_go_importer, go_pkg_go_parser, go_pkg_go_token, go_pkg_go_types, go_pkg_os (+1 more)
@@ -172,32 +183,44 @@ Cohesion: 0.17
 Nodes (7): Gen, IEnumerable, ImmutableArray, MethodSignature, Name, Parent, Sig
 
 ### Community 44 - ".golangci.yml template"
-Cohesion: 0.05
-Nodes (42): "Gate is wrong" issue template, cherry-pick and revert cannot be covered cheaply, Deliberately chosen boundaries (not TODOs), GIT_INDEX_FILE marks that we are inside a commit, Measured git hook coverage matrix (git 2.53), Incoming agent reports: symptom right, cause wrong half the time, Parallel commits in one worktree swallow each other's staged files, git add --renormalize + checkout is a no-op for CRLF (+34 more)
+Cohesion: 0.08
+Nodes (26): Incoming agent reports: symptom right, cause wrong half the time, git add --renormalize + checkout is a no-op for CRLF, Cancellability findings (context propagation), Three rules for a machine-readable deferral file, Final-write timeout created too early, Second-engine review, Security findings (path traversal, middleware order, body limits), Suppression needs a named reason; stale suppressions flagged (+18 more)
 
 ### Community 50 - "Box.cs"
 Cohesion: 0.50
 Nodes (3): Bcl, Box, Version
 
+### Community 52 - "Test-GitIgnored"
+Cohesion: 0.33
+Nodes (6): Find-Marker(), Get-NestedRepos(), Get-OrphanProjects(), Test-GitIgnored(), Test-GitIgnoredDir(), Test-InNestedRepo()
+
+### Community 53 - "Get-TrustedHash"
+Cohesion: 0.33
+Nodes (6): Get-ChecksHash(), Get-DefaultTrustStore(), Get-TrustedHash(), Get-TrustKey(), Get-TrustStore(), Test-ChecksTrusted()
+
+### Community 54 - "Get-Stacks"
+Cohesion: 0.50
+Nodes (4): Get-CustomChecks(), Get-DeployEntries(), Get-GodotBin(), Get-Stacks()
+
 ## Knowledge Gaps
-- **42 isolated node(s):** `stylelint-config-standard-scss`, `stylelint-config-recommended-vue/scss`, `ignoreFiles`, `net8.0`, `Microsoft.NET.Sdk` (+37 more)
-  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 202 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
-- **29 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **42 isolated node(s):** `Constructor`, `Enumerator`, `Getter`, `Normal`, `Setter` (+37 more)
+  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 203 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
+- **32 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `QGateHarmony` connect `QGateHarmony` to `harmony.cs`, `.Scan`, `MetadataReader`, `.Resolve`, `.Run`, `.Get`, `.Callee`?**
-  _High betweenness centrality (0.106) - this node is a cross-community bridge._
+  _High betweenness centrality (0.104) - this node is a cross-community bridge._
 - **Why does `Get-PathKey()` connect `check.ps1` to `detect.ps1`, `selftest.ps1`?**
-  _High betweenness centrality (0.024) - this node is a cross-community bridge._
+  _High betweenness centrality (0.025) - this node is a cross-community bridge._
 - **Why does `Lookups` connect `Lookups` to `harmony.cs`?**
   _High betweenness centrality (0.020) - this node is a cross-community bridge._
 - **Are the 4 inferred relationships involving `Invoke-CppStack()` (e.g. with `Get-CMakeGenerator()` and `Get-CppTidyTarget()`) actually correct?**
   _`Invoke-CppStack()` has 4 INFERRED edges - model-reasoned connections that need verification._
-- **What connects `stylelint-config-standard-scss`, `stylelint-config-recommended-vue/scss`, `ignoreFiles` to the rest of the system?**
+- **What connects `Constructor`, `Enumerator`, `Getter` to the rest of the system?**
   _42 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `harmony.cs` be split into smaller, more focused modules?**
   _Cohesion score 0.05398110661268556 - nodes in this community are weakly interconnected._
 - **Should `detect.ps1` be split into smaller, more focused modules?**
-  _Cohesion score 0.05224963715529753 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.07977207977207977 - nodes in this community are weakly interconnected._

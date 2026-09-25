@@ -1,7 +1,7 @@
 {
   "0": "harmony.cs",
   "1": "detect.ps1",
-  "2": "GitHub Actions quality-gate workflow",
+  "2": "qgate wire (repo wiring, config only)",
   "3": ".Scan",
   "4": "Lookups",
   "5": "selftest.ps1",
@@ -37,6 +37,7 @@
   "35": "app.ps1",
   "36": "MetadataReader",
   "37": ".Resolve",
+  "38": "install.ps1",
   "39": ".Run",
   "40": "gopurity/main.go",
   "41": "Hud",
@@ -49,5 +50,11 @@
   "48": "Invoke-Child",
   "49": "hold.ps1",
   "50": "Box.cs",
-  "51": "Bcl.csproj"
+  "51": "Bcl.csproj",
+  "52": "Test-GitIgnored",
+  "53": "Get-TrustedHash",
+  "54": "Get-Stacks",
+  "55": "Test-GoToolStale",
+  "56": "Get-GoFuzzArgs",
+  "57": "Test-CppOwn"
 }
