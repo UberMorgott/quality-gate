@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Stands in for a BCL assembly (#119): bin is the runtime copy (Unity's Managed\mscorlib),
+       obj\...\ref the reference assembly a net48 targeting pack compiles against, private
+       members stripped. selftest points Mod at the ref copy and puts the runtime one in ..\lib. -->
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <ProduceReferenceAssembly>true</ProduceReferenceAssembly>
+  </PropertyGroup>
+
+</Project>

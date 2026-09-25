@@ -120,7 +120,9 @@ public sealed class QGateHarmony : ISignatureTypeProvider<string, object>, ICust
         return null;
     }
 
-    sealed class Asm { public MetadataReader R; public PEReader Pe; }
+    // Ref: a reference assembly ([ReferenceAssembly], e.g. the net48 targeting pack's
+    // mscorlib) -- public surface only, private members stripped.
+    sealed class Asm { public MetadataReader R; public PEReader Pe; public bool Ref; public string Path; }
     sealed class Target { public string Type, Method; public int? Kind; public string[] Args; public bool ByName; public Target Clone() => (Target)MemberwiseClone(); }
     // One value on the symbolic IL stack. K: 'T' a type (S = name, Asm = its assembly),
     // 's' a string, 'i' an int, '0' null, 'a' a Type[] (Arr; a null element is not known).
@@ -137,7 +139,10 @@ public sealed class QGateHarmony : ISignatureTypeProvider<string, object>, ICust
     readonly Dictionary<string, string> source = new();
     Asm mod;
     bool mapped;
-    SortedSet<string> fails, probes;
+    SortedSet<string> fails, probes, refOnly;
+    // The type the last HasMember/Overloads looked in is from a reference assembly: a member
+    // not found there may be a private one it stripped -- the absence proves nothing.
+    bool stripped;
     // -Why / -Targets: every target that DID resolve, so a reviewer can confirm a specific new
     // patch by name instead of inferring it from a count that went up.
     List<string> oks;
@@ -157,10 +162,23 @@ public sealed class QGateHarmony : ISignatureTypeProvider<string, object>, ICust
         var q = new QGateHarmony { listTargets = targets };
         var asms = mods.Select(Load).ToArray();
         foreach (var a in asms) if (a != null) q.Index(a);
-        foreach (var p in refPaths) { var a = Load(p); if (a != null) q.Index(a); }
+        var refs = refPaths.Select(Load).Where(a => a != null).ToList();
+        foreach (var a in refs) q.Index(a);
+        // A reference assembly the build compiled against (the net48 pack's mscorlib) is not
+        // what the game runs: the runtime copy of the same file beside the game's own
+        // references (Unity's Managed\mscorlib.dll) is, and it has the private fields
+        // FieldRefAccess reaches for. Index that one over the stripped one (#119).
+        var dirs = refs.Where(a => !a.Ref).Select(a => System.IO.Path.GetDirectoryName(a.Path)).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        foreach (var a in refs.Where(a => a.Ref))
+            foreach (var d in dirs)
+            {
+                var rt = Load(System.IO.Path.Combine(d, System.IO.Path.GetFileName(a.Path)));
+                if (rt != null && !rt.Ref) { q.Index(rt); break; }
+            }
         q.MapSource(srcDir, root);
         var outp = new List<string>();
         const string probe = " -- its result is null-checked: a version probe with a fallback";
+        const string refOnlyWhy = " -- only a reference assembly (private members stripped) declares the type, no runtime copy beside the references: not checkable";
         for (int i = 0; i < asms.Length; i++)
         {
             if (asms[i] == null) continue;
@@ -169,6 +187,7 @@ public sealed class QGateHarmony : ISignatureTypeProvider<string, object>, ICust
             var pre = i < own ? "" : file + ": ";
             outp.AddRange(q.fails.Select(f => i < own ? f : "[WARN] harmony: " + pre + f));
             outp.AddRange(q.probes.Select(p => "[WARN] harmony: " + pre + p + probe));
+            outp.AddRange(q.refOnly.Select(p => "[WARN] harmony: " + pre + p + refOnlyWhy));
             outp.AddRange(q.oks.Select(o => "[NOTE] harmony: " + pre + o));
             int skipped = q.nDynamic + q.nComputed + q.nUnloaded;
             if (q.nChecked + skipped == 0) continue;
@@ -184,8 +203,13 @@ public sealed class QGateHarmony : ISignatureTypeProvider<string, object>, ICust
     {
         try
         {
+            if (!File.Exists(path)) return null;
             var pe = new PEReader(ImmutableArray.Create(File.ReadAllBytes(path)));
-            return pe.HasMetadata ? new Asm { Pe = pe, R = pe.GetMetadataReader() } : null;
+            if (!pe.HasMetadata) return null;
+            var r = pe.GetMetadataReader();
+            var isRef = r.IsAssembly && r.GetAssemblyDefinition().GetCustomAttributes()
+                .Any(h => AttrName(r, r.GetCustomAttribute(h)) == "System.Runtime.CompilerServices.ReferenceAssemblyAttribute");
+            return new Asm { Pe = pe, R = r, Ref = isRef, Path = path };
         }
         catch (Exception) { return null; }
     }
@@ -194,7 +218,12 @@ public sealed class QGateHarmony : ISignatureTypeProvider<string, object>, ICust
     {
         var r = a.R;
         if (r.IsAssembly) loaded.Add(r.GetString(r.GetAssemblyDefinition().Name));
-        foreach (var h in r.TypeDefinitions) types.TryAdd(Name(r, h), (a, h));
+        foreach (var h in r.TypeDefinitions)
+        {
+            var n = Name(r, h);
+            // A runtime definition replaces a reference-assembly one; otherwise the first wins.
+            if (!types.TryAdd(n, (a, h)) && types[n].A.Ref && !a.Ref) types[n] = (a, h);
+        }
         foreach (var h in r.ExportedTypes)
         {
             var e = r.GetExportedType(h);
@@ -276,6 +305,7 @@ public sealed class QGateHarmony : ISignatureTypeProvider<string, object>, ICust
         foreach (var h in a.R.TypeDefinitions) local.TryAdd(Name(a.R, h), (a, h));
         fails = new(StringComparer.Ordinal);
         probes = new(StringComparer.Ordinal);
+        refOnly = new(StringComparer.Ordinal);
         oks = new();
         stored = new();
         checkedSinks = new();
@@ -469,7 +499,7 @@ public sealed class QGateHarmony : ISignatureTypeProvider<string, object>, ICust
             if (n.StartsWith("___"))
             {
                 if (!HasMember(ta, td, n.Substring(3), false, "field"))
-                    fails.Add($"{label}: field {n.Substring(3)} not found (parameter {n}) {where}");
+                    (stripped ? refOnly : fails).Add($"{label}: field {n.Substring(3)} not found (parameter {n}) {where}");
                 continue;
             }
             if (n.StartsWith("__") || names == null || renames || names.Contains(n)) continue;
@@ -501,6 +531,7 @@ public sealed class QGateHarmony : ISignatureTypeProvider<string, object>, ICust
     // AccessTools.Field/Method/Property walk base types; the Declared* forms do not.
     bool HasMember(Asm a, TypeDefinition td, string name, bool declaredOnly, string what)
     {
+        stripped = a.Ref; // the looked-up type only: a stripped System.Object must not hide a game type's missing field
         for (int guard = 0; guard < 64; guard++)
         {
             var r = a.R;
@@ -526,6 +557,7 @@ public sealed class QGateHarmony : ISignatureTypeProvider<string, object>, ICust
     {
         var res = new List<ImmutableArray<string>>();
         open = true;
+        stripped = a.Ref; // the looked-up type only: a stripped System.Object must not hide a game type's missing field
         for (int guard = 0; guard < 64; guard++)
         {
             var r = a.R;
@@ -766,7 +798,8 @@ public sealed class QGateHarmony : ISignatureTypeProvider<string, object>, ICust
                     if (msg != null)
                     {
                         msg += " " + Where(Name(r, m.GetDeclaringType()), r.GetString(m.Name));
-                        if (NullCheckAt(ins, i + 1)) probes.Add(msg);
+                        if (stripped) refOnly.Add(msg);
+                        else if (NullCheckAt(ins, i + 1)) probes.Add(msg);
                         else if (i + 1 < ins.Count && Sink(ins[i + 1], locKey) is string sink) stored.Add((msg, sink));
                         else fails.Add(msg);
                     }
@@ -798,6 +831,7 @@ public sealed class QGateHarmony : ISignatureTypeProvider<string, object>, ICust
         bool harmony = parent == "HarmonyLib.AccessTools";
         var label = (harmony ? "AccessTools." : "Type.") + api;
         okLookup = null;
+        stripped = false;
         if (harmony && api == "TypeByName" && p.Length == 1)
         {
             if (a[0]?.K != 's') { nDynamic++; return (null, null); }

@@ -1894,6 +1894,53 @@ public sealed class Bad
     Check 'qgate.json harmony.assemblies are checked too, as warnings' `
         (($out -match '\[WARN\] harmony: Other\.dll: Hud\.UpdateFood method not found') -and
             ($out -match '\[NOTE\] harmony: Other\.dll -- ')) $out
+    # #119: a net48 mod compiles against the targeting pack's REFERENCE mscorlib (private
+    # fields stripped), so FieldRefAccess<List<T>, int>("_version") read as missing although
+    # the game's runtime mscorlib has it. Bcl stands in: Mod references its ref assembly, the
+    # runtime copy sits in ..\lib beside the "game". Found there = silent; a field the runtime
+    # copy lacks too, or one on a game type, still fails; with no runtime copy it is a warning.
+    Remove-Item (Join-Path $hmMod 'qgate.json')
+    & dotnet build (Join-Path $hm 'Bcl') -o (Join-Path $hm 'lib') -nologo -v q *> $null
+    $bclRef = New-Item -ItemType Directory -Force (Join-Path $hm 'refpack')
+    Copy-Item (Get-ChildItem (Join-Path $hm 'Bcl\obj') -Recurse -Filter Bcl.dll | Where-Object { $_.Directory.Name -eq 'ref' } | Select-Object -First 1).FullName $bclRef
+    $hmProj = Join-Path $hmMod 'Mod.csproj'
+    [IO.File]::WriteAllText($hmProj, (Get-Content $hmProj -Raw).Replace('</Project>', @'
+  <ItemGroup>
+    <Reference Include="Bcl">
+      <HintPath>..\refpack\Bcl.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+</Project>
+'@))
+    [IO.File]::WriteAllText((Join-Path $hmMod 'BclLookups.cs'), @'
+using HarmonyLib;
+
+namespace Fixture;
+
+public static class BclLookups
+{
+    public static void Run()
+    {
+        _ = AccessTools.FieldRefAccess<Bcl.Box, int>("_version");
+        _ = AccessTools.FieldRefAccess<Bcl.Box, int>("_gone");
+        _ = AccessTools.FieldRefAccess<Hud, int>("m_nope");
+    }
+}
+'@)
+    $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $hmMod -All -Full 2>&1 | Out-String)
+    $hmIn = Get-InlineReport $out
+    Check 'a private field a reference assembly strips resolves against the runtime copy beside the game' `
+        (($out -match '\[PASS\] build') -and ($out -notmatch 'Box\._version')) $out
+    Check 'a field the runtime copy lacks, or a game type lacks, still fails (FieldRefAccess)' `
+        (($hmIn -match '(?m)^(?!\[WARN\]).*Bcl\.Box\._gone field not found \(AccessTools\.FieldRefAccess\)') -and
+            ($hmIn -match '(?m)^(?!\[WARN\]).*Hud\.m_nope field not found \(AccessTools\.FieldRefAccess\)')) $out
+    Remove-Item (Join-Path $hm 'lib\Bcl.dll')
+    $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $hmMod -All -Full 2>&1 | Out-String)
+    $hmIn = Get-InlineReport $out
+    Check 'with only the reference assembly, its missing private field is a warning, not a failure' `
+        (($out -match '\[WARN\] harmony: Bcl\.Box\._version field not found \(AccessTools\.FieldRefAccess\).*only a reference assembly') -and
+            ($hmIn -notmatch '(?m)^(?!\[WARN\]).*Box\._version') -and
+            ($hmIn -match '(?m)^(?!\[WARN\]).*Hud\.m_nope field not found')) $out
     }
 } else {
     Write-Output '[skip] no .NET SDK on this machine -- the dotnet stack cannot be exercised'

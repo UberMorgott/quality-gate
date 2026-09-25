@@ -26,6 +26,10 @@ namespace HarmonyLib
 
         public static FieldInfo Field(Type type, string name) => null;
 
+        public delegate ref F FieldRef<in T, F>(T instance);
+
+        public static FieldRef<T, F> FieldRefAccess<T, F>(string fieldName) => null;
+
         public static Type TypeByName(string name) => null;
     }
 }
