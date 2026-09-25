@@ -42,9 +42,9 @@
     "semantic_hash": ""
   },
   "selftest.ps1": {
-    "mtime": 1790276893.956421,
-    "seen": 1790276966.2679555,
-    "ast_hash": "1d95de3b4b0bd93033d7c0aa86807d8a",
+    "mtime": 1790318541.839371,
+    "seen": 1790318994.008694,
+    "ast_hash": "ae067cec1767e6cb87140cca4819e5d5",
     "semantic_hash": ""
   },
   "templates/.stylelintrc.json": {
@@ -210,9 +210,9 @@
     "semantic_hash": ""
   },
   "gate/harmony.cs": {
-    "mtime": 1789168165.0374415,
-    "seen": 1789168578.0932772,
-    "ast_hash": "cadd2ff663e9aa40853705ef169b3746",
+    "mtime": 1790318454.942572,
+    "seen": 1790318994.0086858,
+    "ast_hash": "567c8b3701599791860bc5df9ad7ee4c",
     "semantic_hash": ""
   },
   "gate/harmony.ps1": {
@@ -240,9 +240,9 @@
     "semantic_hash": ""
   },
   "testdata/harmony-fixture/Harmony/HarmonyStub.cs": {
-    "mtime": 1789140344.7323842,
-    "seen": 1789140345.2092495,
-    "ast_hash": "5125aeefe23c2b730b5622c527211322",
+    "mtime": 1790318511.6033928,
+    "seen": 1790318994.008707,
+    "ast_hash": "fe955b03ff9e96490dacf3b151d2fb2f",
     "semantic_hash": ""
   },
   "testdata/harmony-fixture/Mod/Mod.csproj": {
@@ -327,6 +327,18 @@
     "mtime": 1789668648.07928,
     "seen": 1789670231.7318861,
     "ast_hash": "29d602a485955e3ea1d5fd1cb968fb61",
+    "semantic_hash": ""
+  },
+  "testdata/harmony-fixture/Bcl/Bcl.csproj": {
+    "mtime": 1790318777.8755803,
+    "seen": 1790318994.0087035,
+    "ast_hash": "3da9b47fa796ee220391cf65f02fee8e",
+    "semantic_hash": ""
+  },
+  "testdata/harmony-fixture/Bcl/Box.cs": {
+    "mtime": 1790318531.8489413,
+    "seen": 1790318994.0087042,
+    "ast_hash": "6c1a36b4d6f027bdfb8e9501b703f48b",
     "semantic_hash": ""
   }
 }

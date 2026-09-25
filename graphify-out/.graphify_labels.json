@@ -1,7 +1,7 @@
 {
   "0": "harmony.cs",
   "1": "detect.ps1",
-  "2": "A right outcome does not prove the right cause (§0.1)",
+  "2": "GitHub Actions quality-gate workflow",
   "3": ".Scan",
   "4": "Lookups",
   "5": "selftest.ps1",
@@ -37,16 +37,17 @@
   "35": "app.ps1",
   "36": "MetadataReader",
   "37": ".Resolve",
-  "38": ".golangci.yml template",
   "39": ".Run",
   "40": "gopurity/main.go",
   "41": "Hud",
   "42": ".Callee",
   "43": "bepinex.ps1",
-  "44": "qgate wire (repo wiring, config only)",
+  "44": ".golangci.yml template",
   "45": "global.ps1",
   "46": "hooks/pre-commit",
   "47": "pre-merge-commit",
   "48": "Invoke-Child",
-  "49": "hold.ps1"
+  "49": "hold.ps1",
+  "50": "Box.cs",
+  "51": "Bcl.csproj"
 }
