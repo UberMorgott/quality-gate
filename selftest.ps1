@@ -1174,7 +1174,8 @@ if ($dnSdks) {
     git -C $dnFast init -q 2>$null
     git -C $dnFast add -A 2>$null
     git -C $dnFast -c user.email=selftest@local -c user.name=selftest commit -qm init 2>$null
-    [IO.File]::WriteAllText((Join-Path $dnFast 'notes.md'), "not a .cs file`n")
+    # .txt, not .md: prose alone no longer selects the dotnet stack at all (#123).
+    [IO.File]::WriteAllText((Join-Path $dnFast 'notes.txt'), "not a .cs file`n")
     $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $dnFast 2>&1 | Out-String)
     $dnFastCode = $LASTEXITCODE
     Check 'the fast lane does not format a project whose .cs files nobody touched' `
