@@ -505,6 +505,29 @@ if ($env:GIT_INDEX_FILE) {
     if ($LASTEXITCODE -eq 0) { $script:StagedAtStart = $tree }
 }
 
+# #123: a commit hook re-gating a tree this gate already passed. Reported from the
+# field: one change gated two or three times -- its commit, then the merge commit whose
+# tree is the same bytes. Keyed by the staged tree, this gate's own files and the flags,
+# kept in the common git dir so every worktree of the repo shares it. Written only by a
+# green hook run whose working tree WAS that tree (nothing unstaged, nothing untracked):
+# otherwise the run judged other bytes than the ones it would vouch for.
+# QGATE_NO_REUSE=1 always re-runs.
+$script:PassKey = $null
+$script:PassFile = $null
+if ($script:StagedAtStart -and -not $env:QGATE_NO_REUSE -and -not $ParallelStacks) {
+    $common = (& git -C $Root rev-parse --path-format=absolute --git-common-dir 2>$null)
+    if ($LASTEXITCODE -eq 0 -and $common) {
+        $script:PassFile = Join-Path $common 'qgate-passed-trees'
+        $gateStamp = @(Get-ChildItem (Join-Path $PSScriptRoot '*.ps1') | ForEach-Object { "$($_.Name):$($_.Length):$($_.LastWriteTimeUtc.Ticks)" }) -join ','
+        $flags = @(Get-SelfArgv $PSBoundParameters 'Root', 'Quiet', 'Sarif', 'Extra') -join ' '
+        $script:PassKey = Get-PathKey "$($script:StagedAtStart)|$flags|$gateStamp"
+        if ((Test-Path $script:PassFile) -and @(Get-Content $script:PassFile -ErrorAction SilentlyContinue) -contains $script:PassKey) {
+            if (-not $Quiet) { Write-Output "[SKIP] staged tree $($script:StagedAtStart.Substring(0, 12)) already passed this gate with these flags -- reused (QGATE_NO_REUSE=1 re-runs)" }
+            exit 0
+        }
+    }
+}
+
 function Phase {
     # -Elapsed: seconds the TOOL took, for a phase whose command ran before the block.
     # `dotnet msbuild` and `dotnet format` run ahead of their Phase (their output has to
@@ -2969,6 +2992,48 @@ function Invoke-DeployStack($s) {
 $cwd = (Get-Location).Path
 $report = @()
 
+# #123: a machine-wide queue for -Full runs. Reported from the field: several worktrees
+# gating at once each ran `go test -race ./...` and golangci-lint, system commit ran
+# out, Go died with "Insufficient system resources" and every run was retried -- more
+# total work than running them one after another. QGATE_MAX_PARALLEL (machine env,
+# like the Go cache limits) is the number of concurrent full runs, default 1, 0 = no
+# queue. Named mutexes, not a semaphore: the OS releases a mutex its holder died with
+# (a killed hook), a semaphore count would leak. The fast lane never queues -- it is
+# every agent turn, and a base-only run (prose) has nothing heavy to wait for.
+# QGATE_SLOT_HELD: a gate run inside this one (a custom check, a -Parallel child)
+# rides on the parent's slot; waiting for it would deadlock.
+$script:GateSlot = $null
+if ($Full -and -not $ParallelStacks -and -not $env:QGATE_SLOT_HELD -and @($stacks | Where-Object { $_.Stack -ne 'base' })) {
+    $slots = 1
+    if ($env:QGATE_MAX_PARALLEL -match '^\s*\d+\s*$') { $slots = [Math]::Min(64, [int]$env:QGATE_MAX_PARALLEL) }
+    elseif ($env:QGATE_MAX_PARALLEL) { $script:Warnings += "[WARN] QGATE_MAX_PARALLEL must be a whole number, got '$env:QGATE_MAX_PARALLEL' -- using 1" }
+    if ($slots -gt 0) {
+        try {
+            $h = [Threading.WaitHandle[]]@(0..($slots - 1) | ForEach-Object { [Threading.Mutex]::new($false, "Global\quality-gate-full-slot-$_") })
+            # An abandoned mutex is acquired all the same; WaitAny reports it by throwing.
+            $waitAny = {
+                param([int]$Ms)
+                try { [Threading.WaitHandle]::WaitAny($h, $Ms) } catch {
+                    $e = $_.Exception
+                    while ($e -and $e -isnot [Threading.AbandonedMutexException]) { $e = $e.InnerException }
+                    if ($e) { $e.MutexIndex } else { throw }
+                }
+            }
+            $i = & $waitAny 0
+            if ($i -eq [Threading.WaitHandle]::WaitTimeout) {
+                # stderr: the wait is news now, and -Quiet keeps stdout for the verdict.
+                [Console]::Error.WriteLine("[NOTE] qgate: waiting for a machine-wide full-gate slot ($slots busy, QGATE_MAX_PARALLEL) ...")
+                $qsw = [Diagnostics.Stopwatch]::StartNew()
+                $i = & $waitAny (30 * 60 * 1000)
+                $waited = $qsw.Elapsed.TotalSeconds.ToString('0', [Globalization.CultureInfo]::InvariantCulture)
+                if ($i -eq [Threading.WaitHandle]::WaitTimeout) { $script:Warnings += "[WARN] no full-gate slot freed in ${waited}s -- running unqueued (QGATE_MAX_PARALLEL=$slots)" }
+                elseif (-not $Quiet) { $report += "[NOTE] waited ${waited}s for a full-gate slot (QGATE_MAX_PARALLEL=$slots)" }
+            }
+            if ($i -ne [Threading.WaitHandle]::WaitTimeout) { $script:GateSlot = $h[$i]; $env:QGATE_SLOT_HELD = '1' }
+        } catch { $script:Warnings += "[WARN] machine-wide gate queue unavailable -- $($_.Exception.Message)" }
+    }
+}
+
 # -Parallel: stacks that only read and build inside their own directory run first, one
 # child process per stack type (all go stacks share one child: the CI-parity question is
 # asked once per run; all dotnet stacks share one `dotnet format` pass). The loop below
@@ -3099,6 +3164,8 @@ foreach ($s in $stacks) {
         }
     }
 }
+# The heavy part is over; the next queued run may start.
+if ($script:GateSlot) { try { $script:GateSlot.ReleaseMutex() } catch { Write-Verbose "slot release: $_" } }
 # Advisory, never a verdict: printed after the stack lines, shown under -Quiet (below).
 if ($script:Warnings) { $report += $script:Warnings }
 # A worker's report-level warnings came back through $r.Warnings, so this covers both.
@@ -3255,6 +3322,17 @@ if ($strict -and ($strictHit -or $strictAdv)) {
 # test package is shown: the hook is the only early warning before CI's -race times out.
 # So is a CI Go variant the gate never runs: green here says nothing about that target.
 # The advisories and skipped summaries stay silent on green too; "strict" is the opt-in that makes them heard.
+# The other half of the tree reuse near the top: only a green run over exactly the staged bytes.
+if ($script:PassKey -and -not $script:Failed) {
+    & git -C $Root diff --quiet 2>$null
+    $clean = ($LASTEXITCODE -eq 0) -and -not @(& git -C $Root ls-files --others --exclude-standard 2>$null)
+    if ($clean) {
+        try {
+            $keep = @(Get-Content $script:PassFile -ErrorAction SilentlyContinue | Select-Object -Last 199) + $script:PassKey
+            Set-Content -LiteralPath $script:PassFile -Value $keep -ErrorAction Stop
+        } catch { Write-Verbose "tree reuse record: $_" }
+    }
+}
 if ($Quiet -and -not $script:Failed) { $report = @($report | Where-Object { $_ -match '^\[WARN\] (qgate\.|dependency update advisory timed out|slow tests:|CI parity:)' }) }
 # A broken qgate.deferrals.json is read by outdated and by every vuln phase; say it once.
 $seenDefer = [Collections.Generic.HashSet[string]]::new()

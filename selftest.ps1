@@ -33,6 +33,11 @@ $ErrorActionPreference = 'Stop'
 # never answered from its cache and asked the network on each green -Full run (#84). The
 # advisory's own checks (section core) put it back for their runs.
 $env:QGATE_NO_ADVISORY = '1'
+# The suite runs its gates concurrently on purpose; the machine-wide queue (#123) would
+# serialise them, and a developer's own gate would stall the suite. Section core tests it.
+$env:QGATE_MAX_PARALLEL = '0'
+# Same for the staged-tree reuse: hook checks here re-gate one tree on purpose.
+$env:QGATE_NO_REUSE = '1'
 
 $sections = 'detect', 'go', 'go2', 'core', 'wiring', 'rust', 'dotnet', 'dotnet2', 'dotnet3', 'proto', 'godot', 'hooks', 'custom', 'cpp', 'base', 'web', 'bootstrap'
 $parts = @{ go = @('go2'); dotnet = @('dotnet2', 'dotnet3') }
@@ -2617,6 +2622,51 @@ $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root
 Check 'a doc file named by tracked source still widens' ($out -match 'belongs to no stack') $out
 git -C $rootGo rm -q --cached embed.go 2>$null
 Remove-Item (Join-Path $rootGo 'embed.go'), (Join-Path $rootGo 'docs') -Recurse
+
+# #123: the machine-wide queue. A full run started while the only slot is held waits,
+# says so on stderr, and runs once the slot is free.
+$slot = [Threading.Mutex]::new($false, 'Global\quality-gate-full-slot-0')
+$held = try { $slot.WaitOne(0) } catch [Threading.AbandonedMutexException] { $true }
+if ($held) {
+    $qRepo = Join-Path $tmp 'queue'
+    Copy-Item (Join-Path $PSScriptRoot 'testdata\go-fixture') $qRepo -Recurse
+    git -C $qRepo init -q 2>$null
+    git -C $qRepo add -A 2>$null
+    git -C $qRepo -c user.email=selftest@local -c user.name=selftest commit -qm init 2>$null
+    $qOut = Join-Path $tmp 'queue.out'
+    $savedHeld = $env:QGATE_SLOT_HELD; $env:QGATE_SLOT_HELD = $null; $env:QGATE_MAX_PARALLEL = '1'
+    $p = Start-Process pwsh -ArgumentList '-NoProfile', '-File', "`"$gate`"", '-Root', "`"$qRepo`"", '-Only', 'go', '-Full' `
+        -RedirectStandardOutput $qOut -RedirectStandardError "$qOut.err" -PassThru -NoNewWindow
+    $env:QGATE_SLOT_HELD = $savedHeld; $env:QGATE_MAX_PARALLEL = '0'
+    $early = $p.WaitForExit(8000)
+    $slot.ReleaseMutex()
+    $p.WaitForExit()
+    $qText = "$(Get-Content $qOut -Raw)`n$(Get-Content "$qOut.err" -Raw)"
+    Check 'a full run queues while the machine-wide slot is held' ((-not $early) -and ($qText -match 'waiting for a machine-wide full-gate slot')) "early=$early $qText"
+    Check 'a queued full run runs once the slot frees' (($p.ExitCode -eq 0) -and ($qText -match '\[PASS\] go')) "code=$($p.ExitCode) $qText"
+} else { Write-Output '[skip] machine-wide queue -- a real gate holds the slot right now' }
+$slot.Dispose()
+
+# #123: a hook run over a staged tree this gate already passed reuses the verdict; a
+# different tree, or a red one, still runs.
+$rRepo = Join-Path $tmp 'reuse'
+Copy-Item (Join-Path $PSScriptRoot 'testdata\go-fixture') $rRepo -Recurse
+git -C $rRepo init -q 2>$null
+git -C $rRepo add -A 2>$null
+git -C $rRepo -c user.email=selftest@local -c user.name=selftest commit -qm init 2>$null
+Set-GoFile (Join-Path $rRepo 'main.go') ((Get-Content (Join-Path $rRepo 'main.go') -Raw) + "`n// a staged edit`n")
+git -C $rRepo add -A 2>$null
+$env:QGATE_NO_REUSE = $null; $env:GIT_INDEX_FILE = (Join-Path $rRepo '.git\index')
+try {
+    $r1 = (& pwsh -NoProfile -File $gate -Root $rRepo -Only go 2>&1 | Out-String)
+    $r2 = (& pwsh -NoProfile -File $gate -Root $rRepo -Only go 2>&1 | Out-String)
+    Check 'a hook run over an already-passed staged tree reuses the verdict' (($r1 -match '\[PASS\] go') -and ($r2 -match 'already passed this gate') -and ($r2 -notmatch '\[PASS\] go')) "$r1`n---`n$r2"
+    Set-GoFile (Join-Path $rRepo 'main.go') ((Get-Content (Join-Path $rRepo 'main.go') -Raw) + "`nfunc broken( {`n")
+    git -C $rRepo add -A 2>$null
+    $r3 = (& pwsh -NoProfile -File $gate -Root $rRepo -Only go 2>&1 | Out-String); $c3 = $LASTEXITCODE
+    $r4 = (& pwsh -NoProfile -File $gate -Root $rRepo -Only go 2>&1 | Out-String); $c4 = $LASTEXITCODE
+    Check 'a different staged tree is gated again, and a red one is never reused' (($c3 -ne 0) -and ($c4 -ne 0) -and ($r4 -notmatch 'already passed')) "code=$c3/$c4 $r4"
+} finally { $env:GIT_INDEX_FILE = $null; $env:QGATE_NO_REUSE = '1' }
 
 }
 
