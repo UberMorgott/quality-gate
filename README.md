@@ -171,7 +171,7 @@ The runner also validates requested stacks/revisions and tool pins, rejects an u
 | `go test` | Fast/full | Go | Runs short cacheable tests in fast, and uncached shuffled tests in full, to catch behavioral regressions. |
 | `go vet GOOS=<os>` | Full, opt-in | Go | Vets configured alternate operating-system targets to expose platform-specific defects. |
 | `golangci-lint GOOS=<os>` | Full, opt-in | golangci-lint | Lints configured alternate operating-system targets so conditional source is checked. |
-| `go test -race` | Full | Go + gcc/cgo | Detects data races; skips with a warning when gcc is missing or `CGO_ENABLED=0`. |
+| `go test -race` | Full | Go + gcc/cgo | Detects data races; skips with a warning when gcc is missing or `CGO_ENABLED=0`. Before it the go build cache (`go env GOCACHE`) is bounded: over `QGATE_GOCACHE_MAX_GB` (default 20) it is cleaned with `go clean -cache` (`[INFO]` with sizes); under `QGATE_GO_MIN_FREE_GB` (default 15) free on its drive it is cleaned, and if still short `-race` is skipped with a warning. `0` disables either guard; never a failure. |
 | `govulncheck` | Full | govulncheck; skip if missing | Finds known vulnerabilities reachable through Go dependencies rather than merely available updates. |
 | `slow tests` | Advisory (full) | Go test output | Flags packages approaching the test timeout so slower CI/race runs are less surprising. |
 | `CI parity` | Advisory (full) | None | Compares workflow Go variants with local coverage to expose untested GOOS/GOARCH/build tags. |

@@ -616,6 +616,72 @@ function Invoke-GoFuzz([string]$Dir, [int]$PerTargetSec = 10, [int]$BudgetSec = 
     $res
 }
 
+# quality-gate#120: the go build cache (GOCACHE) has no size limit of its own -- go only
+# trims entries unused for 5 days -- and repeated `-All -Full` runs (-race builds a second
+# copy of everything) grew one to 143 GB and filled the disk. The gate caps what it
+# grows: over QGATE_GOCACHE_MAX_GB (20) the cache is cleaned, and with less than
+# QGATE_GO_MIN_FREE_GB (15) free on its drive it is cleaned and, if that is not enough,
+# -race is skipped. Machine-wide env vars, not qgate.json: the cache is the machine's, not
+# the repo's. 0 disables either guard. Never a verdict: a cleaned cache is an [INFO], the
+# gate's own housekeeping -- a [WARN] would fail every qgate.json "strict" repo over it.
+function Get-GoCacheLimits {
+    $cfg = [pscustomobject]@{ MaxGB = 20.0; MinFreeGB = 15.0; Error = '' }
+    foreach ($p in @(, @('QGATE_GOCACHE_MAX_GB', 'MaxGB')) + @(, @('QGATE_GO_MIN_FREE_GB', 'MinFreeGB'))) {
+        $raw = [Environment]::GetEnvironmentVariable($p[0])
+        if (-not $raw) { continue }
+        $v = 0.0
+        if ([double]::TryParse($raw, [Globalization.NumberStyles]::Float, [Globalization.CultureInfo]::InvariantCulture, [ref]$v) -and $v -ge 0) { $cfg.($p[1]) = $v }
+        else { $cfg.Error = "$($p[0]) must be a number of GB (0 disables), got '$raw' -- default kept" }
+    }
+    $cfg
+}
+
+function Get-DirBytes([string]$Dir) {
+    $opt = [IO.EnumerationOptions]@{ RecurseSubdirectories = $true; IgnoreInaccessible = $true; AttributesToSkip = [IO.FileAttributes]::ReparsePoint }
+    $sum = 0L
+    foreach ($f in [IO.DirectoryInfo]::new($Dir).EnumerateFiles('*', $opt)) { $sum += $f.Length }
+    $sum
+}
+
+function Invoke-GoCacheGuard([string]$Cache, $Limits = (Get-GoCacheLimits), [switch]$SkipSize) {
+    $res = [pscustomobject]@{ Warn = @(); LowSpace = $false }
+    # GOCACHE=off, or a cache not created yet: nothing to measure.
+    if (-not $Cache -or -not (Test-Path -LiteralPath $Cache -PathType Container)) { return $res }
+    $inv = [Globalization.CultureInfo]::InvariantCulture
+    $prev = $global:LASTEXITCODE
+    $prevCache = $env:GOCACHE
+    $cleaned = $false
+    try {
+        $env:GOCACHE = $Cache
+        if (-not $SkipSize -and $Limits.MaxGB -gt 0) {
+            $before = Get-DirBytes $Cache
+            if ($before -gt $Limits.MaxGB * 1GB) {
+                & go clean -cache 2>&1 | Out-Null
+                $cleaned = $true
+                $res.Warn += "[INFO] go build cache $Cache was $(($before / 1GB).ToString('0.0', $inv)) GB, over the $($Limits.MaxGB.ToString($inv)) GB cap (QGATE_GOCACHE_MAX_GB) -- go clean -cache, now $(((Get-DirBytes $Cache) / 1GB).ToString('0.0', $inv)) GB"
+            }
+        }
+        if ($Limits.MinFreeGB -gt 0) {
+            $root = [IO.Path]::GetPathRoot([IO.Path]::GetFullPath($Cache))
+            $free = [IO.DriveInfo]::new($root).AvailableFreeSpace
+            if ($free -lt $Limits.MinFreeGB * 1GB) {
+                $was = $free
+                if (-not $cleaned) { & go clean -cache 2>&1 | Out-Null; $free = [IO.DriveInfo]::new($root).AvailableFreeSpace }
+                $gbs = "$(($was / 1GB).ToString('0.0', $inv)) GB free on $root, under $($Limits.MinFreeGB.ToString($inv)) GB (QGATE_GO_MIN_FREE_GB)"
+                if ($free -lt $Limits.MinFreeGB * 1GB) {
+                    $res.LowSpace = $true
+                    $res.Warn += "[WARN] $gbs, still $(($free / 1GB).ToString('0.0', $inv)) GB after go clean -cache -- go test -race skipped"
+                } else {
+                    $res.Warn += "[INFO] $gbs -- go clean -cache ($Cache), now $(($free / 1GB).ToString('0.0', $inv)) GB free"
+                }
+            }
+        }
+    } catch {
+        $res.Warn += "[WARN] go build cache guard skipped: $($_.Exception.Message)"
+    } finally { $env:GOCACHE = $prevCache; $global:LASTEXITCODE = $prev }
+    $res
+}
+
 # A cgo `//export` function is the C ABI of a -buildmode=c-shared/c-archive build: C calls it,
 # Go never does, and deadcode roots only main, init and tests -- so it reports every export
 # and every helper only exports call. deadcode takes no extra roots, so this returns the names

@@ -478,6 +478,36 @@ Check 'a bad fuzz limit is named and the default kept' (($fzl.Error -match 'go\.
 Remove-Item (Join-Path $fz 'qgate.json')
 $env:GOMEMLIMIT = $memPrev
 
+# #120: a go build cache over its cap is cleaned (go clean -cache, [INFO] with the sizes),
+# one under it or with the cap at 0 is left alone, and a drive short of free space even
+# after a clean skips -race with a [WARN]. A fake 2 MB cache and fractional-GB caps.
+$gcd = Join-Path $tmp 'gocache'
+$gcEntry = Join-Path $gcd 'ab\entry-d'
+# go clean -cache removes the ab\ directory itself.
+$gcFill = { New-Item -ItemType Directory -Path (Join-Path $gcd 'ab') -Force | Out-Null; [IO.File]::WriteAllBytes($gcEntry, [byte[]]::new(2MB)) }
+& $gcFill
+$gcPrev = $env:GOCACHE
+$gc = Invoke-GoCacheGuard $gcd ([pscustomobject]@{ MaxGB = 1.0; MinFreeGB = 0.0 })
+Check 'a go build cache under its cap is left alone' ((-not $gc.Warn) -and (Test-Path $gcEntry) -and -not $gc.LowSpace) ($gc.Warn -join "`n")
+$gc = Invoke-GoCacheGuard $gcd ([pscustomobject]@{ MaxGB = 0.0; MinFreeGB = 0.0 })
+Check 'QGATE_GOCACHE_MAX_GB=0 disables the cache cap' ((-not $gc.Warn) -and (Test-Path $gcEntry)) ($gc.Warn -join "`n")
+$gc = Invoke-GoCacheGuard $gcd ([pscustomobject]@{ MaxGB = 0.001; MinFreeGB = 0.0 })
+Check 'a go build cache over its cap is cleaned and reported with both sizes' `
+    ((-not (Test-Path $gcEntry)) -and (($gc.Warn -join ' ') -match '^\[INFO\] go build cache .* was 0\.0 GB, over the 0\.001 GB cap \(QGATE_GOCACHE_MAX_GB\) -- go clean -cache, now 0\.0 GB') -and -not $gc.LowSpace) ($gc.Warn -join "`n")
+& $gcFill
+$gc = Invoke-GoCacheGuard $gcd ([pscustomobject]@{ MaxGB = 0.0; MinFreeGB = 1e9 })
+Check 'too little free space even after a clean skips -race with a warning' `
+    ($gc.LowSpace -and (-not (Test-Path $gcEntry)) -and (($gc.Warn -join ' ') -match '^\[WARN\] .* GB free on .*QGATE_GO_MIN_FREE_GB.* -- go test -race skipped')) ($gc.Warn -join "`n")
+Check 'the cache guard restores the caller GOCACHE' ($env:GOCACHE -eq $gcPrev) "GOCACHE=$env:GOCACHE"
+$gcEnv = $env:QGATE_GOCACHE_MAX_GB; $gcFreeEnv = $env:QGATE_GO_MIN_FREE_GB; $env:QGATE_GO_MIN_FREE_GB = $null
+$env:QGATE_GOCACHE_MAX_GB = '0.5'
+$gcl = Get-GoCacheLimits
+Check 'cache limits default to 15 GB free and take QGATE_GOCACHE_MAX_GB' (($gcl.MaxGB -eq 0.5) -and ($gcl.MinFreeGB -eq 15) -and -not $gcl.Error) "$($gcl | ConvertTo-Json -Compress)"
+$env:QGATE_GOCACHE_MAX_GB = 'lots'
+$gcl = Get-GoCacheLimits
+Check 'a bad cache cap is named and the 20 GB default kept' (($gcl.MaxGB -eq 20) -and ($gcl.Error -match 'QGATE_GOCACHE_MAX_GB')) "$($gcl | ConvertTo-Json -Compress)"
+$env:QGATE_GOCACHE_MAX_GB = $gcEnv; $env:QGATE_GO_MIN_FREE_GB = $gcFreeEnv
+
 # #51: an unreachable function is warned; the clean fixture, a helper only its tests call,
 # and a module with no main package and no tests (no program to walk) are not.
 if ((Get-Command deadcode -ErrorAction SilentlyContinue) -and -not (Test-GoToolStale 'deadcode' ((go env GOVERSION) -replace '^go', '') 'x')) {

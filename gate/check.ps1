@@ -799,8 +799,16 @@ function Invoke-GoStackOnce($s) {
         }
         # The race detector catches a bug class go vet and golangci-lint structurally
         # cannot. It needs a cgo toolchain, so its absence is a warning, not a failure.
+        # quality-gate#120: first bound the build cache it doubles (Invoke-GoCacheGuard);
+        # the size is walked once per run, free space before every -race.
+        $gcl = Get-GoCacheLimits
+        if ($gcl.Error -and -not $script:GoCacheSized) { $script:Warnings += "[WARN] $($gcl.Error)" }
+        $gc = Invoke-GoCacheGuard (go env GOCACHE) $gcl -SkipSize:([bool]$script:GoCacheSized)
+        $script:GoCacheSized = $true
+        $script:Warnings += @($gc.Warn)
+        # A LowSpace skip is named in the guard's own [WARN].
         if ($env:CGO_ENABLED -ne '0' -and (Have 'gcc')) {
-            Invoke-WithoutHookGitEnv { Phase 'go test -race' { go test -race -short -failfast -timeout=15m ./... } }
+            if (-not $gc.LowSpace) { Invoke-WithoutHookGitEnv { Phase 'go test -race' { go test -race -short -failfast -timeout=15m ./... } } }
         } else {
             $script:Lines += '[WARN] no cgo toolchain (gcc) -- go test -race skipped'
         }
