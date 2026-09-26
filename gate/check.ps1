@@ -1131,6 +1131,62 @@ function Get-DotnetSharedFormat([int]$MaxSdk, $Changed) {
     $script:FmtShared
 }
 
+# The line of a failed `dotnet format` run that says why, or ''. #127: a project that would
+# not load ends in a .NET stack trace, and the exception line sits ABOVE the frames. Matched on
+# the exception shape, the frame and the path, never on the message: the SDK localizes it
+# (measured on ru-RU: "Не удалось найти хост сборки в ...\BuildHost-net472\...BuildHost.exe").
+function Get-DotnetFormatFailure([string]$Out) {
+    $exc = @($Out -split "`r?`n" | Where-Object { $_ -notmatch '^\s*at\s' -and $_ -match '^\s*Unhandled exception:|\b[\w.]*Exception:' } | Select-Object -First 1)
+    $t = if ($exc) { $exc[0].Trim() -replace '\s+', ' ' } else { '' }
+    if ($t.Length -gt 300) { $t = $t.Substring(0, 300) + '...' }
+    if ($Out -match 'AssertBuildHostExists|BuildHost-') {
+        $t = "$t$(if ($t) { ' -- ' })MSBuild BuildHost missing from the .NET SDK -- repair/reinstall the SDK"
+    }
+    $t
+}
+
+# #127: whitespace is syntax, so when dotnet format cannot load the project through MSBuild
+# (measured: an SDK whose BuildHost-net472 has no .exe, which only net472 projects need),
+# `--folder` reads the same files with no workspace at all. Folder mode sees every .cs under
+# the directory, so its answer is cut back to the project's own files -- the evaluated Compile
+# items (explicit <Compile Include> on a legacy csproj, the default globs on an SDK one), never
+# bin\ or obj\ -- or a file the project does not compile would fail the run. The `refs` phase
+# already proved the project evaluates; if that evaluation fails here, bin\ and obj\ are
+# still dropped. $null when the fallback gave no answer either.
+function Get-DotnetFolderFormat([string]$ProjAbs, [string[]]$Include) {
+    $sep = [IO.Path]::DirectorySeparatorChar
+    $dir = [IO.Path]::GetFullPath((Split-Path $ProjAbs -Parent)).TrimEnd('\', '/') + $sep
+    $a = @('.', '--folder', '--verify-no-changes', '-v', 'q')
+    # Relative to the project directory, like the project call's --include.
+    if ($Include) { $a += @('--include') + $Include }
+    Push-Location $dir
+    try { $out = (& dotnet format whitespace @a 2>&1 | Out-String).TrimEnd(); $code = $LASTEXITCODE }
+    finally { Pop-Location }
+    $ws = @($out -split "`r?`n" | Where-Object { $_ -match 'error WHITESPACE' })
+    if ($code -ne 0 -and -not $ws) { return $null }
+    $compile = $null
+    if ($ws) {
+        $q = (& dotnet msbuild $ProjAbs -getItem:Compile -nologo 2>&1 | Out-String).Trim()
+        $ci = if ($LASTEXITCODE -eq 0) { try { $q | ConvertFrom-Json } catch { $null } }
+        if ($ci) {
+            $compile = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+            foreach ($c in @($ci.Items.Compile)) { if ($c.FullPath) { [void]$compile.Add($c.FullPath) } }
+        }
+    }
+    $files = @()
+    $keep = @($ws | Where-Object {
+            # A line this parse does not recognise is kept: dropping it could hide a defect.
+            if ($_ -notmatch '^\s*(.+?)\(\d+,\d+\):') { return $true }
+            $f = [IO.Path]::GetFullPath($Matches[1].Trim(), $dir)
+            if ($f.StartsWith("${dir}bin$sep", [StringComparison]::OrdinalIgnoreCase) -or
+                $f.StartsWith("${dir}obj$sep", [StringComparison]::OrdinalIgnoreCase)) { return $false }
+            if ($null -ne $compile -and -not $compile.Contains($f)) { return $false }
+            $files += [IO.Path]::GetRelativePath($dir, $f)
+            $true
+        })
+    @{ Out = ($keep -join "`n"); Code = $(if ($keep) { 2 } else { 0 }); Files = @($files | Sort-Object -Unique) }
+}
+
 function Invoke-DotnetStack($s) {
     Set-Location $s.Dir
     $proj = $s.Marker
@@ -1231,6 +1287,8 @@ function Invoke-DotnetStack($s) {
     # carries 1091 whitespace errors nobody may reformat, and -Baseline was ignored here.
     $fmtArgs = @($proj, '--verify-no-changes', '--no-restore', '-v', 'q')
     $runFormat = $true
+    $fmtInc = @()
+    $fmtFolder = $null
     $changed = $null
     if ($Baseline) { $changed = Get-ChangedPaths $Root $Baseline }
     elseif (-not $Full -and -not $All) { $changed = Get-ChangedPaths $Root }
@@ -1241,7 +1299,7 @@ function Invoke-DotnetStack($s) {
         # unformatted file. Set-Location above put us in the project directory, so
         # these are relative to it.
         $cs = @(Get-DotnetChangedCs $s $changed | ForEach-Object { $_.Substring($prefix.Length) })
-        if ($cs) { $fmtArgs += @('--include') + $cs }
+        if ($cs) { $fmtArgs += @('--include') + $cs; $fmtInc = $cs }
         # A phase that did not run must never look like a phase that passed.
         else { $runFormat = $false; $script:Lines += "[SKIP] format $proj -- no changed .cs files$(if ($Baseline) { " since $Baseline" })" }
     }
@@ -1268,8 +1326,19 @@ function Invoke-DotnetStack($s) {
             $fmtSw = [Diagnostics.Stopwatch]::StartNew()
             $fmtOut = (& dotnet format whitespace @fmtArgs 2>&1 | Out-String).TrimEnd()
             $fmtCode = $LASTEXITCODE
+            if ($fmtCode -ne 0 -and $fmtOut -notmatch 'error WHITESPACE') {
+                # #127: the project would not load; whitespace does not need it to.
+                $fmtFolder = Get-DotnetFolderFormat $projAbs $fmtInc
+                if ($fmtFolder) {
+                    $fmtWhy = Get-DotnetFormatFailure $fmtOut
+                    $script:Lines += "[WARN] ${proj}: dotnet format could not load the project$(if ($fmtWhy) { " ($fmtWhy)" }) -- whitespace checked with --folder over the project's own files instead"
+                    $fmtOut = $fmtFolder.Out
+                    $fmtCode = $fmtFolder.Code
+                }
+            }
             $fmtSw.Stop()
             $fmtPhaseArgs.Elapsed = $fmtSw.Elapsed.TotalSeconds
+            if ($fmtFolder) { $fmtPhaseArgs.Time = "$($fmtSw.Elapsed.TotalSeconds.ToString('0.0', [Globalization.CultureInfo]::InvariantCulture))s, --folder fallback" }
         }
         if ($fmtCode -ne 0 -and $fmtOut -notmatch 'error WHITESPACE') {
             # dotnet format loads the project through MSBuild before it reads a single
@@ -1278,8 +1347,11 @@ function Invoke-DotnetStack($s) {
             # `fix: dotnet format whitespace` at a reader whose problem it does not touch;
             # same convention as govulncheck offline -- an answer nobody got is not a
             # verdict.
-            $script:Lines += "[UNKNOWN] ${proj}: could not check formatting -- dotnet format failed to load the project"
-            $script:Lines += (($fmtOut -split "`r?`n" | Where-Object { $_.Trim() } | Select-Object -Last 5) -join "`n")
+            # With the exception line (#127): the last lines of that output are stack frames,
+            # and five frames told the reader nothing about why.
+            $fmtWhy = Get-DotnetFormatFailure $fmtOut
+            $script:Lines += "[UNKNOWN] ${proj}: could not check formatting -- dotnet format failed to load the project$(if ($fmtWhy) { ": $fmtWhy" })"
+            if (-not $fmtWhy) { $script:Lines += (($fmtOut -split "`r?`n" | Where-Object { $_.Trim() } | Select-Object -Last 5) -join "`n") }
         }
         else {
             Phase 'format' {
@@ -1299,8 +1371,15 @@ function Invoke-DotnetStack($s) {
                 }
                 else { $fmtOut }
                 # Every line already names file(line,col); what none of them says is the
-                # one command that fixes all of them.
-                if ($fmtCode -ne 0) { "fix: dotnet format whitespace $proj"; $global:LASTEXITCODE = 1 }
+                # one command that fixes all of them. After the --folder fallback the project
+                # command is the one that just failed to load, so the fix names the files --
+                # a bare `--folder` would also rewrite files the project does not compile.
+                if ($fmtCode -ne 0) {
+                    if (-not $fmtFolder) { "fix: dotnet format whitespace $proj" }
+                    elseif ($fmtFolder.Files.Count -le 10) { "fix: dotnet format whitespace . --folder --include $($fmtFolder.Files -join ' ')" }
+                    else { 'fix: dotnet format whitespace . --folder  (also rewrites .cs files outside the project)' }
+                    $global:LASTEXITCODE = 1
+                }
             } @fmtPhaseArgs -Soft
         }
         # Code style (IDE rules at warning/error in .editorconfig), -Full only and advisory:
@@ -1319,7 +1398,10 @@ function Invoke-DotnetStack($s) {
                         Sort-Object Count, Name -Descending | Select-Object -First 5 | ForEach-Object { "$($_.Name) x$($_.Count)" }) -join ', ')
                 $script:Lines += "[WARN] ${proj}: $($ide.Count) code-style violation(s) -- $top (fix: dotnet format style $proj)"
             }
-            elseif ($styleCode -ne 0) { $script:Lines += "[UNKNOWN] ${proj}: could not check code style -- dotnet format style exited $styleCode" }
+            elseif ($styleCode -ne 0) {
+                $styleWhy = Get-DotnetFormatFailure ($styleOut -join "`n")
+                $script:Lines += "[UNKNOWN] ${proj}: could not check code style -- dotnet format style exited $styleCode$(if ($styleWhy) { ": $styleWhy" })"
+            }
         }
     }
 

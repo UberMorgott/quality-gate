@@ -2067,6 +2067,83 @@ namespace Legacy
             (($out -match '\[WARN\] Legacy\.csproj: analyzers injected but 0 loaded \(non-SDK project\)') -and ($out -notmatch 'MA0084') -and
                 ($out -notmatch 'QGATE001 x') -and ($out -notmatch 'compiler warning')) $out
     }
+
+    # #127: dotnet format could not load a net472 project (an SDK whose BuildHost-net472 had no
+    # .exe) and the gate printed five stack frames. A shim stands in for that SDK on every
+    # machine: the project call fails the way the real one did -- the message localized, so
+    # the hint has to come from the frame and the path -- and --folder goes to the real tool.
+    # Folder mode sees every .cs under the directory; only the project's Compile items count.
+    $fbShim = New-Item -ItemType Directory -Force (Join-Path $tmp 'dotnet-loadfail-shim')
+    $fbReal = (Get-Command dotnet -CommandType Application | Select-Object -First 1).Source
+    # A .cmd, not a .ps1: PowerShell's script binder splits `-getProperty:X` apart and the
+    # `refs` evaluation would fail for the shim's sake.
+    $fbCmd = @"
+@echo off
+if /i not "%~1"=="format" goto real
+set QST_FOLDER=
+for %%a in (%*) do if "%%~a"=="--folder" set QST_FOLDER=1
+if defined QST_FOLDER if not defined QGATE_ST_FOLDER_FAIL goto real
+echo Unhandled exception: System.Exception: xx-localized-message "C:\sdk\DotnetTools\dotnet-format\BuildHost-net472\Microsoft.CodeAnalysis.Workspaces.MSBuild.BuildHost.exe"
+echo    at Microsoft.CodeAnalysis.MSBuild.BuildHostProcessManager.AssertBuildHostExists(String buildHostPath)
+echo    at Microsoft.CodeAnalysis.Tools.CodeFormatter.OpenMSBuildWorkspaceAsync(String solutionOrProjectPath)
+echo    at Microsoft.CodeAnalysis.Tools.CodeFormatter.FormatWorkspaceAsync(FormatOptions formatOptions)
+echo    at Microsoft.CodeAnalysis.Tools.FormatCommandCommon.FormatAsync(FormatOptions formatOptions)
+echo    at System.CommandLine.Invocation.InvocationPipeline.InvokeAsync(ParseResult parseResult)
+exit /b 1
+:real
+"$fbReal" %*
+exit /b %errorlevel%
+"@
+    [IO.File]::WriteAllText((Join-Path $fbShim 'dotnet.cmd'), ($fbCmd -replace '\r?\n', "`r`n"))
+    $fb = New-Item -ItemType Directory -Force (Join-Path $tmp 'dotnet-folder-fallback')
+    New-Item -ItemType Directory -Force (Join-Path $fb 'obj') | Out-Null
+    [IO.File]::WriteAllText((Join-Path $fb 'Legacy.csproj'), @'
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <AssemblyName>Legacy</AssemblyName>
+    <TargetFrameworkVersion>v4.7.2</TargetFrameworkVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="System" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="Listed.cs" />
+  </ItemGroup>
+  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+</Project>
+'@)
+    $fbGood = "namespace Legacy`r`n{`r`n    public class A`r`n    {`r`n        public int X() { return 1; }`r`n    }`r`n}`r`n"
+    $fbBad = $fbGood.Replace('        public int X', ' public int X')
+    [IO.File]::WriteAllText((Join-Path $fb 'Unlisted.cs'), $fbBad.Replace('class A', 'class B'))
+    [IO.File]::WriteAllText((Join-Path $fb 'obj\Generated.cs'), $fbBad.Replace('class A', 'class C'))
+    $fbPath = $env:PATH
+    $env:PATH = "$($fbShim.FullName)$([IO.Path]::PathSeparator)$fbPath"
+    try {
+        [IO.File]::WriteAllText((Join-Path $fb 'Listed.cs'), $fbBad)
+        $out = (& pwsh -NoProfile -File $gate -Root $fb.FullName -All -Only dotnet 2>&1 | Out-String)
+        Check 'a project dotnet format cannot load is still judged with --folder: a Compile-listed defect fails (#127)' `
+            (($out -match '\[FAIL\] format \([\d.]+s, --folder fallback\)') -and ($out -match 'Listed\.cs\(5,2\): error WHITESPACE') -and
+                ($out -match 'fix: dotnet format whitespace \. --folder --include Listed\.cs') -and ($out -notmatch 'could not check formatting')) $out
+        Check 'the --folder fallback does not judge files the project does not compile, nor obj\ (#127)' `
+            (($out -notmatch 'Unlisted\.cs') -and ($out -notmatch 'Generated\.cs')) $out
+        Check 'the --folder fallback says why the project call failed (#127)' `
+            ($out -match '\[WARN\] Legacy\.csproj: dotnet format could not load the project \(Unhandled exception: System\.Exception: xx-localized-message[^\r\n]*MSBuild BuildHost missing from the \.NET SDK -- repair/reinstall the SDK\) -- whitespace checked with --folder') $out
+        [IO.File]::WriteAllText((Join-Path $fb 'Listed.cs'), $fbGood)
+        $out = (& pwsh -NoProfile -File $gate -Root $fb.FullName -All -Only dotnet 2>&1 | Out-String)
+        Check 'defects only outside the Compile items pass the --folder fallback (#127)' `
+            (($out -match '\[PASS\] format \([\d.]+s, --folder fallback\)') -and ($out -notmatch '\[FAIL\] format') -and
+                ($out -notmatch 'error WHITESPACE') -and ($out -notmatch 'could not check formatting')) $out
+        $env:QGATE_ST_FOLDER_FAIL = '1'
+        [IO.File]::WriteAllText((Join-Path $fb 'Listed.cs'), $fbBad)
+        $out = (& pwsh -NoProfile -File $gate -Root $fb.FullName -All -Only dotnet 2>&1 | Out-String)
+        Check 'a load failure with no fallback names the exception and the BuildHost hint, not stack frames (#127)' `
+            (($out -match '\[UNKNOWN\] Legacy\.csproj: could not check formatting -- dotnet format failed to load the project: Unhandled exception: System\.Exception: xx-localized-message[^\r\n]*BuildHost-net472[^\r\n]* -- MSBuild BuildHost missing from the \.NET SDK -- repair/reinstall the SDK') -and
+                ($out -notmatch 'InvocationPipeline') -and ($out -notmatch '\] format \(') -and ($out -notmatch 'fix: dotnet format')) $out
+    }
+    finally { $env:PATH = $fbPath; $env:QGATE_ST_FOLDER_FAIL = $null }
     }
 } else {
     Write-Output '[skip] no .NET SDK on this machine -- the dotnet stack cannot be exercised'
