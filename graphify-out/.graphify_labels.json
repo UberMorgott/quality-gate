@@ -1,7 +1,7 @@
 {
   "0": "harmony.cs",
   "1": "detect.ps1",
-  "2": "qgate wire (repo wiring, config only)",
+  "2": ".golangci.yml template",
   "3": ".Scan",
   "4": "Lookups",
   "5": "selftest.ps1",
@@ -37,13 +37,12 @@
   "35": "app.ps1",
   "36": "MetadataReader",
   "37": ".Resolve",
-  "38": "install.ps1",
   "39": ".Run",
   "40": "gopurity/main.go",
   "41": "Hud",
   "42": ".Callee",
   "43": "bepinex.ps1",
-  "44": ".golangci.yml template",
+  "44": "quality_gate job anchor shared by both hooks",
   "45": "global.ps1",
   "46": "hooks/pre-commit",
   "47": "pre-merge-commit",
@@ -51,12 +50,5 @@
   "49": "hold.ps1",
   "50": "Box.cs",
   "51": "Bcl.csproj",
-  "52": "Test-GitIgnored",
-  "53": "Get-TrustedHash",
-  "54": "Get-Stacks",
-  "55": "\"Gate is wrong\" issue template",
-  "56": "Get-GoFuzzArgs",
-  "57": "Test-CppOwn",
-  "58": "Get-DirBytes",
-  "59": "Get-GoCgoExportLive"
+  "55": "Coverage measures happy paths; a green suite proves nothing"
 }
