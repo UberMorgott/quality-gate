@@ -1459,7 +1459,11 @@ function Invoke-DotnetStack($s) {
                 }
             })
         $linked = @($diags | Where-Object Linked | ForEach-Object Code)
-        $codes = @($diags | Where-Object { -not $_.Linked } | ForEach-Object Code)
+        $codes = @($diags | Where-Object { -not $_.Linked -and $_.Code -notmatch '^QGATE\d+$' } | ForEach-Object Code)
+        # qgate.analyzers.props itself (#126): on a legacy csproj it adds the injected packages'
+        # DLLs to @(Analyzer) by hand, and says so when none arrived -- silence there would read
+        # exactly like clean code.
+        if ($o -match 'warning\s+QGATE001') { $script:Lines += "[WARN] ${proj}: analyzers injected but 0 loaded (non-SDK project) -- analyzer rules did not run" }
         if ($linked) {
             $script:Lines += "[INFO] ${proj}: $($linked.Count) newer-API analyzer diagnostic(s) in files linked from outside the project dir, not counted -- $((@($linked | Group-Object | Sort-Object Count, Name -Descending | ForEach-Object { "$($_.Name) x$($_.Count)" })) -join ', ')"
         }

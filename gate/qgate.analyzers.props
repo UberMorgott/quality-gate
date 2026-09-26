@@ -119,12 +119,12 @@
   </PropertyGroup>
 
   <ItemGroup Condition="!Exists('$(MSBuildProjectDirectory)\.qgate-no-analyzers')">
-    <PackageReference Include="Meziantou.Analyzer" Version="3.0.224"
+    <PackageReference Include="Meziantou.Analyzer" Version="3.0.224" QGateDir="meziantou.analyzer\3.0.224"
                       PrivateAssets="all" IncludeAssets="runtime;build;native;contentfiles;analyzers;buildtransitive" />
     <!-- Unity rules on a non-Unity project are noise, so the gate decides: it already reads
          the evaluated Reference/PackageReference list in the `refs` phase and passes
          -p:QGateUnity=true only when something there is called UnityEngine*. -->
-    <PackageReference Include="Microsoft.Unity.Analyzers" Version="1.27.0" Condition="'$(QGateUnity)' == 'true'"
+    <PackageReference Include="Microsoft.Unity.Analyzers" Version="1.27.0" QGateDir="microsoft.unity.analyzers\1.27.0" Condition="'$(QGateUnity)' == 'true'"
                       PrivateAssets="all" IncludeAssets="runtime;build;native;contentfiles;analyzers;buildtransitive" />
     <!-- Caps the analyzer rules that default to ERROR; see the file for why and for what
          still outranks it. -->
@@ -140,12 +140,71 @@
     the file IS the opt-in, and every RS0030 hit is an API its owner listed.
   -->
   <ItemGroup Condition="'$(QGateSonarVersion)' != '' and !Exists('$(MSBuildProjectDirectory)\.qgate-no-analyzers')">
-    <PackageReference Include="SonarAnalyzer.CSharp" Version="$(QGateSonarVersion)"
+    <PackageReference Include="SonarAnalyzer.CSharp" Version="$(QGateSonarVersion)" QGateDir="sonaranalyzer.csharp\$(QGateSonarVersion)"
                       PrivateAssets="all" IncludeAssets="runtime;build;native;contentfiles;analyzers;buildtransitive" />
   </ItemGroup>
   <ItemGroup Condition="'$(QGateBannedApiVersion)' != '' and !Exists('$(MSBuildProjectDirectory)\.qgate-no-analyzers')">
-    <PackageReference Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" Version="$(QGateBannedApiVersion)"
+    <PackageReference Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" Version="$(QGateBannedApiVersion)" QGateDir="microsoft.codeanalysis.bannedapianalyzers\$(QGateBannedApiVersion)"
                       PrivateAssets="all" IncludeAssets="runtime;build;native;contentfiles;analyzers;buildtransitive" />
     <AdditionalFiles Include="$(QGateBannedSymbols)" />
   </ItemGroup>
+
+  <!--
+    Legacy (non-SDK) csproj, #126. Restore still runs and still extracts the packages above,
+    but turning a package's analyzers/ folder into @(Analyzer) items is ResolvePackageAssets,
+    and that target lives in Microsoft.NET.Sdk: a ToolsVersion="15.0" project built by the
+    dotnet MSBuild has none. Measured on such a project: packages restored, 0 Analyzer items,
+    no diagnostics, a false clean. So for those projects only, the gate adds the items itself,
+    from the packages IT injected (QGateDir above) and nothing else in the repository.
+
+    Same selection as the SDK: C# and language-neutral DLLs (not vb/fs, not satellite
+    resources), and where a package ships per-Roslyn copies (analyzers/dotnet/roslyn4.8/...)
+    only the highest one this compiler can load ($(CompilerApiVersion), set by Roslyn's own
+    targets); unversioned DLLs count as 0.0. SDK projects never reach this target, so they
+    keep exactly the analyzers the SDK resolved, none twice.
+
+    qgate.globalconfig needs nothing here: Roslyn's Microsoft.Managed.Core.targets copies
+    GlobalAnalyzerConfigFiles into EditorConfigFiles at evaluation time on legacy projects
+    too (measured: listed there).
+  -->
+  <!-- Never a silent false clean: packages injected and none of their DLLs made it into
+       @(Analyzer) is said out loud. check.ps1 turns QGATE001 into an advisory [WARN]. -->
+  <Target Name="QGateLegacyAnalyzers" BeforeTargets="CoreCompile" DependsOnTargets="_QGateLegacyAnalyzerPackage"
+          Condition="'$(UsingMicrosoftNETSdk)' != 'true'">
+    <Warning Condition="'$(_QGateInjected)' == 'true' and '@(_QGateLoaded)' == ''" Code="QGATE001"
+             Text="analyzers injected but 0 loaded (non-SDK project)" />
+  </Target>
+  <Target Name="_QGateLegacyAnalyzerPackage" Outputs="%(_QGatePkgDir.Identity)" DependsOnTargets="_QGateLegacyAnalyzerDirs"
+          Condition="'$(UsingMicrosoftNETSdk)' != 'true'">
+    <ItemGroup>
+      <_QGateCand Remove="@(_QGateCand)" />
+      <_QGateCand Condition="'%(_QGatePkgDir.Identity)' != ''" Include="%(_QGatePkgDir.Identity)\analyzers\**\*.dll"
+                  Exclude="%(_QGatePkgDir.Identity)\analyzers\**\*.resources.dll;%(_QGatePkgDir.Identity)\analyzers\**\vb\**;%(_QGatePkgDir.Identity)\analyzers\**\fs\**" />
+      <_QGateCand>
+        <Ver>$([System.Text.RegularExpressions.Regex]::Replace('%(_QGateCand.RecursiveDir)', '(?s)^(?:.*?roslyn(\d+\.\d+)[\\/].*|.*)$', '$1'))</Ver>
+      </_QGateCand>
+      <_QGateCand Condition="'%(_QGateCand.Ver)' == ''">
+        <Ver>0.0</Ver>
+      </_QGateCand>
+    </ItemGroup>
+    <PropertyGroup>
+      <_QGateApi>$(CompilerApiVersion.Replace('roslyn', ''))</_QGateApi>
+      <_QGateApi Condition="'$(_QGateApi)' == ''">99.0</_QGateApi>
+      <_QGateBest>0.0</_QGateBest>
+      <_QGateBest Condition="$([MSBuild]::VersionLessThanOrEquals('%(_QGateCand.Ver)', '$(_QGateApi)')) and $([MSBuild]::VersionGreaterThan('%(_QGateCand.Ver)', '$(_QGateBest)'))">%(_QGateCand.Ver)</_QGateBest>
+    </PropertyGroup>
+    <ItemGroup>
+      <_QGateLoaded Include="@(_QGateCand)" Condition="'%(_QGateCand.Ver)' == '$(_QGateBest)'" />
+      <Analyzer Include="@(_QGateCand)" Condition="'%(_QGateCand.Ver)' == '$(_QGateBest)'" />
+    </ItemGroup>
+  </Target>
+  <Target Name="_QGateLegacyAnalyzerDirs">
+    <PropertyGroup>
+      <_QGatePkgRoot>$(NuGetPackageRoot.TrimEnd('\').TrimEnd('/'))</_QGatePkgRoot>
+      <_QGateInjected Condition="'%(PackageReference.QGateDir)' != ''">true</_QGateInjected>
+    </PropertyGroup>
+    <ItemGroup Condition="'$(_QGatePkgRoot)' != ''">
+      <_QGatePkgDir Include="@(PackageReference->'$(_QGatePkgRoot)\%(QGateDir)')" Condition="'%(PackageReference.QGateDir)' != ''" />
+    </ItemGroup>
+  </Target>
 </Project>

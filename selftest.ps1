@@ -1611,6 +1611,10 @@ internal class Sealable
         # the analyzers arrived and the Unity half did not.
         Check 'Unity analyzers are not injected into a project with no UnityEngine reference' `
             (($out -match 'MA0084') -and ($out -match 'CA1001') -and ($out -notmatch '\bUNT\d')) $out
+        # #126 adds analyzer DLLs by hand on legacy csproj only: an SDK project keeps the ones
+        # the SDK resolved, none loaded twice (one MA0084 site in Probe.cs, reported once).
+        Check 'an SDK project never takes the legacy analyzer path' `
+            (($out -match 'MA0084 x1\b') -and ($out -cnotmatch 'QGATE\d') -and ($out -notmatch '0 loaded')) $out
     }
 
     # #87: a net8.0 test project `<Compile Include="..\X.cs" Link=...>`-links a file that
@@ -1999,7 +2003,7 @@ public static class BclLookups
     <Reference Include="Game"><HintPath>..\lib\Game.dll</HintPath></Reference>
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Patches.cs" />
+    <Compile Include="*.cs" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies.net472" Version="1.0.3" PrivateAssets="all" />
@@ -2019,11 +2023,50 @@ namespace Legacy
     }
 }
 '@)
+    [IO.File]::WriteAllText((Join-Path $hmLeg 'Probe.cs'), @'
+namespace Legacy
+{
+    public class Probe
+    {
+        private readonly string tag = "probe";
+
+        public string Tag => tag;
+
+        public int Find(string a, string b)
+        {
+            var tag = a;
+            return tag.Length + b.Length;
+        }
+    }
+}
+'@)
     $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $hmLeg.FullName -All -Full 2>&1 | Out-String)
     Check 'a legacy csproj with only TargetFrameworkVersion does not crash the stack (#125)' `
         (($out -notmatch 'gate crashed') -and ($out -match '\[PASS\] build')) $out
     Check 'the harmony phase runs on a legacy csproj and finds its dangling target (#125)' `
         (($out -match '\[FAIL\] harmony') -and ($out -match 'Hud\.UpdateStatusEffects not found \(Patches\.cs:\d+, StatusPatch\.Postfix\)')) $out
+    # #126: on the same legacy project the injected analyzer packages restored and 0 Analyzer
+    # items reached csc -- no SDK ResolvePackageAssets there. MA0084 (a local hiding a field,
+    # Probe.cs) is the defect Meziantou must now find; then a compiler older than every
+    # per-Roslyn copy Meziantou ships, which leaves nothing loadable, must say so out loud.
+    if ($out -match 'injection failed[^\r\n]*\bNU\d') {
+        Write-Output '[skip] analyzer packages could not be restored -- the legacy injection checks cannot run'
+    }
+    else {
+        Check 'injected analyzers run on a legacy csproj (#126)' `
+            (($out -match '\[WARN\] Legacy\.csproj: \d+ analyzer diagnostic\(s\)[^\r\n]*MA0084') -and ($out -notmatch '0 loaded')) $out
+        $legProj = Join-Path $hmLeg 'Legacy.csproj'
+        [IO.File]::WriteAllText($legProj, (Get-Content $legProj -Raw).Replace('</Project>', @'
+  <Target Name="OldCompiler" BeforeTargets="_QGateLegacyAnalyzerPackage">
+    <PropertyGroup><CompilerApiVersion>roslyn1.0</CompilerApiVersion></PropertyGroup>
+  </Target>
+</Project>
+'@))
+        $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $hmLeg.FullName -All -Full 2>&1 | Out-String)
+        Check 'injected analyzers that load nothing on a legacy csproj are a warning, not a clean pass (#126)' `
+            (($out -match '\[WARN\] Legacy\.csproj: analyzers injected but 0 loaded \(non-SDK project\)') -and ($out -notmatch 'MA0084') -and
+                ($out -notmatch 'QGATE001 x') -and ($out -notmatch 'compiler warning')) $out
+    }
     }
 } else {
     Write-Output '[skip] no .NET SDK on this machine -- the dotnet stack cannot be exercised'
