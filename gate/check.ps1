@@ -619,22 +619,40 @@ function Fail([string]$Message) {
 # hidden behind the one that happened to print first. Status lines ([PASS]/[FAIL]/[SKIP]/
 # [UNKNOWN]/[WARN]/[NOTE], `fix:`, `run:`) are always kept; the detail budget is split evenly
 # across the detail blocks between them, so one loud phase cannot starve the next.
+#
+# quality-gate#128: `go test ./...` prints one `ok  <pkg>` line per passing package, in
+# package order, so in a 145-package module the head of a failing block was all `ok` lines
+# and the `--- FAIL` of a package past ~#80 fell into the cut tail -- `[FAIL] go test` with
+# no failure text, re-run, flaky test passed, defect invisible. A block over its budget
+# drops those pass lines (and `?  <pkg> [no test files]`) first and says how many; a block
+# that fits is printed as it was.
 function Format-StackOutput([string[]]$Lines, [int]$Max) {
     $status = '^\s*(\[(PASS|FAIL|SKIP|UNKNOWN|WARN|NOTE)\]|fix:|run:)'
+    $noise = '^(ok\s+\S+\s+(\(cached\)|\d+(\.\d+)?s)|\?\s+\S+\s+\[no test files\])'
     $rows = @($Lines | ForEach-Object { "$_" -split "`r?`n" })
-    $blocks = 0; $inDetail = $false
-    foreach ($r in $rows) { $d = $r -notmatch $status; if ($d -and -not $inDetail) { $blocks++ }; $inDetail = $d }
+    $parts = [Collections.Generic.List[object]]::new(); $blk = $null
+    foreach ($r in $rows) {
+        if ($r -match $status) { $parts.Add($r); $blk = $null; continue }
+        if (-not $blk) { $blk = [Collections.Generic.List[string]]::new(); $parts.Add($blk) }
+        $blk.Add($r)
+    }
+    $blocks = @($parts | Where-Object { $_ -isnot [string] }).Count
     $cap = if ($blocks) { [Math]::Floor($Max / $blocks) } else { $Max }
     $out = [Collections.Generic.List[string]]::new()
-    $used = 0; $cut = 0
-    foreach ($r in $rows) {
-        if ($r -match $status) {
-            if ($cut) { $out.Add("...[truncated, $cut more chars]"); $cut = 0 }
-            $out.Add($r); $used = 0; continue
+    foreach ($p in $parts) {
+        if ($p -is [string]) { $out.Add($p); continue }
+        $keep = @($p); $omitted = 0
+        if ((($p | Measure-Object -Property Length -Sum).Sum + $p.Count) -gt $cap) {
+            $keep = @($p | Where-Object { $_ -notmatch $noise })
+            $omitted = $p.Count - $keep.Count
         }
-        if ($used + $r.Length + 1 -le $cap) { $out.Add($r); $used += $r.Length + 1 } else { $cut += $r.Length + 1; $used = $cap + 1 }
+        $used = 0; $cut = 0
+        foreach ($r in $keep) {
+            if ($used + $r.Length + 1 -le $cap) { $out.Add($r); $used += $r.Length + 1 } else { $cut += $r.Length + 1; $used = $cap + 1 }
+        }
+        if ($omitted) { $out.Add("...[$omitted passing go test package lines omitted]") }
+        if ($cut) { $out.Add("...[truncated, $cut more chars]") }
     }
-    if ($cut) { $out.Add("...[truncated, $cut more chars]") }
     ($out -join "`n").TrimEnd()
 }
 

@@ -3757,6 +3757,14 @@ try {
         (($r.Code -ne 0) -and ($r.Out -match '\[FAIL\] loud') -and ($r.Out -match '\[SKIP\] later -- not run')) $r.Out
     Check 'the detail of a failing stack is still capped' `
         (($r.Out -match '\.\.\.\[truncated, \d+ more chars\]') -and ($r.Out.Length -lt 8000)) "len=$($r.Out.Length)"
+    # #128: 145 `ok <pkg>` lines ahead of a `--- FAIL` used to fill the budget and cut the
+    # failure away. Over budget, the pass lines go first; the failure text stays.
+    [IO.File]::WriteAllText($custJson,
+        '{"checks":[{"name":"gotest","run":"1..145 | % { ''ok  '' + [char]9 + ''github.com/x/aegis/internal/pkg'' + $_ + [char]9 + ''1.234s'' }; ''--- FAIL: TestFlaky (0.50s)''; ''    flaky_test.go:42: want 1, got 2''; ''FAIL''; exit 1","level":"fast"}]}')
+    $null = Invoke-Trust $cust
+    $r = Invoke-Gate $cust
+    Check 'a go test failure after 145 passing packages is still reported' `
+        (($r.Code -ne 0) -and ($r.Out -match 'TestFlaky') -and ($r.Out -match 'want 1, got 2') -and ($r.Out -match '\[145 passing go test package lines omitted\]')) $r.Out
 
     # Trust is a hash of the checks, so editing the command re-arms the gate. This is
     # the case the feature exists to survive: a pull, a branch switch or a teammate
