@@ -459,6 +459,13 @@ if ($Baseline) {
     $script:BaselineLines = Get-BaselineLines $Root $Baseline
 }
 
+# #124: qgate.json "env", applied around every stack below. A malformed one is refused
+# here, before anything runs: a phase run without the variable the repository declared
+# is the very run it exists to prevent (the real user save opened by a smoke boot).
+$script:QGateEnv = Get-QGateEnv $Root
+if ($script:QGateEnv.Error) { Write-Output "[FAIL] $($script:QGateEnv.Error)"; exit 1 }
+$script:QGateEnvTmp = $null
+
 $script:Failed = $false
 # A -Soft phase failed: the run is red, but the phases and stacks after it still run.
 # StackSoft is per stack (its [FAIL] header), SoftFailed is the run's (the exit code).
@@ -2031,6 +2038,19 @@ function Invoke-GodotStack($s) {
     # verdict from the output; the test itself speaks through its exit code, which
     # Phase already checks.
     $scriptErrs = 'SCRIPT ERROR|Parse Error|Failed to load script'
+    # #124, opt-in: qgate.json {"godot": {"warningsFail": true}} also fails the test and
+    # smoke runs on an engine WARNING: line. A project that reports its own boot failure
+    # through push_warning() (CodeDungeon: BOOT_ERROR_CORE_START_FAILED) otherwise passed
+    # the smoke boot. Not the import: its warnings are about assets, not about the code.
+    $wf = $null
+    $cfgFile = Join-Path $Root 'qgate.json'
+    if (Test-Path -LiteralPath $cfgFile) { $wf = try { (Get-Content -LiteralPath $cfgFile -Raw | ConvertFrom-Json).godot.warningsFail } catch { $null } }
+    if ($wf -eq $true -and $wf -is [bool]) {
+        $errs += '|^\s*WARNING:'
+        $scriptErrs += '|^\s*WARNING:'
+    } elseif ($null -ne $wf -and $wf -isnot [bool]) {
+        $script:Lines += "[WARN] qgate.json godot.warningsFail must be true or false, got '$wf' -- ignored"
+    }
     foreach ($t in Get-ChildItem $s.Dir -Recurse -File -Filter '*_headless_test.gd' -ErrorAction SilentlyContinue |
         Where-Object { $_.FullName -notmatch $noGodotDir }) {
         $tf = "`"$($t.FullName)`""
@@ -3046,6 +3066,12 @@ if ($Full -and -not $ParallelStacks -and -not $env:QGATE_SLOT_HELD -and @($stack
 # and none of them may run while another stack is changing the tree.
 # ponytail: one child per stack type, not per stack directory; split further if a repo
 # with many modules of one type shows it matters.
+# #124: the run's own `{tmp}` for qgate.json "env", removed with the dotnet format
+# solution after the loop. Per process: a -Parallel worker makes its own.
+if ($script:QGateEnv -and @($script:QGateEnv.Vars.Values | Where-Object { $_.Contains('{tmp}') })) {
+    $script:QGateEnvTmp = Join-Path ([IO.Path]::GetTempPath()) "quality-gate-env-$PID-$([IO.Path]::GetRandomFileName())"
+    New-Item -ItemType Directory -Force $script:QGateEnvTmp | Out-Null
+}
 $script:ChildResults = @{}
 $parallelKeys = @()
 if ($Parallel -and -not $ParallelStacks) {
@@ -3106,17 +3132,19 @@ foreach ($s in $stacks) {
     $script:StackSoft = $false
     $before = $script:Phases
     try {
-        switch ($s.Stack) {
-            'base' { Invoke-BaseStack $s }
-            'go' { Invoke-GoStack $s }
-            'web' { Invoke-WebStack $s }
-            'rust' { Invoke-RustStack $s }
-            'proto' { Invoke-ProtoStack $s }
-            'godot' { Invoke-GodotStack $s }
-            'dotnet' { Invoke-DotnetStack $s }
-            'cpp' { Invoke-CppStack $s }
-            'custom' { Invoke-WithoutHookGitEnv { Invoke-CustomStack $s } }
-            'deploy' { Invoke-DeployStack $s }
+        Invoke-WithQGateEnv $script:QGateEnv.Vars $script:QGateEnvTmp $Root {
+            switch ($s.Stack) {
+                'base' { Invoke-BaseStack $s }
+                'go' { Invoke-GoStack $s }
+                'web' { Invoke-WebStack $s }
+                'rust' { Invoke-RustStack $s }
+                'proto' { Invoke-ProtoStack $s }
+                'godot' { Invoke-GodotStack $s }
+                'dotnet' { Invoke-DotnetStack $s }
+                'cpp' { Invoke-CppStack $s }
+                'custom' { Invoke-WithoutHookGitEnv { Invoke-CustomStack $s } }
+                'deploy' { Invoke-DeployStack $s }
+            }
         }
     } catch {
         # Fail closed: a crash in the gate is a failure, never a silent pass.
@@ -3179,6 +3207,7 @@ if ($script:SoftFailed) { $script:Failed = $true }
 # every path out of the loop reaches this line, and a killed process leaves a directory
 # named by its own PID, which nothing else will ever collide with.
 if ($script:FmtSlnDir) { Remove-Item $script:FmtSlnDir -Recurse -Force -ErrorAction SilentlyContinue }
+if ($script:QGateEnvTmp) { Remove-Item -LiteralPath $script:QGateEnvTmp -Recurse -Force -ErrorAction SilentlyContinue }
 if ($ParallelStacks) { $childRec | Export-Clixml -LiteralPath $ParallelOut; exit 0 }
 
 # THE INVARIANT: a run that executed zero check phases is not a green run.

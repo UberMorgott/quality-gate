@@ -2102,7 +2102,83 @@ if ($IsWindows) {
         (($loudCode -ne 0) -and ($loudOut -match '\[FAIL\] godot import \(') -and ($loudOut -match 'SCRIPT ERROR: boom')) $loudOut
     Check 'a bounded godot run that prints nothing passes' `
         (($quietCode -eq 0) -and ($quietOut -match '\[PASS\] godot import') -and ($quietOut -match '\[PASS\] godot smoke')) $quietOut
+
+    # #124: an engine WARNING: is a verdict only when qgate.json opts in. CodeDungeon's boot
+    # failure (BOOT_ERROR_CORE_START_FAILED) arrived as one and the smoke run passed.
+    $warn = Join-Path $gdShims 'godot-warn.cmd'
+    [IO.File]::WriteAllText($warn, "@echo off`r`necho WARNING: [StateBridge] BOOT_ERROR_CORE_START_FAILED: stand-in`r`necho    WARNING: indented stand-in`r`n")
+    $gdCfg = Join-Path $gdt 'qgate.json'
+    $gdTest = Join-Path $gdt 'boot_headless_test.gd'
+    $runGd = { param($Bin) $env:GODOT_BIN = $Bin; $o = (& pwsh -NoProfile -File $gate -Root $gdt -Only godot -Full 2>&1 | Out-String); [pscustomobject]@{ Code = $LASTEXITCODE; Out = $o } }
+    try {
+        $warnOff = & $runGd $warn
+        Set-Content $gdCfg '{"godot": {"warningsFail": true}}'
+        $warnOn = & $runGd $warn
+        $quietOn = & $runGd $quiet
+        $gdTestText = [IO.File]::ReadAllText($gdTest)
+        Remove-Item $gdTest, "$gdTest.uid"
+        try { $warnSmoke = & $runGd $warn } finally { [IO.File]::WriteAllText($gdTest, $gdTestText) }
+        Set-Content $gdCfg '{"godot": {"warningsFail": "yes"}}'
+        $warnBad = & $runGd $warn
+    } finally { $env:GODOT_BIN = $priorGodot; Remove-Item $gdCfg -Force -ErrorAction SilentlyContinue }
+    Check 'godot WARNING: output passes by default' (($warnOff.Code -eq 0) -and ($warnOff.Out -match '\[PASS\] godot smoke')) $warnOff.Out
+    Check 'godot.warningsFail fails the test run on WARNING: and names the lines, import untouched' `
+        (($warnOn.Code -ne 0) -and ($warnOn.Out -match '\[PASS\] godot import') -and ($warnOn.Out -match '\[FAIL\] godot test boot_headless_test\.gd') -and
+        ($warnOn.Out -match 'BOOT_ERROR_CORE_START_FAILED') -and ($warnOn.Out -match '(?m)^\s+WARNING: indented stand-in')) $warnOn.Out
+    Check 'godot.warningsFail fails the smoke boot on WARNING:' `
+        (($warnSmoke.Code -ne 0) -and ($warnSmoke.Out -match '\[FAIL\] godot smoke') -and ($warnSmoke.Out -match 'BOOT_ERROR_CORE_START_FAILED')) $warnSmoke.Out
+    Check 'godot.warningsFail passes a run that prints no warning' (($quietOn.Code -eq 0) -and ($quietOn.Out -match '\[PASS\] godot smoke')) $quietOn.Out
+    Check 'godot.warningsFail that is not a boolean warns and is ignored' `
+        (($warnBad.Code -eq 0) -and ($warnBad.Out -match 'godot\.warningsFail must be true or false')) $warnBad.Out
+
+    # #124: qgate.json "env" reaches the engine, {tmp} is a real directory for the run and
+    # is gone after it, {root} is the repository, and only placeholder values are
+    # normalised. A shim writes what it saw to a probe file.
+    $probe = Join-Path $gdShims 'env-probe.txt'
+    $envShim = Join-Path $gdShims 'godot-env.cmd'
+    [IO.File]::WriteAllText($envShim, (@(
+                '@echo off'
+                "if exist `"%QGATE_T_TMP%\`" (>>`"$probe`" echo tmp-exists) else (>>`"$probe`" echo tmp-missing)"
+                ">>`"$probe`" echo tmp=%QGATE_T_TMP%"
+                ">>`"$probe`" echo saves=%QGATE_T_SAVES%"
+                ">>`"$probe`" echo root=%QGATE_T_ROOT%"
+                ">>`"$probe`" echo plain=%QGATE_T_PLAIN%"
+            ) -join "`r`n") + "`r`n")
+    Set-Content $gdCfg '{"env": {"QGATE_T_TMP": "{tmp}", "QGATE_T_SAVES": "{tmp}/saves", "QGATE_T_ROOT": "{root}", "QGATE_T_PLAIN": "a/b"}}'
+    try { $envRun = & $runGd $envShim } finally { $env:GODOT_BIN = $priorGodot; Remove-Item $gdCfg -Force -ErrorAction SilentlyContinue }
+    $seen = @(Get-Content $probe -ErrorAction SilentlyContinue)
+    $envTmp = (@($seen | Where-Object { $_ -like 'tmp=*' }) | Select-Object -First 1) -replace '^tmp=', ''
+    Check 'qgate.json env reaches every godot run with {tmp} created' `
+        (($envRun.Code -eq 0) -and ($seen -contains 'tmp-exists') -and ($seen -notcontains 'tmp-missing') -and ($envTmp -match 'quality-gate-env-')) "$($envRun.Out) probe: $($seen -join ' | ')"
+    Check 'qgate.json env {tmp} is removed after the run' ($envTmp -and -not (Test-Path -LiteralPath $envTmp)) $envTmp
+    Check 'qgate.json env expands {root} and normalises only placeholder paths' `
+        (($seen -contains "saves=$envTmp\saves") -and ($seen -contains "root=$((Resolve-Path $gdt).Path)") -and ($seen -contains 'plain=a/b')) ($seen -join ' | ')
+    Set-Content $gdCfg '{"env": {"QGATE_T_TMP": 1}}'
+    try { $envBad = & $runGd $quiet } finally { $env:GODOT_BIN = $priorGodot; Remove-Item $gdCfg -Force -ErrorAction SilentlyContinue }
+    Check 'qgate.json env with a non-string value fails the run' `
+        (($envBad.Code -ne 0) -and ($envBad.Out -match "\[FAIL\] qgate\.json env 'QGATE_T_TMP' must be a string")) $envBad.Out
 }
+# #124: the env wrapper itself -- applied inside, put back exactly (a value restored, an
+# unset variable unset again) however the body ends, and a malformed "env" named.
+$env:QGATE_T_KEEP = 'orig'
+Remove-Item env:QGATE_T_NEW -ErrorAction SilentlyContinue
+$script:envSeen = $null
+try {
+    Invoke-WithQGateEnv ([ordered]@{ QGATE_T_KEEP = 'over'; QGATE_T_NEW = '{tmp}/x' }) 'T' 'R' {
+        $script:envSeen = "$env:QGATE_T_KEEP|$env:QGATE_T_NEW"; throw 'boom'
+    }
+} catch { Write-Verbose "expected: $_" }
+Check 'env wrapper applies the values with {tmp} expanded' ($script:envSeen -eq "over|T$([IO.Path]::DirectorySeparatorChar)x") $script:envSeen
+Check 'env wrapper restores a set variable and unsets a new one after a throw' `
+    (($env:QGATE_T_KEEP -eq 'orig') -and -not (Test-Path env:QGATE_T_NEW)) "KEEP=$env:QGATE_T_KEEP NEW=$env:QGATE_T_NEW"
+Remove-Item env:QGATE_T_KEEP
+$envDir = Join-Path $tmp 'env-shapes'
+New-Item -ItemType Directory $envDir -Force | Out-Null
+$envShape = { param($Json) Set-Content (Join-Path $envDir 'qgate.json') $Json; Get-QGateEnv $envDir }
+Check 'qgate.json env that is not an object is refused' ((& $envShape '{"env": ["A=1"]}').Error -match 'must be an object')
+Check 'qgate.json env with a bad variable name is refused' ((& $envShape '{"env": {"A-B": "x"}}').Error -match 'is not a variable name')
+$envOk = & $envShape '{"env": {"A": "x", "B": "{tmp}"}}'
+Check 'qgate.json env with string values is accepted' ((-not $envOk.Error) -and ($envOk.Vars['B'] -eq '{tmp}'))
 
 }
 

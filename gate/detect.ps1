@@ -1224,6 +1224,54 @@ function Get-DeployEntries([string]$Root) {
     [pscustomobject]@{ Entries = $entries; Error = '' }
 }
 
+# quality-gate#124: qgate.json "env": {"NAME": "value"} -- set for every phase of every
+# stack this run executes, restored after each stack. The gate has no other per-project
+# environment, and a Godot autoload that opens the real user save unless a variable points
+# it elsewhere touched the user's data on every gate run. `{tmp}` is a fresh directory the
+# gate creates for the run and removes at its end, `{root}` the repository root; a value
+# with either has its separators normalised for the platform. Same contract as
+# Get-DeployEntries: $null when nothing is declared, else .Vars (ordered) and .Error.
+function Get-QGateEnv([string]$Root) {
+    $file = Join-Path $Root 'qgate.json'
+    if (-not (Test-Path $file)) { return $null }
+    $json = try { Get-Content $file -Raw | ConvertFrom-Json } catch { $null }
+    if ($null -eq $json -or $json.PSObject.Properties.Name -notcontains 'env') { return $null }
+    $bad = { param($m) [pscustomobject]@{ Vars = [ordered]@{}; Error = $m } }
+    $raw = $json.env
+    if ($raw -isnot [Management.Automation.PSCustomObject]) { return (& $bad 'qgate.json "env" must be an object of NAME: "value" strings') }
+    $vars = [ordered]@{}
+    foreach ($p in $raw.PSObject.Properties) {
+        if ($p.Name -notmatch '^[A-Za-z_][A-Za-z0-9_]*$') { return (& $bad "qgate.json env '$($p.Name)' is not a variable name (letters, digits, _)") }
+        if ($p.Value -isnot [string]) { return (& $bad "qgate.json env '$($p.Name)' must be a string, got '$($p.Value)'") }
+        $vars[$p.Name] = $p.Value
+    }
+    if ($vars.Count -eq 0) { return $null }
+    [pscustomobject]@{ Vars = $vars; Error = '' }
+}
+
+# Runs $Body with $Vars applied to the process environment -- every tool a phase starts
+# inherits it -- and puts each variable back exactly as it was, unset included, however
+# $Body ends. Through the env: drive, not [Environment]::SetEnvironmentVariable: see
+# Invoke-WithoutHookGitEnv in check.ps1 for the $null that arrived as ''.
+function Invoke-WithQGateEnv($Vars, [string]$Tmp, [string]$Root, [scriptblock]$Body) {
+    if (-not $Vars -or $Vars.Count -eq 0) { & $Body; return }
+    $saved = @{}
+    foreach ($k in $Vars.Keys) {
+        $item = Get-Item "env:$k" -ErrorAction SilentlyContinue
+        $saved[$k] = if ($item) { $item.Value } else { $null }
+        $v = [string]$Vars[$k]
+        if ($v.Contains('{tmp}') -or $v.Contains('{root}')) {
+            $v = $v.Replace('{tmp}', $Tmp).Replace('{root}', $Root).Replace('/', [IO.Path]::DirectorySeparatorChar)
+        }
+        if ($v) { Set-Item "env:$k" $v } else { Remove-Item "env:$k" -ErrorAction SilentlyContinue }
+    }
+    try { & $Body } finally {
+        foreach ($k in $saved.Keys) {
+            if ($null -eq $saved[$k]) { Remove-Item "env:$k" -ErrorAction SilentlyContinue } else { Set-Item "env:$k" $saved[$k] }
+        }
+    }
+}
+
 # Where this machine remembers which repositories may run their own commands. Per
 # user, never inside the repository: a trust marker a clone can carry is not trust.
 function Get-DefaultTrustStore {

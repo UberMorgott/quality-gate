@@ -113,6 +113,8 @@ Place one optional `qgate.json` at the repository root. Tool-specific rules rema
 | `stopHook` | Opt-in, default off: only `true` makes `wire` add the Claude Code Stop hook and lets `qgate stop-hook` run the gate; anything else makes `wire` remove it. Re-run `wire` after changing it. |
 | `enabled` | `false` disables the global hook dispatcher for this repository. |
 | `timeouts.godot` | Positive per-process timeout in seconds; default 600. |
+| `env` | Object of `"NAME": "value"` strings set for every phase of every stack (custom checks and tools included), restored after each stack. `{tmp}` is a fresh per-run directory the gate creates and removes, `{root}` the repository root; values using them get platform path separators. Use it to keep test/smoke runs off real user data, e.g. `{"env": {"MYGAME_SAVE_DIR": "{tmp}/saves"}}`, or redirect the whole user-data root (`APPDATA`, `LOCALAPPDATA`, `XDG_DATA_HOME`: `"{tmp}/appdata"`) -- note that also moves npm/Go/dotnet user config for those phases. A non-object, a bad name or a non-string value fails the run. |
+| `godot.warningsFail` | Opt-in, default `false`: `true` fails the `godot test` and `godot smoke` runs on any engine `WARNING:` line (leading whitespace allowed), listing them; `godot import` is unaffected. |
 | `go.tags` | Array of build-tag sets (`["valheim", "windrose"]`; `"a,b"` = both at once); every Go phase runs once per set via `GOFLAGS=-tags=<set>`, for tag-per-binary modules. |
 | `go.lintGoos` | Array of extra GOOS targets for full vet/lint; host target is omitted and cross-target runs disable cgo. |
 | `go.deterministic` | Array of root-relative package directories for purity/property-test advisories. |
@@ -204,7 +206,7 @@ Go-built linter/scanner binaries older than the module's Go language version are
 | `res:// references` | Fast | None | Validates case-sensitive resource paths and UID references to catch missing assets before runtime. |
 | `godot import` | Full | Godot | Runs headless import with a warm-up pass to detect import and script errors. |
 | `godot test <filename>` | Full | Godot | Runs each `*_headless_test.gd` script to detect script/test failures. |
-| `godot smoke` | Full | Godot | Starts the project headlessly for one iteration to catch startup errors. |
+| `godot smoke` | Full | Godot | Starts the project headlessly for one iteration to catch startup errors; `WARNING:` lines also fail it with `godot.warningsFail`. Runs with qgate.json `env`, so a boot that writes user data can be pointed at `{tmp}`. |
 
 Formatting/linting targets changed `.gd` files unless `-All`/`-Full`; `.godot` and `addons` are excluded. If either gdtoolkit command is missing, both phases warn/skip in fast and fail in full. Full requires Godot: set `GODOT_BIN` if it is not discovered. Timeouts fail the relevant Godot phase.
 
