@@ -12,15 +12,15 @@
     "semantic_hash": ""
   },
   "gate/check.ps1": {
-    "mtime": 1790374810.0505416,
-    "seen": 1790374994.6395926,
-    "ast_hash": "79fb017d264c2cfb87ba66c0989e1ffd",
+    "mtime": 1790422834.2096455,
+    "seen": 1790423049.1757214,
+    "ast_hash": "f164ccec5421aa4c9224374da0f380eb",
     "semantic_hash": ""
   },
   "gate/detect.ps1": {
-    "mtime": 1790329138.9882226,
-    "seen": 1790329339.6634424,
-    "ast_hash": "6105a0bc4ea7895c8ba7d447381cc49a",
+    "mtime": 1790422809.0587983,
+    "seen": 1790423049.1757228,
+    "ast_hash": "3a8d26d5c1aa4f8a9881902ea0f99f0c",
     "semantic_hash": ""
   },
   "gate/outdated.ps1": {
@@ -42,9 +42,9 @@
     "semantic_hash": ""
   },
   "selftest.ps1": {
-    "mtime": 1790374824.5279822,
-    "seen": 1790374994.6396031,
-    "ast_hash": "b392c6eb2b171158cf603af191da8c78",
+    "mtime": 1790422881.1098788,
+    "seen": 1790423049.1757317,
+    "ast_hash": "c7c8b032d94c66773d5f9791a177f409",
     "semantic_hash": ""
   },
   "templates/.stylelintrc.json": {
@@ -126,9 +126,9 @@
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1790356146.7024689,
-    "seen": 1790356628.6727335,
-    "ast_hash": "47f34a1778390d88605266e0fe3c4951",
+    "mtime": 1790423030.1073048,
+    "seen": 1790423049.1757524,
+    "ast_hash": "e152afe9803f469d3e82008df4c28add",
     "semantic_hash": ""
   },
   "templates/.golangci.yml": {

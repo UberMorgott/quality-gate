@@ -54,7 +54,9 @@
   "52": "Test-GitIgnored",
   "53": "Get-TrustedHash",
   "54": "Get-Stacks",
-  "55": "Test-GoToolStale",
+  "55": "\"Gate is wrong\" issue template",
   "56": "Get-GoFuzzArgs",
-  "57": "Test-CppOwn"
+  "57": "Test-CppOwn",
+  "58": "Get-DirBytes",
+  "59": "Get-GoCgoExportLive"
 }
