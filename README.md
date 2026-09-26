@@ -117,6 +117,7 @@ Place one optional `qgate.json` at the repository root. Tool-specific rules rema
 | `godot.warningsFail` | Opt-in, default `false`: `true` fails the `godot test` and `godot smoke` runs on any engine `WARNING:` line (leading whitespace allowed), listing them; `godot import` is unaffected. |
 | `go.tags` | Array of build-tag sets (`["valheim", "windrose"]`; `"a,b"` = both at once); every Go phase runs once per set via `GOFLAGS=-tags=<set>`, for tag-per-binary modules. |
 | `go.lintGoos` | Array of extra GOOS targets for full vet/lint; host target is omitted and cross-target runs disable cgo. |
+| `go.lintEngine` | `"auto"` (default) or `"golangci"`: `"golangci"` keeps `go vet` + `golangci-lint run` even when `aegis lint` is installed. |
 | `go.deterministic` | Array of root-relative package directories for purity/property-test advisories. |
 | `go.flaky` | `true` or options: `count` (20; 1..500), `budget` seconds (180; 10..3600), `cpu` (`"1,2"`), `race` (true), `fail` (false), `packages` (root-relative directories; otherwise changed test packages). |
 | `go.fuzzParallel` | Fuzz worker processes per target (`go test -parallel`); default half the cores, 1..4; allowed 1..256. |
@@ -168,6 +169,7 @@ The runner also validates requested stacks/revisions and tool pins, rejects an u
 | `gofmt` | Fast | Go (`gofmt`) | Rejects unformatted non-ignored Go files to keep source formatting consistent. |
 | `go build` | Fast | Go | Compiles all module packages into temporary output to catch build errors. |
 | `go vet` | Fast | Go | Finds suspicious constructs that compile but are likely incorrect. |
+| `aegis lint` | Fast | aegis >= 0.1.7; used only when on PATH | Replaces `go vet` + `golangci-lint` (reads the golangci config, `//nolint`, go vet's default analyzers) in a warm shared daemon; `[INFO] lint engine:` names the engine used. Pre-commit lints staged packages and their importers (`--changed=staged`), 120 s timeout. Only a pass is a verdict: findings (exit 1) are printed and `go vet` + `golangci-lint` decide, with a `[WARN]` if they pass; exit 2 falls back. Not used with `-Baseline`, `QGATE_NO_AEGIS=1`, `go.lintEngine: "golangci"`, or a golangci config with `run.tests: false` or a govet exclusion. |
 | `golangci-lint config verify` | Fast | golangci-lint | Validates the linter config schema to prevent local/CI disagreement; skips absent config or an older tool without this command. |
 | `golangci-lint` | Fast | golangci-lint | Runs configured Go linters to catch defects; missing tool warns/skips in fast and fails in full. |
 | `go test` | Fast/full | Go | Runs short cacheable tests in fast, and uncached shuffled tests in full, to catch behavioral regressions. |

@@ -898,6 +898,48 @@ function Get-GoTags([string]$Root) {
     [pscustomobject]@{ Sets = $sets; Error = '' }
 }
 
+# quality-gate#130: `aegis lint` (golangci config, //nolint, go vet's default analyzers)
+# in a shared warm daemon instead of cold go vet + golangci-lint runs. $null when aegis is
+# not on PATH (nothing to say), else .Use, .Version and .Why (the reason it is not used).
+# Opt-outs: QGATE_NO_AEGIS=1, qgate.json {"go": {"lintEngine": "golangci"}}. A golangci
+# config with `run.tests: false` or an exclusion naming govet stays on go vet: aegis
+# applies both to its vet analyzers, real go vet ignores them (aegis-engine#15).
+# ponytail: both are a text match on the config, not a YAML parser -- a false hit only
+# keeps the old engine.
+function Get-AegisLint([string]$Root, [string]$Dir) {
+    # The machine-wide opt-out is as silent as no aegis at all.
+    if ($env:QGATE_NO_AEGIS -eq '1' -or -not (Get-Command aegis -ErrorAction SilentlyContinue)) { return $null }
+    $no = { param($w, $v = '') [pscustomobject]@{ Use = $false; Version = $v; Why = $w } }
+    $file = Join-Path $Root 'qgate.json'
+    $json = if (Test-Path $file) { try { Get-Content $file -Raw | ConvertFrom-Json } catch { $null } }
+    if ($null -ne $json -and $null -ne $json.go -and $json.go.PSObject.Properties.Name -contains 'lintEngine') {
+        $eng = $json.go.lintEngine
+        if ($eng -eq 'golangci') { return (& $no 'qgate.json go.lintEngine is "golangci"') }
+        if ($eng -ne 'auto') { return (& $no "qgate.json go.lintEngine '$eng' is not `"auto`" or `"golangci`"") }
+    }
+    $prev = $global:LASTEXITCODE
+    $first = "$(@(& aegis version 2>$null)[0])"
+    $global:LASTEXITCODE = $prev
+    if ($first -notmatch '^aegis v?(\d+\.\d+\.\d+)') { return (& $no "``aegis version`` printed '$first', no version") }
+    $ver = $Matches[1]
+    if ([version]$ver -lt [version]'0.1.7') { return (& $no "aegis $ver is older than 0.1.7" $ver) }
+    $cfgs = @($Dir, $Root) | Select-Object -Unique | ForEach-Object { $d = $_; @('.golangci.yml', '.golangci.yaml') | ForEach-Object { Join-Path $d $_ } } | Where-Object { Test-Path $_ }
+    foreach ($c in $cfgs) {
+        $name = Split-Path -Leaf $c
+        # Comments dropped: the template names govet in commented-out exclusion examples.
+        $lines = @(Get-Content $c | ForEach-Object { $_ -replace '(^|\s)#.*$', '' } | Where-Object { $_.Trim() })
+        $in = -1
+        foreach ($l in $lines) {
+            $ind = $l.Length - $l.TrimStart().Length
+            if ($in -ge 0 -and $ind -le $in) { $in = -1 }
+            if ($l -match '^\s+tests:\s*false\b') { return (& $no "$name sets run.tests: false, which aegis would apply to go vet too (aegis-engine#15)" $ver) }
+            if ($l -match '^\s*(exclusions|exclude-rules):') { $in = $ind; continue }
+            if ($in -ge 0 -and $l -match '(?<![\w-])govet(?![\w-])') { return (& $no "$name excludes govet findings, which aegis would apply to go vet too (aegis-engine#15)" $ver) }
+        }
+    }
+    [pscustomobject]@{ Use = $true; Version = $ver; Why = '' }
+}
+
 # quality-gate#103: qgate.json {"go": {"flaky": true}} -- re-run the CHANGED test packages
 # under constrained scheduling, where a test that treats a short wall-clock window as a
 # verdict ("no pong in 100ms" = "the client is dead") stops passing. Reported from the

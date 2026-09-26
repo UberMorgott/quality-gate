@@ -38,6 +38,9 @@ $env:QGATE_NO_ADVISORY = '1'
 $env:QGATE_MAX_PARALLEL = '0'
 # Same for the staged-tree reuse: hook checks here re-gate one tree on purpose.
 $env:QGATE_NO_REUSE = '1'
+# And the lint engine (#130): an installed aegis would replace go vet + golangci-lint in
+# every Go fixture. Its own checks (section go) use a fake aegis and clear this.
+$env:QGATE_NO_AEGIS = '1'
 
 $sections = 'detect', 'go', 'go2', 'core', 'wiring', 'rust', 'dotnet', 'dotnet2', 'dotnet3', 'proto', 'godot', 'hooks', 'custom', 'cpp', 'base', 'web', 'bootstrap'
 $parts = @{ go = @('go2'); dotnet = @('dotnet2', 'dotnet3') }
@@ -941,6 +944,81 @@ func main() {
 $runs = @(Get-ChildItem (Join-Path $PSScriptRoot 'gate') -Filter *.ps1 | Select-String -Pattern '^[^#]*golangci-lint run\b')
 $bare = @($runs | Where-Object { $_.Line -notmatch '--allow-serial-runners' })
 Check 'every golangci-lint run waits on the parallel-runner lock' (($runs.Count -ge 4) -and (-not $bare)) ($bare -join "`n")
+
+# #130: aegis lint as the Go lint engine. A fake aegis first on PATH: `version` answers
+# $env:FAKE_AEGIS_VER, `lint` logs its arguments, prints one finding and exits
+# $env:FAKE_AEGIS_CODE. Only a pass is a verdict; exit 1 hands it to golangci-lint.
+if (Get-Command golangci-lint -ErrorAction SilentlyContinue) {
+    $aeBin = Join-Path $tmp 'fake-aegis'
+    $aeLog = Join-Path $tmp 'fake-aegis.log'
+    New-Item -ItemType Directory -Path $aeBin | Out-Null
+    if ($IsWindows) {
+        [IO.File]::WriteAllText((Join-Path $aeBin 'aegis.cmd'), "@if `"%1`"==`"version`" (echo aegis %FAKE_AEGIS_VER%& exit /b 0)`r`n@echo %*>>`"%FAKE_AEGIS_LOG%`"`r`n@echo fake.go:1:1: fake aegis finding`r`n@exit /b %FAKE_AEGIS_CODE%`r`n")
+    } else {
+        $p = Join-Path $aeBin 'aegis'
+        [IO.File]::WriteAllText($p, "#!/bin/sh`n[ `"`$1`" = version ] && { echo `"aegis `$FAKE_AEGIS_VER`"; exit 0; }`necho `"`$*`" >> `"`$FAKE_AEGIS_LOG`"`necho 'fake.go:1:1: fake aegis finding'`nexit `$FAKE_AEGIS_CODE`n")
+        chmod +x $p
+    }
+    $aeg = Join-Path $tmp 'aegis-go'
+    Copy-Item (Join-Path $PSScriptRoot 'testdata\go-fixture') $aeg -Recurse
+    Copy-Item (Join-Path $PSScriptRoot 'templates\.golangci.yml') $aeg
+    $aeSaved = @{ PATH = $env:PATH; QGATE_NO_AEGIS = $env:QGATE_NO_AEGIS }
+    $aeRun = {
+        param([string]$Ver, [int]$Code)
+        $env:FAKE_AEGIS_VER = $Ver; $env:FAKE_AEGIS_CODE = "$Code"; $env:FAKE_AEGIS_LOG = $aeLog
+        Remove-Item $aeLog -ErrorAction SilentlyContinue
+        $r = Invoke-Gate $aeg
+        $r | Add-Member Called (Test-Path $aeLog) -PassThru
+    }
+    try {
+        $env:PATH = "$aeBin$([IO.Path]::PathSeparator)$env:PATH"
+        $env:QGATE_NO_AEGIS = $null
+        $r = & $aeRun '0.1.7' 0
+        Check 'aegis lint exit 0 passes and replaces go vet + golangci-lint run' `
+            (($r.Code -eq 0) -and $r.Called -and ($r.Out -match '\[INFO\] lint engine: aegis 0\.1\.7') -and ($r.Out -match '\[PASS\] aegis lint') -and
+            ($r.Out -notmatch '\[PASS\] go vet') -and ($r.Out -notmatch '\[PASS\] golangci-lint \(')) $r.Out
+        Check 'aegis lint is run on the module directory with a timeout' `
+            ((Get-Content $aeLog -Raw) -match "lint -C .*aegis-go.* -timeout 120s") (Get-Content $aeLog -Raw)
+        $r = & $aeRun '0.1.7' 1
+        Check 'aegis findings golangci-lint does not confirm pass with a disagreement warning' `
+            (($r.Code -eq 0) -and ($r.Out -match '\[PASS\] golangci-lint') -and ($r.Out -match '\[PASS\] go vet') -and
+            ($r.Out -match '\[WARN\] aegis lint 0\.1\.7 flagged findings .* engines disagree') -and ($r.Out -match 'fake aegis finding')) $r.Out
+        $aeMain = Join-Path $aeg 'main.go'
+        $aeClean = Get-Content $aeMain -Raw
+        Set-GoFile $aeMain "package main`n`nimport `"os`"`n`n// Add returns the sum of a and b.`nfunc Add(a, b int) int { return a + b }`n`nfunc main() {`n`tos.WriteFile(`"x.txt`", nil, 0o600)`n`t_ = Add(1, 2)`n}"
+        $r = & $aeRun '0.1.7' 1
+        Check 'aegis findings golangci-lint confirms fail, verdict named as golangci' `
+            (($r.Code -ne 0) -and ($r.Out -match '\[FAIL\] golangci-lint') -and ($r.Out -match 'failing lint verdict from golangci-lint') -and ($r.Out -notmatch 'engines disagree')) $r.Out
+        Set-GoFile $aeMain $aeClean
+        $r = & $aeRun '0.1.7' 2
+        Check 'aegis lint exit 2 falls back to go vet + golangci-lint' `
+            (($r.Code -eq 0) -and $r.Called -and ($r.Out -match 'aegis lint 0\.1\.7 could not judge \(exit 2\)') -and ($r.Out -match '\[PASS\] go vet') -and ($r.Out -match '\[PASS\] golangci-lint \(')) $r.Out
+        $r = & $aeRun '0.1.6' 0
+        Check 'aegis older than 0.1.7 is not used' `
+            (($r.Code -eq 0) -and -not $r.Called -and ($r.Out -match 'aegis not used: aegis 0\.1\.6 is older') -and ($r.Out -match '\[PASS\] golangci-lint \(')) $r.Out
+        $env:QGATE_NO_AEGIS = '1'
+        $r = & $aeRun '0.1.7' 0
+        Check 'QGATE_NO_AEGIS=1 keeps aegis from being called' `
+            (($r.Code -eq 0) -and -not $r.Called -and ($r.Out -notmatch 'lint engine') -and ($r.Out -match '\[PASS\] go vet')) $r.Out
+        $env:QGATE_NO_AEGIS = $null
+        [IO.File]::WriteAllText((Join-Path $aeg 'qgate.json'), '{"go":{"lintEngine":"golangci"}}')
+        $r = & $aeRun '0.1.7' 0
+        Check 'qgate.json go.lintEngine golangci keeps aegis from being called' `
+            (($r.Code -eq 0) -and -not $r.Called -and ($r.Out -match 'go\.lintEngine is "golangci"')) $r.Out
+        Remove-Item (Join-Path $aeg 'qgate.json')
+        [IO.File]::WriteAllText((Join-Path $aeg '.golangci.yml'), "version: `"2`"`nrun:`n  tests: false`n")
+        $r = & $aeRun '0.1.7' 0
+        Check 'a golangci config with run.tests: false stays on go vet (aegis-engine#15)' `
+            (($r.Code -eq 0) -and -not $r.Called -and ($r.Out -match 'run\.tests: false') -and ($r.Out -match '\[PASS\] go vet')) $r.Out
+        [IO.File]::WriteAllText((Join-Path $aeg '.golangci.yml'), "version: `"2`"`nlinters:`n  exclusions:`n    rules:`n      - path: '_test\.go$'`n        linters: [govet]`n")
+        $r = & $aeRun '0.1.7' 0
+        Check 'a golangci exclusion naming govet stays on go vet (aegis-engine#15)' `
+            (($r.Code -eq 0) -and -not $r.Called -and ($r.Out -match 'excludes govet findings') -and ($r.Out -match '\[PASS\] go vet')) $r.Out
+    } finally {
+        $env:PATH = $aeSaved.PATH; $env:QGATE_NO_AEGIS = $aeSaved.QGATE_NO_AEGIS
+        Remove-Item Env:FAKE_AEGIS_VER, Env:FAKE_AEGIS_CODE, Env:FAKE_AEGIS_LOG -ErrorAction SilentlyContinue
+    }
+} else { Write-Output '[skip] golangci-lint not on PATH -- aegis lint engine checks cannot run' }
 
 # 7. Provenance: every phase names the marker that created it.
 $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $go -All -Why 2>&1 | Out-String)

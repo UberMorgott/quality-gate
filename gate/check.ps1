@@ -763,7 +763,41 @@ function Invoke-GoStackOnce($s) {
     New-Item -ItemType Directory -Path $outDir -Force | Out-Null
     try { Phase 'go build' { if ($hasMain) { go build -o $outDir ./... } else { go build ./... } } }
     finally { Remove-Item $outDir -Recurse -Force -ErrorAction SilentlyContinue }
-    Phase 'go vet' { go vet ./... }
+    # quality-gate#130: aegis lint, when installed, stands in for go vet + golangci-lint
+    # run (Get-AegisLint says when it may). Only its pass is a verdict: exit 1 prints its
+    # findings and lets the usual golangci-lint + go vet decide, so a disagreement between
+    # the engines can never turn another repo red; exit 2 (error, timeout) falls back too.
+    # A pre-commit run lints the staged packages and their importers, like the hook sees.
+    # -Baseline is golangci's --new-from-rev, which aegis does not have.
+    $ae = if (-not $script:Failed) { Get-AegisLint $Root $s.Dir }
+    if ($ae -and $ae.Use -and $Baseline) { $ae = [pscustomobject]@{ Use = $false; Version = $ae.Version; Why = '-Baseline filters with golangci-lint --new-from-rev' } }
+    $aePass = $false
+    $aeFlagged = ''
+    if ($ae -and $ae.Use) {
+        $aArgs = @('lint', '-C', $s.Dir, '-timeout', '120s')
+        if ($script:StagedAtStart) { $aArgs += '--changed=staged' }
+        if ($env:GOFLAGS -match '(?:^|\s)-tags=(\S+)') { $aArgs += '-tags', $Matches[1] }
+        $aSw = [Diagnostics.Stopwatch]::StartNew()
+        $aOut = (& aegis @aArgs 2>&1 | Out-String).TrimEnd()
+        $aCode = $LASTEXITCODE
+        $aSw.Stop()
+        $global:LASTEXITCODE = 0
+        if ($aCode -eq 0) {
+            $aePass = $true
+            $script:Lines += "[INFO] lint engine: aegis $($ae.Version) (go vet + golangci config)"
+            Phase 'aegis lint' { $aOut } -Elapsed $aSw.Elapsed.TotalSeconds
+        } elseif ($aCode -eq 1) {
+            $aeFlagged = $aOut
+            $script:Lines += "[INFO] lint engine: golangci-lint + go vet -- aegis lint $($ae.Version) flagged the findings below; golangci-lint + go vet decide"
+            $script:Lines += $aOut
+        } else {
+            $why = @($aOut -split "`r?`n" | Where-Object { $_.Trim() }) | Select-Object -Last 1
+            $script:Lines += "[INFO] lint engine: golangci-lint + go vet -- aegis lint $($ae.Version) could not judge (exit $aCode): $why"
+        }
+    } elseif ($ae) {
+        $script:Lines += "[INFO] lint engine: golangci-lint + go vet -- aegis not used: $($ae.Why)"
+    }
+    if (-not $aePass) { Phase 'go vet' { go vet ./... } }
     # The `go` directive, not the `toolchain` one: it is what both tools compare
     # themselves against, and it is what the error messages call "the targeted Go
     # version".
@@ -800,18 +834,27 @@ function Invoke-GoStackOnce($s) {
         # repos or a hook beside a manual run turned clean code red (measured). Serial,
         # not parallel: waiting keeps two heavy analyses from competing for the machine.
         # Every `golangci-lint run` the gate issues carries it (selftest asserts).
-        Phase 'golangci-lint' {
-            golangci-lint run --allow-serial-runners --output.text.print-issued-lines=false --output.text.colors=false `
-                --max-issues-per-linter=0 --max-same-issues=0 @newFrom ./...
+        if (-not $aePass) {
+            Phase 'golangci-lint' {
+                golangci-lint run --allow-serial-runners --output.text.print-issued-lines=false --output.text.colors=false `
+                    --max-issues-per-linter=0 --max-same-issues=0 @newFrom ./...
+            }
         }
         # Advisory, full level only: a note about the config, not about this change.
         if ($Full) { $script:Warnings += @(Get-GolangciFloorGaps $s.Dir $s.Rel (Join-Path $PSScriptRoot '..\templates\.golangci.yml')) }
-    } elseif ($Full) {
+    } elseif ($Full -and -not $aePass) {
         # The full level is what guards a commit and CI. A gate that quietly drops
-        # its main linter there is not a gate.
+        # its main linter there is not a gate. (An aegis pass already read its config.)
         Fail 'golangci-lint not on PATH -- required at the full level (go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest)'
-    } else {
+    } elseif (-not $aePass) {
         $script:Lines += '[WARN] golangci-lint not on PATH -- phase skipped'
+    }
+    # Report-level, not a stack line: -Quiet drops a green stack's lines, findings included.
+    if ($aeFlagged -and -not $script:Failed -and (Have 'golangci-lint')) {
+        $script:Warnings += (@("[WARN] aegis lint $($ae.Version) flagged findings golangci-lint + go vet pass -- engines disagree, golangci verdict kept (report it to aegis):") +
+            @($aeFlagged -split "`r?`n" | Select-Object -First 20 | ForEach-Object { "       $_" })) -join "`n"
+    } elseif ($aeFlagged -and $script:Failed) {
+        $script:Lines += "[NOTE] failing lint verdict from golangci-lint + go vet (aegis lint flagged too)"
     }
     # quality-gate#40: opt-in (qgate.json go.lintGoos) vet and lint under other GOOS targets.
     if ($Full) {
