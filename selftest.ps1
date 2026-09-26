@@ -1977,6 +1977,53 @@ public static class BclLookups
         (($out -match '\[WARN\] harmony: Bcl\.Box\._version field not found \(AccessTools\.FieldRefAccess\).*only a reference assembly') -and
             ($hmIn -notmatch '(?m)^(?!\[WARN\]).*Box\._version') -and
             ($hmIn -match '(?m)^(?!\[WARN\]).*Hud\.m_nope field not found')) $out
+
+    # #125: a legacy (non-SDK) csproj names neither TargetFramework nor TargetFrameworks, only
+    # TargetFrameworkVersion. The empty TFM list unrolled to $null and `$tfms[0]` crashed the
+    # stack before the harmony phase. Same "game", same dangling target, legacy project file.
+    $hmLeg = New-Item -ItemType Directory -Force (Join-Path $hm 'Legacy')
+    [IO.File]::WriteAllText((Join-Path $hmLeg 'Legacy.csproj'), @'
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <OutputType>Library</OutputType>
+    <AssemblyName>Legacy</AssemblyName>
+    <TargetFrameworkVersion>v4.7.2</TargetFrameworkVersion>
+    <OutputPath>bin\$(Configuration)\</OutputPath>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="System" />
+    <Reference Include="0Harmony"><HintPath>..\lib\0Harmony.dll</HintPath></Reference>
+    <Reference Include="Game"><HintPath>..\lib\Game.dll</HintPath></Reference>
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="Patches.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies.net472" Version="1.0.3" PrivateAssets="all" />
+  </ItemGroup>
+  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+</Project>
+'@)
+    [IO.File]::WriteAllText((Join-Path $hmLeg 'Patches.cs'), @'
+using HarmonyLib;
+
+namespace Legacy
+{
+    [HarmonyPatch(typeof(Hud), "UpdateStatusEffects")]
+    public static class StatusPatch
+    {
+        public static void Postfix() { }
+    }
+}
+'@)
+    $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $hmLeg.FullName -All -Full 2>&1 | Out-String)
+    Check 'a legacy csproj with only TargetFrameworkVersion does not crash the stack (#125)' `
+        (($out -notmatch 'gate crashed') -and ($out -match '\[PASS\] build')) $out
+    Check 'the harmony phase runs on a legacy csproj and finds its dangling target (#125)' `
+        (($out -match '\[FAIL\] harmony') -and ($out -match 'Hud\.UpdateStatusEffects not found \(Patches\.cs:\d+, StatusPatch\.Postfix\)')) $out
     }
 } else {
     Write-Output '[skip] no .NET SDK on this machine -- the dotnet stack cannot be exercised'

@@ -995,7 +995,7 @@ $script:FmtSlnDir = $null
 function Get-DotnetEval([string]$ProjPath) {
     if (-not $script:DnEval.ContainsKey($ProjPath)) {
         $sw = [Diagnostics.Stopwatch]::StartNew()
-        $q = (& dotnet msbuild $ProjPath -getProperty:TargetFramework -getProperty:TargetFrameworks `
+        $q = (& dotnet msbuild $ProjPath -getProperty:TargetFramework -getProperty:TargetFrameworks -getProperty:TargetFrameworkVersion `
                 -getProperty:IsTestProject -getProperty:OutputType -getItem:Reference -getItem:PackageReference -nologo 2>&1 | Out-String).Trim()
         $code = $LASTEXITCODE
         $sw.Stop()
@@ -1028,9 +1028,15 @@ function Get-NuGetCachedVersion([string]$Id) {
         Sort-Object { [version]$_.Name } -Descending | Select-Object -First 1).Name
 }
 
+# A legacy (non-SDK) csproj names neither TargetFramework nor TargetFrameworks, only
+# `<TargetFrameworkVersion>v4.7.2</TargetFrameworkVersion>`; that is net472 (#125). Callers wrap
+# the call in @(): an empty array returned from a function unrolls to $null.
 function Get-DotnetTfms($info) {
-    @(if ($info.Properties.TargetFramework) { $info.Properties.TargetFramework }
-        else { ($info.Properties.TargetFrameworks -split ';') | ForEach-Object { $_.Trim() } | Where-Object { $_ } })
+    if ($info.Properties.TargetFramework) { return @($info.Properties.TargetFramework) }
+    $multi = @(($info.Properties.TargetFrameworks -split ';') | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+    if ($multi) { return $multi }
+    if ("$($info.Properties.TargetFrameworkVersion)" -match '^v([1-4])\.(\d)(?:\.(\d))?$') { return @("net$($Matches[1])$($Matches[2])$($Matches[3])") }
+    @()
 }
 
 # The first TFM no installed SDK can build, or $null.
@@ -1172,7 +1178,11 @@ function Invoke-DotnetStack($s) {
     # A multi-targeted project leaves the singular property EMPTY and lists them in the
     # plural one as `net8.0;net472`. Reading only TargetFramework there is a silent pass
     # over every TFM the project actually has.
-    $tfms = Get-DotnetTfms $info
+    $tfms = @(Get-DotnetTfms $info)
+    # Multi-targeted = TargetFramework empty AND a TargetFrameworks list. A legacy csproj has
+    # neither; its one TFM comes from TargetFrameworkVersion and must not be forced back in
+    # as a -p:TargetFramework it never had.
+    $multiTfm = (-not $info.Properties.TargetFramework) -and [bool]$info.Properties.TargetFrameworks
     # net4xx builds on any modern SDK; net<major>.0 needs that major installed. Reported
     # as a skip, not a red build: a project targeting an SDK nobody here has is a gap in
     # the machine, and the raw NETSDK1045 tells the reader nothing about which one.
@@ -1190,7 +1200,7 @@ function Invoke-DotnetStack($s) {
     # unioned. PackageReference rides along in the same call for the same reason.
     $refs = @($info.Items.Reference)
     $pkgs = @($info.Items.PackageReference)
-    if (-not $info.Properties.TargetFramework) {
+    if ($multiTfm) {
         foreach ($tfm in $tfms) {
             $tq = (& dotnet msbuild $proj -getItem:Reference -getItem:PackageReference `
                     -p:TargetFramework=$tfm -nologo 2>&1 | Out-String).Trim()
@@ -1476,7 +1486,7 @@ function Invoke-DotnetStack($s) {
     # gate/harmony.ps1. Only where Harmony is referenced; the references themselves are
     # present, or the missing-reference [SKIP] on the build above already returned.
     if (@($refs.Identity) + @($pkgs.Identity) | Where-Object { $_ -match '^(0Harmony|Lib\.Harmony|HarmonyX)\b' }) {
-        $hTfm = if (-not $info.Properties.TargetFramework) { $tfms[0] }
+        $hTfm = if ($multiTfm -and $tfms.Count) { $tfms[0] }
         Phase 'harmony' {
             # -Why lists every target that resolved, beside the count of them.
             $h = @(& (Join-Path $PSScriptRoot 'harmony.ps1') -Project $projAbs -Root $Root -Tfm $hTfm -Targets:$Why)
