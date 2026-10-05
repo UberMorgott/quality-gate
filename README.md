@@ -131,7 +131,7 @@ Custom commands execute in declaration order from the repository root using `pws
 
 A `smoke` check replaces `run`, is full-only and Windows-only, and requires `exe` plus `stages: [{ "name": "ready", "ready": "log regex" }]`. Optional smoke keys: `args`, `env`, `cwd`, `log`, `closeSec` (15), `errorPattern`, `ignorePattern`, `repeatLimit` (10); stage keys: `holdSec`, `baseline` (PNG path), `tolerance` (0.01). `{dataDir}` and `QGATE_DATA_DIR` provide a fresh directory the application must explicitly use; they do not isolate an application that ignores them. Logs/screenshots are retained in the reported run directory.
 
-Baseline filtering covers changed-line diagnostics for typos, repository linters, clang-tidy/cppcheck; Go lint and .NET formatting use changed whole files. It does not waive builds, tests, or vulnerability checks. Separate `qgate.deferrals.json` arrays can defer `dependencies` entries (`name`, `until`, `reason`) or acknowledge `vulnerabilities` (`id`, `until`, `reason`), with `until` as `YYYY-MM-DD`; vulnerability acknowledgements apply to govulncheck, OSV, and NuGet scans, not npm audit.
+Baseline filtering covers changed-line diagnostics for typos, repository linters, clang-tidy/cppcheck; Go lint and .NET formatting use changed whole files. It does not waive builds, tests, or vulnerability checks. Separate `qgate.deferrals.json` arrays can defer `dependencies` entries (`name`, `until`, `reason`) or acknowledge `vulnerabilities` (`id`, `until`, `reason`), with `until` as `YYYY-MM-DD`; vulnerability acknowledgements apply to govulncheck, OSV, NuGet, and `npm audit` scans. An entry matches an advisory by any of its ids or aliases (for npm audit: the GHSA id or npm's advisory number); each live acknowledgement prints a `[WARN]`, while an expired one, or a high/critical advisory with no entry, still fails.
 
 ## Checks by stack
 
@@ -237,7 +237,7 @@ Detected by `package.json` plus `vite.config.*`, `next.config.*`, `webpack.confi
 | `build` | Full and default; skipped by `-Fast` alone | npm + project bundler | Runs `build-only` or `build` when declared to catch bundling failures. |
 | `build drift` | Advisory, with `build`; blocking with `web.buildDrift: "fail"` | Git | When the build output directory (vite `outDir` if written literally, else `dist`) has tracked files, reports committed output the build newly changed/deleted and new untracked output, so a committed bundle matches its sources; changed files are restored afterwards. |
 | `test` | Full | npm + project test runner | Runs the declared test script with `CI=1`, a 600-second timeout, and child-process leak detection to catch failed or hanging tests. |
-| `npm audit` | Full | npm | Rejects high/critical dependency vulnerabilities; skips without `package-lock.json` or `npm-shrinkwrap.json`. |
+| `npm audit` | Full | npm | Rejects high/critical dependency vulnerabilities not acknowledged in `qgate.deferrals.json`; skips without `package-lock.json` or `npm-shrinkwrap.json`. |
 
 When `tailwindcss` is present, `wire` adds `scss/at-rule-no-unknown` `ignoreAtRules` for Tailwind directives to the Stylelint config it creates; existing configs are preserved.
 

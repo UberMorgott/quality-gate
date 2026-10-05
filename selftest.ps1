@@ -5417,6 +5417,47 @@ Check 'knip findings are an advisory warning, not a failure' `
 $out = (& pwsh -NoProfile -File $gate -Root $wc -Only 'web' -Fast 2>&1 | Out-String)
 Check 'the fast lane does not run knip' ($out -notmatch 'knip:') $out
 
+# #144: npm audit ignored qgate.deferrals.json, so an advisory with no fixed version
+# (braces 3.0.3) failed every -Full run. A stand-in npm: `audit --json` prints a v2 report
+# (two high advisories in `via` objects, a moderate one, a string-via dependent); any other
+# call prints the text report and exits 1. Both sides: acked passes, the rest still fails.
+$na = Join-Path $tmp 'npmaudit-ack'
+New-Item -ItemType Directory -Path (Join-Path $na 'node_modules\.bin') -Force | Out-Null
+[IO.File]::WriteAllText((Join-Path $na 'package.json'), '{"name":"npmaudit","private":true,"type":"module"}')
+[IO.File]::WriteAllText((Join-Path $na 'package-lock.json'), '{"name":"npmaudit","lockfileVersion":3,"packages":{}}')
+Set-Content (Join-Path $na 'vite.config.js') 'export default {}'
+$naShim = Join-Path $tmp 'npm-shim'
+New-VulnShim $naShim 'npm' '--json' (@{ auditReportVersion = 2; vulnerabilities = @{
+            braces     = @{ name = 'braces'; severity = 'high'; via = @(@{ source = 1240992; name = 'braces'; severity = 'high'; url = 'https://github.com/advisories/GHSA-vfj7-8cjw-p6xm' }) }
+            micromatch = @{ name = 'micromatch'; severity = 'high'; via = @('braces') }
+            leftpad    = @{ name = 'leftpad'; severity = 'high'; via = @(@{ source = 9999; name = 'leftpad'; severity = 'high'; url = 'https://github.com/advisories/GHSA-aaaa-bbbb-cccc' }, @{ source = 8888; name = 'leftpad'; severity = 'moderate'; url = 'https://github.com/advisories/GHSA-mmmm-mmmm-mmmm' }) }
+        } } | ConvertTo-Json -Depth 8 -Compress) 'braces * Severity: high npmshimtext' 1
+$naPrior = $env:PATH
+$naAck = { param($Entries) [IO.File]::WriteAllText((Join-Path $na 'qgate.deferrals.json'), (@{ vulnerabilities = $Entries } | ConvertTo-Json -Depth 5)) }
+try {
+    $env:PATH = "$naShim$([IO.Path]::PathSeparator)$naPrior"
+    $out = (& pwsh -NoProfile -File $gate -Root $na -Only 'web' -Full 2>&1 | Out-String); $code = $LASTEXITCODE
+    Check 'npm audit: with no acknowledgements a high advisory still fails' `
+        (($code -ne 0) -and ($out -match '\[FAIL\] npm audit') -and ($out -match 'npmshimtext')) "code=$code $out"
+    # The second ack names npm's advisory number, not the GHSA id: an alias holds too.
+    & $naAck @(@{ id = 'GHSA-vfj7-8cjw-p6xm'; until = '2099-01-01'; reason = 'no fixed braces' }, @{ id = '9999'; until = '2099-01-01'; reason = 'no fix either' })
+    $out = (& pwsh -NoProfile -File $gate -Root $na -Only 'web' -Full 2>&1 | Out-String); $code = $LASTEXITCODE
+    Check 'npm audit: every high advisory acknowledged passes and names each one' `
+        (($code -eq 0) -and ($out -match '\[PASS\] npm audit') -and
+        ($out -match '\[WARN\] qgate\.deferrals\.json: npm audit GHSA-vfj7-8cjw-p6xm acknowledged until 2099-01-01 -- no fixed braces') -and
+        ($out -match 'npm audit 9999 acknowledged') -and ($out -notmatch 'GHSA-mmmm-mmmm-mmmm')) "code=$code $out"
+    & $naAck @(@{ id = 'GHSA-vfj7-8cjw-p6xm'; until = '2099-01-01'; reason = 'no fixed braces' })
+    $out = (& pwsh -NoProfile -File $gate -Root $na -Only 'web' -Full 2>&1 | Out-String); $code = $LASTEXITCODE
+    Check 'npm audit: a high advisory beside an acknowledged one still fails, named' `
+        (($code -ne 0) -and ($out -match '\[FAIL\] npm audit') -and ($out -match 'not acknowledged: GHSA-aaaa-bbbb-cccc') -and
+        ($out -notmatch 'not acknowledged: GHSA-vfj7-8cjw-p6xm') -and ($out -notmatch 'GHSA-mmmm-mmmm-mmmm')) "code=$code $out"
+    & $naAck @(@{ id = 'GHSA-vfj7-8cjw-p6xm'; until = '2020-01-01'; reason = 'no fixed braces' }, @{ id = 'GHSA-aaaa-bbbb-cccc'; until = '2099-01-01'; reason = 'no fix either' })
+    $out = (& pwsh -NoProfile -File $gate -Root $na -Only 'web' -Full 2>&1 | Out-String); $code = $LASTEXITCODE
+    Check 'npm audit: an expired acknowledgement fails, and says it expired' `
+        (($code -ne 0) -and ($out -match '\[FAIL\] npm audit') -and
+        ($out -match 'acknowledgement expired: GHSA-vfj7-8cjw-p6xm was acknowledged until 2020-01-01')) "code=$code $out"
+} finally { $env:PATH = $naPrior }
+
 # #115: a repository that commits its bundle (dist/ embedded by Go) went green with a stale
 # dist/ -- the build ran and nobody looked at what it changed. The stand-in build writes
 # dist/app.js and dist/chunk-<src>.js from src.txt, so editing src.txt drifts both.

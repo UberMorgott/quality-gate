@@ -689,6 +689,25 @@ function Get-UnackedVulns([string]$Tool, [object[]]$Found) {
 }
 function Test-VulnAcks { [bool]@(Read-Deferrals $Root 'vulnerabilities' 'id').Count }
 
+# quality-gate#144: the advisories `npm audit --json` holds at or above high -- the ones
+# --audit-level=high fails on. Report v2 (npm 7+) nests each advisory object in the `via`
+# of the package it was found in; a string `via` is a dependent that only inherits a
+# severity, so it is no advisory of its own. Report v1 (npm 6) lists them under
+# `advisories`. One id list per advisory: the GHSA id out of its url, then npm's number.
+function Get-NpmAuditAdvisories($Report) {
+    $adv = @(@($Report.vulnerabilities.PSObject.Properties.Value | ForEach-Object { @($_.via) } | Where-Object { $_ -isnot [string] }) +
+        @(if ($Report.advisories) { $Report.advisories.PSObject.Properties.Value }) | Where-Object { $_ -and $_.severity -in 'high', 'critical' })
+    $seen = @{}
+    foreach ($a in $adv) {
+        $ghsa = if ("$($a.url)" -match '(GHSA(-[0-9a-z]{4}){3})') { $Matches[1] } elseif ($a.github_advisory_id) { "$($a.github_advisory_id)" }
+        $num = if ($a.source) { "$($a.source)" } elseif ($a.id) { "$($a.id)" }
+        $ids = @(@($ghsa, $num) | Where-Object { $_ })
+        if (-not $ids -or $seen[$ids[0]]) { continue }
+        $seen[$ids[0]] = $true
+        , $ids
+    }
+}
+
 # --- stack runners ---------------------------------------------------------
 $script:PhaseSuffix = ''
 $script:GoTagSets = @()
@@ -1975,7 +1994,23 @@ function Invoke-WebStack($s) {
     # a lockfile to have anything to resolve against.
     if ($Full) {
         if (Test-AnyFile $s.Dir @('package-lock.json', 'npm-shrinkwrap.json')) {
-            Phase 'npm audit' { npm audit --audit-level=high }
+            # #144: qgate.deferrals.json "vulnerabilities" holds here too, the way it does for
+            # govulncheck and OSV. A failing run with acknowledgements in the repo is asked
+            # again in JSON; it passes only when every high+ advisory has a live ack. No
+            # advisory read (an npm error, an unknown report shape) is not "all acknowledged":
+            # the verdict stays the text run's.
+            Phase 'npm audit' {
+                npm audit --audit-level=high
+                if ($LASTEXITCODE -ne 0 -and (Test-VulnAcks)) {
+                    $aj = try { npm audit --json 2>$null | Out-String | ConvertFrom-Json } catch { $null }
+                    $found = @(Get-NpmAuditAdvisories $aj)
+                    if ($found) {
+                        $left = @(Get-UnackedVulns 'npm audit' $found)
+                        $left
+                        $global:LASTEXITCODE = [int][bool]$left.Count
+                    }
+                }
+            }
         } else {
             $script:Lines += '[WARN] no package-lock.json -- npm audit skipped'
         }
