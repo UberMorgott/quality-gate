@@ -486,27 +486,46 @@ Check 'a bad fuzz limit is named and the default kept' (($fzl.Error -match 'go\.
 Remove-Item (Join-Path $fz 'qgate.json')
 $env:GOMEMLIMIT = $memPrev
 
-# #120: a go build cache over its cap is cleaned (go clean -cache, [INFO] with the sizes),
-# one under it or with the cap at 0 is left alone, and a drive short of free space even
-# after a clean skips -race with a [WARN]. A fake 2 MB cache and fractional-GB caps.
+# #120/#145: a go build cache over its cap is trimmed oldest-entry-first to 75% of the cap
+# ([INFO] with the sizes), never cleared: entries used in the last 2h and files outside
+# go's <hex>/<hash>-a|-d layout survive, and with another go process running nothing is
+# deleted. One under its cap or with the cap at 0 is left alone; a drive short of free
+# space even after a trim skips -race with a [WARN]. A fake 7 MB cache and fractional-GB caps.
 $gcd = Join-Path $tmp 'gocache'
-$gcEntry = Join-Path $gcd 'ab\entry-d'
-# go clean -cache removes the ab\ directory itself.
-$gcFill = { New-Item -ItemType Directory -Path (Join-Path $gcd 'ab') -Force | Out-Null; [IO.File]::WriteAllBytes($gcEntry, [byte[]]::new(2MB)) }
+$gcOld = @(1..6 | ForEach-Object { Join-Path $gcd ('ab\{0:x2}-{1}' -f $_, ('a', 'd')[$_ % 2]) })
+$gcNew = Join-Path $gcd 'cd\ff-d'
+$gcOther = @((Join-Path $gcd 'README'), (Join-Path $gcd 'ab\keep.txt'))
+$gcFill = {
+    Remove-Item $gcd -Recurse -Force -ErrorAction SilentlyContinue
+    New-Item -ItemType Directory -Path (Join-Path $gcd 'ab'), (Join-Path $gcd 'cd') -Force | Out-Null
+    for ($i = 0; $i -lt $gcOld.Count; $i++) {
+        [IO.File]::WriteAllBytes($gcOld[$i], [byte[]]::new(1MB))
+        [IO.File]::SetLastWriteTimeUtc($gcOld[$i], [DateTime]::UtcNow.AddDays(-10 + $i))
+    }
+    [IO.File]::WriteAllBytes($gcNew, [byte[]]::new(1MB))
+    foreach ($o in $gcOther) { [IO.File]::WriteAllBytes($o, [byte[]]::new(16)); [IO.File]::SetLastWriteTimeUtc($o, [DateTime]::UtcNow.AddDays(-30)) }
+}
 & $gcFill
 $gcPrev = $env:GOCACHE
-$gc = Invoke-GoCacheGuard $gcd ([pscustomobject]@{ MaxGB = 1.0; MinFreeGB = 0.0 })
-Check 'a go build cache under its cap is left alone' ((-not $gc.Warn) -and (Test-Path $gcEntry) -and -not $gc.LowSpace) ($gc.Warn -join "`n")
-$gc = Invoke-GoCacheGuard $gcd ([pscustomobject]@{ MaxGB = 0.0; MinFreeGB = 0.0 })
-Check 'QGATE_GOCACHE_MAX_GB=0 disables the cache cap' ((-not $gc.Warn) -and (Test-Path $gcEntry)) ($gc.Warn -join "`n")
-$gc = Invoke-GoCacheGuard $gcd ([pscustomobject]@{ MaxGB = 0.001; MinFreeGB = 0.0 })
-Check 'a go build cache over its cap is cleaned and reported with both sizes' `
-    ((-not (Test-Path $gcEntry)) -and (($gc.Warn -join ' ') -match '^\[INFO\] go build cache .* was 0\.0 GB, over the 0\.001 GB cap \(QGATE_GOCACHE_MAX_GB\) -- go clean -cache, now 0\.0 GB') -and -not $gc.LowSpace) ($gc.Warn -join "`n")
+$gcAll = { @($gcOld + $gcNew + $gcOther | Where-Object { Test-Path $_ }).Count }
+$gc = Invoke-GoCacheGuard $gcd ([pscustomobject]@{ MaxGB = 1.0; MinFreeGB = 0.0 }) -Busy 0
+Check 'a go build cache under its cap is left alone' ((-not $gc.Warn) -and ((& $gcAll) -eq 9) -and -not $gc.LowSpace) ($gc.Warn -join "`n")
+$gc = Invoke-GoCacheGuard $gcd ([pscustomobject]@{ MaxGB = 0.0; MinFreeGB = 0.0 }) -Busy 0
+Check 'QGATE_GOCACHE_MAX_GB=0 disables the cache cap' ((-not $gc.Warn) -and ((& $gcAll) -eq 9)) ($gc.Warn -join "`n")
+# 0.004 GB cap = 4.1 MB; target 75% = 3.1 MB: the 4 oldest go, 2 old + the recent stay.
+$gc = Invoke-GoCacheGuard $gcd ([pscustomobject]@{ MaxGB = 0.004; MinFreeGB = 0.0 }) -Busy 2
+Check 'a shared go build cache is not trimmed while another go process runs' `
+    (((& $gcAll) -eq 9) -and (($gc.Warn -join ' ') -match '^\[INFO\] go build cache .* over the 0\.004 GB cap \(QGATE_GOCACHE_MAX_GB\) -- trim deferred: 2 go process') -and -not $gc.LowSpace) ($gc.Warn -join "`n")
+$gc = Invoke-GoCacheGuard $gcd ([pscustomobject]@{ MaxGB = 0.004; MinFreeGB = 0.0 }) -Busy 0
+$gcLeft = @($gcOld | Where-Object { Test-Path $_ })
+Check 'a go build cache over its cap is trimmed oldest-first to 75% of it, never cleared' `
+    ((($gcLeft -join '|') -eq ($gcOld[4..5] -join '|')) -and (Test-Path $gcNew) -and -not @($gcOther | Where-Object { -not (Test-Path $_) }) -and
+    (($gc.Warn -join ' ') -match '^\[INFO\] go build cache .* over the 0\.004 GB cap \(QGATE_GOCACHE_MAX_GB\) -- trimmed 0\.0 GB .* target 0\.0 GB$') -and -not $gc.LowSpace) ($gc.Warn -join "`n")
 & $gcFill
-$gc = Invoke-GoCacheGuard $gcd ([pscustomobject]@{ MaxGB = 0.0; MinFreeGB = 1e9 })
-Check 'too little free space even after a clean skips -race with a warning' `
-    ($gc.LowSpace -and (-not (Test-Path $gcEntry)) -and (($gc.Warn -join ' ') -match '^\[WARN\] .* GB free on .*QGATE_GO_MIN_FREE_GB.* -- go test -race skipped')) ($gc.Warn -join "`n")
-Check 'the cache guard restores the caller GOCACHE' ($env:GOCACHE -eq $gcPrev) "GOCACHE=$env:GOCACHE"
+$gc = Invoke-GoCacheGuard $gcd ([pscustomobject]@{ MaxGB = 0.0; MinFreeGB = 1e9 }) -Busy 0
+Check 'too little free space even after a trim skips -race with a warning; recent entries kept' `
+    ($gc.LowSpace -and -not @($gcOld | Where-Object { Test-Path $_ }) -and (Test-Path $gcNew) -and (($gc.Warn -join ' ') -match '\[WARN\] still .* GB free on .*QGATE_GO_MIN_FREE_GB.* -- go test -race skipped')) ($gc.Warn -join "`n")
+Check 'the cache guard leaves the caller GOCACHE alone' ($env:GOCACHE -eq $gcPrev) "GOCACHE=$env:GOCACHE"
 $gcEnv = $env:QGATE_GOCACHE_MAX_GB; $gcFreeEnv = $env:QGATE_GO_MIN_FREE_GB; $env:QGATE_GO_MIN_FREE_GB = $null
 $env:QGATE_GOCACHE_MAX_GB = '0.5'
 $gcl = Get-GoCacheLimits

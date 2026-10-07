@@ -3554,7 +3554,8 @@ if ($script:PassKey -and -not $script:Failed) {
         } catch { Write-Verbose "tree reuse record: $_" }
     }
 }
-if ($Quiet -and -not $script:Failed) { $report = @($report | Where-Object { $_ -match '^\[WARN\] (qgate\.|dependency update advisory timed out|slow tests:|CI parity:)' }) }
+# A cache trim touches every session on the machine (#137): seen even from a -Quiet hook.
+if ($Quiet -and -not $script:Failed) { $report =@($report | Where-Object { $_ -match '^\[WARN\] (qgate\.|dependency update advisory timed out|slow tests:|CI parity:)' -or $_ -match '^\[INFO\] go build cache ' }) }
 # A broken qgate.deferrals.json is read by outdated and by every vuln phase; say it once.
 $seenDefer = [Collections.Generic.HashSet[string]]::new()
 $report = @($report | Where-Object { "$_" -notmatch '^\[WARN\] qgate\.deferrals\.json (is not|.*entry)' -or $seenDefer.Add("$_") })

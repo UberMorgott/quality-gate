@@ -619,10 +619,10 @@ function Invoke-GoFuzz([string]$Dir, [int]$PerTargetSec = 10, [int]$BudgetSec = 
 # quality-gate#120: the go build cache (GOCACHE) has no size limit of its own -- go only
 # trims entries unused for 5 days -- and repeated `-All -Full` runs (-race builds a second
 # copy of everything) grew one to 143 GB and filled the disk. The gate caps what it
-# grows: over QGATE_GOCACHE_MAX_GB (20) the cache is cleaned, and with less than
-# QGATE_GO_MIN_FREE_GB (15) free on its drive it is cleaned and, if that is not enough,
+# grows: over QGATE_GOCACHE_MAX_GB (20) the cache is trimmed, and with less than
+# QGATE_GO_MIN_FREE_GB (15) free on its drive it is trimmed and, if that is not enough,
 # -race is skipped. Machine-wide env vars, not qgate.json: the cache is the machine's, not
-# the repo's. 0 disables either guard. Never a verdict: a cleaned cache is an [INFO], the
+# the repo's. 0 disables either guard. Never a verdict: a trimmed cache is an [INFO], the
 # gate's own housekeeping -- a [WARN] would fail every qgate.json "strict" repo over it.
 function Get-GoCacheLimits {
     $cfg = [pscustomobject]@{ MaxGB = 20.0; MinFreeGB = 15.0; Error = '' }
@@ -643,42 +643,81 @@ function Get-DirBytes([string]$Dir) {
     $sum
 }
 
-function Invoke-GoCacheGuard([string]$Cache, $Limits = (Get-GoCacheLimits), [switch]$SkipSize) {
+# quality-gate#145: one GOCACHE is shared by every repo and session on the machine, so the
+# guard never clears it wholesale (`go clean -cache` mid-build broke other gates' links).
+# It trims: go's own layout -- <2 hex>/<hash>-a action and -d output files -- oldest
+# mtime first, down to 75% of the cap (headroom, so the next run does not trim again) or
+# to what restores the free-space floor. go refreshes an entry's mtime on use when it is
+# over an hour old, so entries touched in the last 2 hours may belong to a running build
+# and are never deleted; a missing older entry is only a cache miss to go. While any other
+# go / golangci-lint process runs nothing is deleted at all -- the trim waits for a quiet
+# run. An over-cap cache is housekeeping, never a verdict: [INFO] only.
+$script:GoCacheKeepRecent = [TimeSpan]::FromHours(2)
+
+function Get-GoBusyCount {
+    @(Get-Process -Name 'go', 'golangci-lint' -ErrorAction SilentlyContinue).Count
+}
+
+# Deletes the oldest go cache entries until $Bytes are freed; returns the bytes freed.
+function Remove-GoCacheOldest([string]$Cache, [long]$Bytes) {
+    $cut = [DateTime]::UtcNow - $script:GoCacheKeepRecent
+    $files = foreach ($d in [IO.DirectoryInfo]::new($Cache).EnumerateDirectories()) {
+        if ($d.Name -notmatch '^[0-9a-f]{2}$' -or ($d.Attributes -band [IO.FileAttributes]::ReparsePoint)) { continue }
+        foreach ($f in $d.EnumerateFiles()) { if ($f.Name -match '-[ad]$' -and $f.LastWriteTimeUtc -lt $cut) { $f } }
+    }
+    $freed = 0L
+    foreach ($f in @($files | Sort-Object LastWriteTimeUtc)) {
+        if ($freed -ge $Bytes) { break }
+        try { $len = $f.Length; $f.Delete(); $freed += $len } catch { continue }
+    }
+    $freed
+}
+
+function Invoke-GoCacheGuard([string]$Cache, $Limits = (Get-GoCacheLimits), [switch]$SkipSize, [int]$Busy = -1) {
     $res = [pscustomobject]@{ Warn = @(); LowSpace = $false }
     # GOCACHE=off, or a cache not created yet: nothing to measure.
     if (-not $Cache -or -not (Test-Path -LiteralPath $Cache -PathType Container)) { return $res }
     $inv = [Globalization.CultureInfo]::InvariantCulture
-    $prev = $global:LASTEXITCODE
-    $prevCache = $env:GOCACHE
-    $cleaned = $false
+    $gb = { param($b) ($b / 1GB).ToString('0.0', $inv) }
     try {
-        $env:GOCACHE = $Cache
+        $size = -1L
+        $target = -1L
+        $why = @()
         if (-not $SkipSize -and $Limits.MaxGB -gt 0) {
-            $before = Get-DirBytes $Cache
-            if ($before -gt $Limits.MaxGB * 1GB) {
-                & go clean -cache 2>&1 | Out-Null
-                $cleaned = $true
-                $res.Warn += "[INFO] go build cache $Cache was $(($before / 1GB).ToString('0.0', $inv)) GB, over the $($Limits.MaxGB.ToString($inv)) GB cap (QGATE_GOCACHE_MAX_GB) -- go clean -cache, now $(((Get-DirBytes $Cache) / 1GB).ToString('0.0', $inv)) GB"
+            $size = Get-DirBytes $Cache
+            if ($size -gt $Limits.MaxGB * 1GB) {
+                $target = [long]($Limits.MaxGB * 1GB * 0.75)
+                $why += "over the $($Limits.MaxGB.ToString($inv)) GB cap (QGATE_GOCACHE_MAX_GB)"
             }
         }
+        $root = $null; $free = 0L
         if ($Limits.MinFreeGB -gt 0) {
             $root = [IO.Path]::GetPathRoot([IO.Path]::GetFullPath($Cache))
             $free = [IO.DriveInfo]::new($root).AvailableFreeSpace
             if ($free -lt $Limits.MinFreeGB * 1GB) {
-                $was = $free
-                if (-not $cleaned) { & go clean -cache 2>&1 | Out-Null; $free = [IO.DriveInfo]::new($root).AvailableFreeSpace }
-                $gbs = "$(($was / 1GB).ToString('0.0', $inv)) GB free on $root, under $($Limits.MinFreeGB.ToString($inv)) GB (QGATE_GO_MIN_FREE_GB)"
-                if ($free -lt $Limits.MinFreeGB * 1GB) {
-                    $res.LowSpace = $true
-                    $res.Warn += "[WARN] $gbs, still $(($free / 1GB).ToString('0.0', $inv)) GB after go clean -cache -- go test -race skipped"
-                } else {
-                    $res.Warn += "[INFO] $gbs -- go clean -cache ($Cache), now $(($free / 1GB).ToString('0.0', $inv)) GB free"
-                }
+                if ($size -lt 0) { $size = Get-DirBytes $Cache }
+                $t = [Math]::Max(0L, $size - ([long]($Limits.MinFreeGB * 1GB) - $free))
+                $target = if ($target -lt 0) { $t } else { [Math]::Min($target, $t) }
+                $why += "$(& $gb $free) GB free on $root, under $($Limits.MinFreeGB.ToString($inv)) GB (QGATE_GO_MIN_FREE_GB)"
             }
+        }
+        if ($target -lt 0) { return $res }
+        $head = "go build cache $Cache is $(& $gb $size) GB, $($why -join '; ')"
+        if ($Busy -lt 0) { $Busy = Get-GoBusyCount }
+        if ($Busy -gt 0) {
+            $res.Warn += "[INFO] $head -- trim deferred: $Busy go process(es) running may be using it"
+        } else {
+            $freed = Remove-GoCacheOldest $Cache ($size - $target)
+            $res.Warn += "[INFO] $head -- trimmed $(& $gb $freed) GB of entries unused for 2h+ (oldest first), target $(& $gb $target) GB"
+            if ($root) { $free = [IO.DriveInfo]::new($root).AvailableFreeSpace }
+        }
+        if ($root -and $free -lt $Limits.MinFreeGB * 1GB) {
+            $res.LowSpace = $true
+            $res.Warn += "[WARN] still $(& $gb $free) GB free on $root, under $($Limits.MinFreeGB.ToString($inv)) GB (QGATE_GO_MIN_FREE_GB) -- go test -race skipped"
         }
     } catch {
         $res.Warn += "[WARN] go build cache guard skipped: $($_.Exception.Message)"
-    } finally { $env:GOCACHE = $prevCache; $global:LASTEXITCODE = $prev }
+    }
     $res
 }
 
