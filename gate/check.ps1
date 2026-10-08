@@ -3695,8 +3695,11 @@ foreach ($ie in $script:InternalErrors) { $report += "[WARN] internal error in t
 if ($script:Failed -and -not @($report | Where-Object { "$_" -match '(?m)^\[FAIL\]' })) {
     $report += '[FAIL] the run failed but no check printed a [FAIL] line -- an internal error in the gate, not a verdict on the code; rerun, and report it with this output'
 }
-# A cache trim touches every session on the machine (#137): seen even from a -Quiet hook.
-if ($Quiet -and -not $script:Failed) { $report =@($report | Where-Object { $_ -match '^\[WARN\] (qgate\.|dependency update advisory timed out|no full-gate slot freed|internal error in the gate|slow tests:|CI parity:)' -or $_ -match '^\[INFO\] go build cache ' }) }
+# Only [WARN]s pass a green -Quiet run. The go build cache trim is an [INFO] -- housekeeping,
+# not news for a commit hook -- so it stays silent here like every other [INFO] and shows
+# on any run without -Quiet. Selftest reads $QuietKeep from this line.
+$QuietKeep = '^\[WARN\] (qgate\.|dependency update advisory timed out|no full-gate slot freed|internal error in the gate|slow tests:|CI parity:)'
+if ($Quiet -and -not $script:Failed) { $report = @($report | Where-Object { $_ -match $QuietKeep }) }
 # A broken qgate.deferrals.json is read by outdated and by every vuln phase; say it once.
 $seenDefer = [Collections.Generic.HashSet[string]]::new()
 $report = @($report | Where-Object { "$_" -notmatch '^\[WARN\] qgate\.deferrals\.json (is not|.*entry)' -or $seenDefer.Add("$_") })

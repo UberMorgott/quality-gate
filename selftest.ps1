@@ -3557,6 +3557,10 @@ Check 'a malformed deferral is warned about on a -Full run' `
 # -Quiet is what the generated pre-commit hook uses, and the warning was gated on
 # `-not $Quiet` -- so a repo whose qgate.deferrals.json the gate cannot read got
 # NOTHING at all (output length 0, exit 0) precisely where the gate guards a commit.
+# The machine's shared go build cache is not this fixture's business: over its cap it
+# would add a trim note to whichever run met it first. Both guards off for these runs.
+$gcEnvSave = $env:QGATE_GOCACHE_MAX_GB, $env:QGATE_GO_MIN_FREE_GB
+$env:QGATE_GOCACHE_MAX_GB = '0'; $env:QGATE_GO_MIN_FREE_GB = '0'
 $outQ = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $defFull -All -Full -Quiet 2>&1 | Out-String)
 $qCode = $LASTEXITCODE
 Check 'a malformed deferral still reaches the -Quiet run the hook uses' `
@@ -3567,11 +3571,22 @@ Check '-Quiet on a green run still says nothing else' `
     (($outQ -notmatch '\[PASS\]') -and ($outQ -notmatch '\[INFO\]') -and ($outQ -notmatch 'golangci\.yml')) $outQ
 Remove-Item (Join-Path $defFull 'qgate.deferrals.json')
 $outQ = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $defFull -All -Full -Quiet 2>&1 | Out-String)
+$qCode = $LASTEXITCODE
+$env:QGATE_GOCACHE_MAX_GB, $env:QGATE_GO_MIN_FREE_GB = $gcEnvSave
 Check '-Quiet prints nothing at all on a clean pass' `
-    (($LASTEXITCODE -eq 0) -and [string]::IsNullOrWhiteSpace($outQ)) $outQ
+    (($qCode -eq 0) -and [string]::IsNullOrWhiteSpace($outQ)) $outQ
 } else {
     Write-Output '[skip] no green -Full run here -- checks asserting one cannot be judged'
 }
+# 5b9b4e6 let the go build cache trim [INFO] through -Quiet, so every green commit hook on
+# a machine with a big shared cache printed it. Judged on the gate's own -Quiet filter: a
+# full run that meets an over-cap cache would trim the machine's real one.
+$qkLine = @(Get-Content (Join-Path $PSScriptRoot 'gate\check.ps1') | Where-Object { $_ -match '^\$QuietKeep = ' })
+$qk = if ($qkLine.Count -eq 1) { [scriptblock]::Create($qkLine[0] + '; $QuietKeep').Invoke()[0] } else { $null }
+Check '-Quiet drops the go build cache trim [INFO] on a green run' `
+    ($qk -and ('[INFO] go build cache D:\cache\go-build is 65.0 GB, over the 20 GB cap (QGATE_GOCACHE_MAX_GB) -- trimmed 50.0 GB of entries unused for 2h+ (oldest first), target 15.0 GB' -notmatch $qk)) "QuietKeep=$qk"
+Check '-Quiet still keeps the gate-config [WARN] on a green run' `
+    ($qk -and ("[WARN] qgate.json: unknown key 'x'" -match $qk)) "QuietKeep=$qk"
 
 }
 
