@@ -3962,6 +3962,36 @@ try {
     # would satisfy the line above and be worth nothing.
     Check 'the edited command is not executed' ($r.Out -notmatch '\[(PASS|FAIL)\] quick') $r.Out
 
+    # #143: two branches with different qgate.json, each trusted once. Switching back to
+    # the first must not revoke it; a third, never-trusted version is still skipped.
+    $brA = '{"checks":[{"name":"branch-a","run":"exit 0","level":"fast"}]}'
+    $brB = '{"checks":[{"name":"branch-b","run":"exit 0","level":"fast"}]}'
+    [IO.File]::WriteAllText($custJson, $brA); $tA = Invoke-Trust $cust
+    [IO.File]::WriteAllText($custJson, $brB); $null = Invoke-Trust $cust
+    Check 'qgate trust names the hash it trusted' ($tA -match '(?m)^hash\s+[0-9a-f]{64}\b') $tA
+    [IO.File]::WriteAllText($custJson, $brA)
+    $r = Invoke-Gate $cust
+    Check 'a qgate.json trusted before another one stays trusted' (($r.Code -eq 0) -and ($r.Out -match '\[PASS\] branch-a')) $r.Out
+    [IO.File]::WriteAllText($custJson, $brB)
+    $r = Invoke-Gate $cust
+    Check 'the most recently trusted qgate.json is trusted too' (($r.Code -eq 0) -and ($r.Out -match '\[PASS\] branch-b')) $r.Out
+    [IO.File]::WriteAllText($custJson, '{"checks":[{"name":"branch-c","run":"exit 0","level":"fast"}]}')
+    $r = Invoke-Gate $cust
+    Check 'a qgate.json version never trusted is still skipped' `
+        (($r.Out -match 'untrusted qgate\.json checks') -and ($r.Out -notmatch '\[(PASS|FAIL)\] branch-c')) $r.Out
+    # A store written before #143 holds one string per repo; it must keep working.
+    $legacyStore = Get-TrustStore; $legacyKey = Get-TrustKey $cust
+    $legacy = Get-Content $legacyStore -Raw | ConvertFrom-Json
+    $legacy.$legacyKey = Get-ChecksHash (Get-CustomChecks $cust).Checks
+    [IO.File]::WriteAllText($legacyStore, (ConvertTo-Json $legacy -Depth 3))
+    $r = Invoke-Gate $cust
+    Check 'a legacy single-hash trust store entry is still honoured' (($r.Code -eq 0) -and ($r.Out -match '\[PASS\] branch-c')) $r.Out
+    $null = Invoke-Trust $cust -Remove
+    [IO.File]::WriteAllText($custJson, $brA)
+    $r = Invoke-Gate $cust
+    Check 'qgate trust -Remove revokes every trusted version' `
+        (($r.Out -match 'untrusted qgate\.json checks') -and ($r.Out -notmatch '\[PASS\] branch-a')) $r.Out
+
     # A non-zero exit is the finding, and the output plus the command line is what a
     # reader acts on -- no other phase's output has to name the tool that produced it.
     [IO.File]::WriteAllText($custJson,

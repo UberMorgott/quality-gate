@@ -1409,18 +1409,28 @@ function Get-ChecksHash($Checks) {
         [Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($canon))).Replace('-', '').ToLowerInvariant()
 }
 
-function Get-TrustedHash([string]$Root) {
+# quality-gate#143: how many qgate.json hashes one repository keeps trusted. A single
+# hash meant a branch switch between two trusted qgate.json versions revoked trust on
+# every checkout; a short list (newest first) keeps each version the user has read.
+$script:TrustKeepMax = 20
+
+# A store entry as a hash list. Accepts both shapes: the legacy single string (stores
+# written before #143) and the list `qgate trust` writes now.
+function ConvertTo-TrustList($Value) {
+    @(@($Value) | Where-Object { $_ -is [string] -and $_ })
+}
+
+function Get-TrustedHashes([string]$Root) {
     $f = Get-TrustStore
-    if (-not (Test-Path $f)) { return $null }
+    if (-not (Test-Path $f)) { return @() }
     $j = try { Get-Content $f -Raw | ConvertFrom-Json } catch { $null }
-    if (-not $j) { return $null }
+    if (-not $j) { return @() }
     # Property lookup is case-insensitive, which is what a Windows path needs.
-    $j.(Get-TrustKey $Root)
+    ConvertTo-TrustList $j.(Get-TrustKey $Root)
 }
 
 function Test-ChecksTrusted([string]$Root, $Checks) {
-    $have = Get-TrustedHash $Root
-    [bool]($have -and $have -eq (Get-ChecksHash $Checks))
+    [bool]((Get-ChecksHash $Checks) -in @(Get-TrustedHashes $Root))
 }
 
 function Test-AnyFile([string]$Dir, [string[]]$Patterns) {

@@ -8,7 +8,7 @@
 #
 #   qgate trust                trust the checks of the repo the cwd is in
 #   qgate trust -Root <path>   ...of that repo
-#   qgate trust -Remove        forget them again
+#   qgate trust -Remove        forget them again (every trusted version of qgate.json)
 [CmdletBinding(PositionalBinding = $false)]
 param([string]$Root, [switch]$Remove)
 
@@ -58,9 +58,15 @@ foreach ($c in $custom.Checks) {
     Write-Output "  $($c.Name)  [$($c.Level) level, timeout $($c.TimeoutSec)s]"
     Write-Output "    $(if ($c.Smoke) { 'smoke: ' + (ConvertTo-Json $c.Smoke -Compress -Depth 10) } else { $c.Run })"
 }
-$map[$key] = Get-ChecksHash $custom.Checks
+# quality-gate#143: a list per repo, newest first, so each qgate.json version trusted
+# here (one per branch) stays trusted after a checkout. A legacy single-string entry is
+# read as a one-item list; -Remove still drops the whole entry.
+$hash = Get-ChecksHash $custom.Checks
+$prior = if ($map.Contains($key)) { ConvertTo-TrustList $map[$key] } else { @() }
+$map[$key] =@(@($hash) + @($prior | Where-Object { $_ -ne $hash }) | Select-Object -Unique -First $script:TrustKeepMax)
 Save-TrustStore $map $store
 Write-Output "trusted  $key"
+Write-Output "hash     $hash ($($map[$key].Count) version(s) of qgate.json trusted for this repo)"
 Write-Output "store    $store"
-Write-Output 'Any edit to a name, command, level or timeout revokes this -- run qgate trust again.'
+Write-Output 'Any edit to a name, command, level or timeout needs its own qgate trust; versions trusted before stay trusted.'
 exit 0
