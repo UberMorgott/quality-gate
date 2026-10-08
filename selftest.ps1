@@ -543,8 +543,15 @@ if ((Get-Command deadcode -ErrorAction SilentlyContinue) -and -not (Test-GoToolS
     Check 'deadcode is silent on the clean fixture' (-not (Get-GoDeadcode $dc))
     Set-GoFile (Join-Path $dc 'helper.go') "package main`n`nfunc testOnly() int { return 1 }`n`nfunc orphan() {}"
     Set-GoFile (Join-Path $dc 'helper_test.go') "package main`n`nimport `"testing`"`n`nfunc TestHelper(t *testing.T) { _ = testOnly() }"
+    # #133: Go sources a JS dependency ships under node_modules (flatted) are not this repo's
+    # dead code; the orphan in the repo's own source beside them still is.
+    $nm = Join-Path $dc 'frontend\node_modules\flatted\golang\pkg\flatted'
+    New-Item -ItemType Directory -Force $nm | Out-Null
+    Set-GoFile (Join-Path $nm 'flatted.go') "package flatted`n`nfunc Stringify() string { return `"`" }"
     $dw = (Get-GoDeadcode $dc) -join "`n"
     Check 'an unreachable function is warned by deadcode' (($dw -match '^\[WARN\] deadcode: 1 unreachable') -and ($dw -match 'unreachable func: orphan')) $dw
+    Check 'Go sources under node_modules are not reported as dead code' ($dw -notmatch 'node_modules|Stringify') $dw
+    Remove-Item (Join-Path $dc 'frontend') -Recurse -Force
     Check 'a helper only tests call is not dead code' ($dw -notmatch 'testOnly') $dw
     # A cgo //export is the C ABI of a c-shared build: it and what only it calls are live;
     # an unreferenced function in that same package is still dead. The export sits in its own
@@ -2560,6 +2567,26 @@ Check 'wire leaves a symlinked AGENTS.md untouched' `
      ($linkOut -match 'AGENTS\.md\s+-- symlink to CLAUDE\.md')) $linkOut
 Check 'wire still writes the block into the symlink target' `
     ((Get-Content (Join-Path $linkRepo 'CLAUDE.md') -Raw) -match '<!-- quality-gate -->') $linkOut
+
+# #141: CLAUDE.md that imports AGENTS.md (`@AGENTS.md`) gets the block through the
+# import; a block of its own doubled the gate in the agent's context. A stale copy
+# already in it is removed. Twice, because wire reruns on every upgrade.
+$importRepo = Join-Path $tmp 'wire-import'
+New-Item -ItemType Directory -Path $importRepo | Out-Null
+git -C $importRepo init -q 2>$null
+Set-Content (Join-Path $importRepo 'AGENTS.md') '# rules'
+Set-Content (Join-Path $importRepo 'CLAUDE.md') "@AGENTS.md`n`n## Claude adapter`n`n<!-- quality-gate -->`nold`n<!-- /quality-gate -->"
+$blockCount = { param($f) ([regex]::Matches((Get-Content (Join-Path $importRepo $f) -Raw), '<!-- quality-gate -->')).Count }
+$importOut = (& pwsh -NoProfile -File $installer -Target $importRepo -NoRun -NoHook 2>&1 | Out-String)
+$importOut += (& pwsh -NoProfile -File $installer -Target $importRepo -NoRun -NoHook 2>&1 | Out-String)
+Check 'wire gives an @AGENTS.md-importing CLAUDE.md no block of its own (twice)' `
+    (((& $blockCount 'CLAUDE.md') -eq 0) -and ((& $blockCount 'AGENTS.md') -eq 1) -and
+     ((Get-Content (Join-Path $importRepo 'CLAUDE.md') -Raw) -match '(?m)^@AGENTS\.md\s*$') -and
+     ((Get-Content (Join-Path $importRepo 'CLAUDE.md') -Raw) -match 'Claude adapter') -and
+     ($importOut -match 'CLAUDE\.md\s+-- imports AGENTS\.md')) $importOut
+# ...and a CLAUDE.md without the import still gets its own block.
+Check 'wire still writes the block into a CLAUDE.md that does not import AGENTS.md' `
+    (([regex]::Matches((Get-Content (Join-Path $goWire 'CLAUDE.md') -Raw), '<!-- quality-gate -->')).Count -eq 1) ''
 
 # A lefthook.yml this installer wrote at an OLDER version is not a foreign file, but
 # "kept existing lefthook.yml" said the same thing about both. When pre-merge-commit

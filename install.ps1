@@ -251,15 +251,20 @@ gh issue create --repo UberMorgott/quality-gate --title "<what broke>" --body "<
 
 # The block goes at the TOP of the file: agents weigh early instructions more, and
 # long project guidance below must not bury it.
-function Set-AgentDoc([string]$name) {
+function Test-DocLink([string]$name) {
+    $item = Get-Item -LiteralPath (Join-Path $root $name) -Force -ErrorAction SilentlyContinue
+    $staged = git -C $root ls-files -s -- $name 2>$null
+    [bool](($item -and $item.LinkType) -or ("$staged" -match '^120000 '))
+}
+
+function Set-AgentDoc([string]$name, [string]$importedDoc = '') {
     $file = Join-Path $root $name
     # A doc git tracks as a symlink (mode 120000, AGENTS.md -> CLAUDE.md) is a plain file
     # holding the target path on Windows with core.symlinks=false. Writing the block into
     # it turned the link into a regular file for every other platform (#85); the target
     # gets the block on its own.
     $item = Get-Item -LiteralPath $file -Force -ErrorAction SilentlyContinue
-    $staged = git -C $root ls-files -s -- $name 2>$null
-    if (($item -and $item.LinkType) -or ("$staged" -match '^120000 ')) {
+    if (Test-DocLink $name) {
         $target = if ($item.LinkTarget) { $item.LinkTarget } elseif ($item) { "$(Get-Content -LiteralPath $file -Raw)".Trim() } else { '?' }
         Write-Output "$($name.PadRight(9)) -- symlink to $target, left as is"
         return
@@ -269,6 +274,26 @@ function Set-AgentDoc([string]$name) {
     # doc in the repo -- never equalled it, and wire rewrote a file it had nothing to
     # change in.
     $body = if (Test-Path $file) { (Get-Content $file -Raw) -replace "`r`n", "`n" } else { '' }
+    # A doc that imports another doc on a line of its own (`@AGENTS.md`, Claude Code's
+    # import syntax) already receives that doc's block when the import is expanded. A
+    # second copy here doubled the gate in the agent's context and put a repo-local
+    # override written after the imported block before a fresh default copy (#141).
+    # Only when the imported doc really carries the block: a symlinked one (#85) does
+    # not, and this doc must then keep its own.
+    if ($importedDoc -and
+        $body -match "(?m)^[ \t]*@(\./)?$([regex]::Escape($importedDoc))[ \t]*$" -and
+        -not (Test-DocLink $importedDoc) -and
+        ("$(Get-Content -LiteralPath (Join-Path $root $importedDoc) -Raw -ErrorAction SilentlyContinue)" -match
+            '(?s)<!-- quality-gate -->.*?<!-- /quality-gate -->')) {
+        if ($body -notmatch '<!-- quality-gate -->') {
+            Write-Output "$($name.PadRight(9)) -- imports $importedDoc, no block of its own"
+            return
+        }
+        $new = ($body -replace '(?s)<!-- quality-gate -->.*?<!-- /quality-gate -->\n*', '').TrimStart().TrimEnd() + "`n"
+        Set-Content -Path $file -Value $new -Encoding utf8 -NoNewline
+        Write-Output "$($name.PadRight(9)) -> $file (block removed, imports $importedDoc)"
+        return
+    }
     $new = if ($body -match '(?s)<!-- quality-gate -->.*?<!-- /quality-gate -->') {
         $body -replace '(?s)<!-- quality-gate -->.*?<!-- /quality-gate -->', $agentDoc.Trim()
     } else {
@@ -381,7 +406,7 @@ if ($NoHook) {
 
 Set-StopHook
 Set-AgentDoc 'AGENTS.md'
-Set-AgentDoc 'CLAUDE.md'
+Set-AgentDoc 'CLAUDE.md' 'AGENTS.md'
 
 # CI is opt-in. Writing it by default made deleting it impossible: a repo whose own
 # workflow already covers this ground got the file back on the next `wire`, and
