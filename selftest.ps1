@@ -5660,6 +5660,26 @@ if (Get-Command gitleaks -ErrorAction SilentlyContinue) {
     $out = (& pwsh -NoProfile -File $gate -Root $sec -Only base -Full 2>&1 | Out-String)
     Check 'binary media is not scanned for secrets, a text asset still is' `
         (($LASTEXITCODE -ne 0) -and ($out -match 'Level\.asset') -and ($out -notmatch 'Texture\.TGA')) "code=$LASTEXITCODE $out"
+    # The other side of the ignored-FILE filter: `git add -f` puts a file .gitignore names
+    # into the index, so it is tracked and the next commit publishes it. Both lanes must
+    # report it -- the fast lane reads the index (`git --staged`), the full lane walks the
+    # tree and drops only what git still ignores. Measured to agree; asserted so the two
+    # filters cannot drift apart unnoticed.
+    $forced = Join-Path $tmp 'secrets-forced'
+    New-Item -ItemType Directory -Path $forced -Force | Out-Null
+    git -C $forced init -q 2>$null
+    [IO.File]::WriteAllText((Join-Path $forced '.gitignore'), "config.json`n")
+    [IO.File]::WriteAllText((Join-Path $forced 'config.json'), "{ `"github_token`": `"$pat`" }`n")
+    git -C $forced add .gitignore 2>$null
+    git -C $forced add -f config.json 2>$null
+    $outFast = (& pwsh -NoProfile -File $gate -Root $forced -Only base 2>&1 | Out-String)
+    $fastCode = $LASTEXITCODE
+    $outFull = (& pwsh -NoProfile -File $gate -Root $forced -Only base -Full 2>&1 | Out-String)
+    $fullCode = $LASTEXITCODE
+    Check 'a gitignored file force-added with git add -f fails secrets on both lanes' `
+        (($fastCode -ne 0) -and ($outFast -match '\[FAIL\] secrets') -and ($outFast -match 'config\.json') -and
+            ($fullCode -ne 0) -and ($outFull -match '\[FAIL\] secrets') -and ($outFull -match 'config\.json:\d+: github-pat')) `
+        "fast=$fastCode $outFast full=$fullCode $outFull"
 } else {
     Write-Output '[skip] gitleaks not on PATH -- the secrets filter cannot be judged here'
 }
