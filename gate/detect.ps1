@@ -788,7 +788,11 @@ function Get-GoDeadcode([string]$Dir, [string[]]$Tags = @('')) {
         $hits = if (-not $ran) { $set } else { @($hits | Where-Object { $_ -in $set }) }
         $ran = $true
     }
-    $hits = @($hits | Where-Object { $_ })
+    # quality-gate#133: ./... walks into a frontend's node_modules (flatted ships Go sources
+    # for eslint) and a vendor tree -- third-party code this repository does not own and
+    # cannot delete from. Dropped by path segment, the same dirs the shipped .golangci.yml
+    # excludes; a dead function in the repository's own source is still reported.
+    $hits = @($hits | Where-Object { $_ -and ($_ -notmatch '(^|[\\/])(node_modules|vendor)[\\/]') })
     $live = @{}
     $hits = @($hits | Where-Object {
         if ($_ -notmatch '^(?<file>.+\.go):\d+:\d+: unreachable func: (?<name>\S+)') { return $true }
