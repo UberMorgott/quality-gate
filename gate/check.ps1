@@ -13,7 +13,7 @@
 # With no stack switch the changed side is auto-detected from git status.
 [CmdletBinding(PositionalBinding = $false)]
 param(
-    [string[]]$Only,      # base | go | web | rust | proto | godot | dotnet | cpp | custom | deploy -- restrict to these stacks (one value: -Only go,web)
+    [string[]]$Only,      # base | go | web | rust | proto | godot | dotnet | cpp | powershell | custom | deploy --restrict to these stacks (one value: -Only go,web)
     [switch]$All,         # every detected stack, ignore git status
     [switch]$Fast,
     [switch]$Full,
@@ -443,6 +443,11 @@ if ($ParallelStacks) {
         }
         # -Unique over the sort keys, so the widening branch above -- which already
         # took every stack, base included -- does not list it twice.
+        # #142: the powershell stack owns no directory -- its files are scattered through
+        # the tree, inside other stacks' directories too -- so the longest-prefix rule above
+        # gives a .ps1 under server/ to go alone. Any changed PowerShell file selects it.
+        $psStack = @($stacks | Where-Object { $_.Stack -eq 'powershell' })
+        if ($psStack -and @($changed | Where-Object { $_ -match '(?i)\.ps(m|d)?1$' })) { $selected += $psStack }
         $stacks = @(@($selected) + $baseStack | Sort-Object Stack, Rel -Unique)
         # Generated code crosses stack boundaries: a .proto edit produces Go and
         # GDScript that nobody touched, so narrowing to the schema directory would
@@ -2270,6 +2275,73 @@ function Invoke-ProtoStack($s) {
     }
 }
 
+# quality-gate#142: PowerShell. Advisory by default -- a new stack lands in every installed
+# repository on its next `qgate update`, and a default-on FAIL over scripts nobody has
+# judged before would turn green repositories red. qgate.json
+# {"powershell": {"findings": "fail"}} makes both phases blocking.
+#   parse             the language's own parser over every file; no dependency, every lane.
+#   PSScriptAnalyzer  Error-severity rules only, full level only, and only when the module
+#                     is already installed: the gate never installs it, and a machine
+#                     without it gets an [INFO] -- not a [SKIP], so strictSkips cannot turn
+#                     an optional analyzer nobody asked for into a red run.
+function Invoke-PowerShellStack($s) {
+    Set-Location $s.Dir
+    $cfgFile = Join-Path $Root 'qgate.json'
+    $cfg = if (Test-Path -LiteralPath $cfgFile) { try { (Get-Content -LiteralPath $cfgFile -Raw | ConvertFrom-Json).powershell } catch { $null } }
+    $blocking = ($cfg -and $cfg.findings -eq 'fail')
+    $hint = "advisory; qgate.json {`"powershell`": {`"findings`": `"fail`"}} makes it a failure"
+
+    # Vendored and generated scripts (.gitattributes) are not this repository's code.
+    $files = @(Get-PowerShellFiles $Root)
+    $vendored = @(Get-VendoredPaths $Root $files)
+    $files = @($files | Where-Object { $vendored -notcontains $_ })
+    if (-not $files) { $script:Lines += '[INFO] powershell: every PowerShell file is vendored or generated (.gitattributes) -- nothing to check'; return }
+
+    # One verdict shape for both phases: blocking -> a Phase that fails on findings;
+    # advisory -> the check still ran (counted, so the zero-phase invariant holds), its
+    # findings become tagged [WARN] lines, which a passing stack still prints.
+    $report = {
+        param([string]$Name, [string[]]$Findings, [double]$Secs)
+        if ($blocking -or -not $Findings) {
+            Phase $Name { if ($Findings) { $Findings; $global:LASTEXITCODE = 1 } } -Elapsed $Secs
+            return
+        }
+        if ($script:Failed) { return }
+        $script:Phases++
+        $script:Lines += "[WARN] $Name -- $($Findings.Count) finding(s), $hint"
+        $script:Lines += @($Findings | Select-Object -First 50 | ForEach-Object { "[WARN] ${Name}: $_" })
+        if ($Findings.Count -gt 50) { $script:Lines += "[WARN] ${Name}: ...and $($Findings.Count - 50) more" }
+    }
+
+    $sw = [Diagnostics.Stopwatch]::StartNew()
+    $parse = @(foreach ($f in $files) {
+            $tokens = $null; $errors = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile((Join-Path $Root $f), [ref]$tokens, [ref]$errors)
+            foreach ($e in @($errors)) { "${f}:$($e.Extent.StartLineNumber):$($e.Extent.StartColumnNumber): $($e.Message)" }
+        })
+    $sw.Stop()
+    & $report 'parse' $parse $sw.Elapsed.TotalSeconds
+
+    if (-not $Full) { return }
+    if (-not (Get-Module -ListAvailable -Name PSScriptAnalyzer)) {
+        $script:Lines += '[INFO] PSScriptAnalyzer not installed -- analyzer phase not run (Install-Module PSScriptAnalyzer enables it; the gate never installs it)'
+        return
+    }
+    # A file that does not parse is already reported above; the analyzer would only say it again.
+    $broken = @($parse | ForEach-Object { ($_ -split ':\d+:\d+: ', 2)[0] } | Sort-Object -Unique)
+    $sw = [Diagnostics.Stopwatch]::StartNew()
+    $pssa = @(try {
+            Import-Module PSScriptAnalyzer -ErrorAction Stop
+            foreach ($f in @($files | Where-Object { $broken -notcontains $_ })) {
+                foreach ($d in @(Invoke-ScriptAnalyzer -Path (Join-Path $Root $f) -Severity Error -ErrorAction Stop)) {
+                    "${f}:$($d.Line):$($d.Column): $($d.RuleName): $($d.Message)"
+                }
+            }
+        } catch { "PSScriptAnalyzer failed: $($_.Exception.Message)" })
+    $sw.Stop()
+    & $report 'PSScriptAnalyzer' $pssa $sw.Elapsed.TotalSeconds
+}
+
 function Invoke-GodotStack($s) {
     Set-Location $s.Dir
     # addons/ is other people's code: a project cannot fix its formatting and
@@ -3644,6 +3716,7 @@ foreach ($s in $stacks) {
                 'godot' { Invoke-GodotStack $s }
                 'dotnet' { Invoke-DotnetStack $s }
                 'cpp' { Invoke-CppStack $s }
+                'powershell' { Invoke-PowerShellStack $s }
                 'custom' { Invoke-WithoutHookGitEnv { Invoke-CustomStack $s } }
                 'deploy' { Invoke-DeployStack $s }
             }

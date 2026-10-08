@@ -52,7 +52,7 @@ Run from the repository or pass `-Root <path>`. Stack discovery uses marker file
 | `qgate selftest` | Run the gate's failure/pass fixtures; `-Only <sections>`, `-Sequential`, `-Exact`, `-SectionTimeoutSec <seconds>` (1500), `-Throttle <jobs>` (4). |
 | `qgate help` | Show CLI help; aliases `-h`, `-?`, `--help`, `/?`. |
 
-Self-test sections: `detect`, `go`, `go2`, `core`, `wiring`, `rust`, `dotnet`, `dotnet2`, `dotnet3`, `proto`, `godot`, `hooks`, `custom`, `cpp`, `base`, `web`, `bootstrap`. Naming `go` or `dotnet` includes its numbered parts unless `-Exact` is used.
+Self-test sections: `detect`, `go`, `go2`, `core`, `wiring`, `rust`, `dotnet`, `dotnet2`, `dotnet3`, `proto`, `powershell`, `godot`, `hooks`, `custom`, `cpp`, `base`, `web`, `bootstrap`. Naming `go` or `dotnet` includes its numbered parts unless `-Exact` is used.
 
 ### Gate flags
 
@@ -71,7 +71,7 @@ Self-test sections: `detect`, `go`, `go2`, `core`, `wiring`, `rust`, `dotnet`, `
 | `-Sarif <file>` | Also write SARIF 2.1.0 from the printed report; `-Quiet` can leave a passing report empty. |
 | `-Parallel` | Run independent Go, web, Rust, .NET, C/C++, and Godot stacks concurrently. |
 
-`-Only` accepts `base`, `go`, `web`, `rust`, `proto`, `godot`, `dotnet`, `cpp`, `custom`, `deploy`, and detected `python`. An unknown or absent stack fails. Python checks are unimplemented, so `-Only python` fails for lack of checks. Unity-generated `.csproj` files are likewise detected but skipped.
+`-Only` accepts `base`, `go`, `web`, `rust`, `proto`, `godot`, `dotnet`, `cpp`, `powershell`, `custom`, `deploy`, and detected `python`. An unknown or absent stack fails. Python checks are unimplemented, so `-Only python` fails for lack of checks. Unity-generated `.csproj` files are likewise detected but skipped.
 
 ### Tiers, hooks, and results
 
@@ -123,6 +123,7 @@ Place one optional `qgate.json` at the repository root. Tool-specific rules rema
 | `go.fuzzParallel` | Fuzz worker processes per target (`go test -parallel`); default half the cores, 1..4; allowed 1..256. |
 | `go.fuzzMemLimit` | `GOMEMLIMIT` for fuzz runs (`"2GiB"`); default an inherited `GOMEMLIMIT`, else `2GiB`. |
 | `dotnet` | `sonar: true` enables cached Sonar analyzers; `inspectcode: true` enables JetBrains inspection; `testRunner: "fail"` makes executable test-runner failures blocking. |
+| `powershell.findings` | `"fail"` makes the PowerShell `parse` and `PSScriptAnalyzer` findings blocking; default advisory `[WARN]`. |
 | `web.buildDrift` | `"fail"` makes the web `build drift` advisory (committed bundle differs from a fresh build) blocking. |
 | `harmony.assemblies` | Additional assembly path/glob array, with `%VAR%` expansion and recursive `**`; findings in these other assemblies are advisory. |
 | `deploy` | Array of `{ "built": "path", "deployed": "path" }` pairs; root-relative or absolute paths with `%VAR%` expansion, compared in full runs without trust. |
@@ -198,6 +199,15 @@ Go-built linter/scanner binaries older than the module's Go language version are
 | `buf format` | Fast | buf | Rejects protobuf formatting drift to keep schemas readable. |
 | `buf breaking` | Full | buf + Git | Checks compatibility against the merge-base with `origin/main`, falling back to `HEAD~1`; skips without a usable baseline containing proto files. |
 | `buf generate drift` | Full | buf + configured generators + Git | Regenerates code and detects newly dirty/untracked output so committed generated files match schemas; skips without `buf.gen.yaml` or Git. |
+
+### PowerShell (`*.ps1`, `*.psm1`, `*.psd1`)
+
+Detected by the PowerShell files themselves (tracked or untracked, not gitignored, any depth; `.gitattributes` vendored/generated files are excluded), as one stack at the repository root. A repository without them has no PowerShell stack. Any changed PowerShell file selects the stack. Findings are advisory `[WARN]`s unless `qgate.json` sets `{"powershell": {"findings": "fail"}}`.
+
+| Printed check | Tier | External tool | What it checks and why |
+| --- | --- | --- | --- |
+| `parse` | Fast | None (PowerShell's own parser) | Parses every file to catch syntax errors before a script is run. |
+| `PSScriptAnalyzer` | Full | PSScriptAnalyzer module; an `[INFO]` when not installed | Reports Error-severity rules only; files that do not parse are left to `parse`. The gate never installs the module. |
 
 ### Godot / GDScript (`project.godot`)
 

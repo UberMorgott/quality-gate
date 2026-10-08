@@ -38,6 +38,7 @@ $script:KnownMarkers = [ordered]@{
     rust   = 'Cargo.toml'
     dotnet = '*.csproj'
     cpp    = 'CMakeLists.txt'
+    powershell = '*.ps1 / *.psm1 / *.psd1 (tracked or untracked, not ignored)'
     custom = 'qgate.json with a non-empty "checks" array'
     deploy = 'qgate.json with a non-empty "deploy" array'
 }
@@ -1433,6 +1434,31 @@ function Test-ChecksTrusted([string]$Root, $Checks) {
     [bool]((Get-ChecksHash $Checks) -in @(Get-TrustedHashes $Root))
 }
 
+# quality-gate#142: the repository's own PowerShell sources, as root-relative paths with
+# forward slashes. No marker file proves a PowerShell project -- scripts sit wherever they
+# are used (tools/, deploy/, bin/) -- so the files themselves are the marker. In a git work
+# tree git answers: tracked plus untracked-not-ignored, at any depth, so an ignored build
+# output (a .NET bin/Debug carrying playwright.ps1) and an untracked nested repository are
+# never listed. 'bin' is the one $SkipDirs name kept here: for PowerShell it is a source
+# directory (this gate's own bin/qgate.ps1), and a .NET bin/ output is ignored anyway. A
+# directory that is not a work tree falls back to the marker search, $SkipDirs and all.
+function Get-PowerShellFiles([string]$Root) {
+    $root = $Root.TrimEnd('\', '/')
+    $prev = $global:LASTEXITCODE
+    $list = @(& git -c core.quotepath=off -C $root ls-files -co --exclude-standard -- '*.ps1' '*.psm1' '*.psd1' 2>$null)
+    $isRepo = ($LASTEXITCODE -eq 0)
+    $global:LASTEXITCODE = $prev
+    if (-not $isRepo) {
+        return @(Find-Marker $root @('*.ps1', '*.psm1', '*.psd1') | ForEach-Object { $_.FullName.Substring($root.Length).Trim('\', '/').Replace('\', '/') } | Sort-Object -Unique)
+    }
+    $skip = @($script:SkipDirs | Where-Object { $_ -ne 'bin' })
+    @($list | Where-Object {
+            $_ -and -not (@($_ -split '/' | Select-Object -SkipLast 1) | Where-Object { $skip -contains $_ }) -and
+            # Tracked but deleted in the work tree: nothing to parse.
+            (Test-Path -LiteralPath (Join-Path $root $_) -PathType Leaf)
+        } | Sort-Object -Unique -CaseSensitive)
+}
+
 function Test-AnyFile([string]$Dir, [string[]]$Patterns) {
     foreach ($p in $Patterns) {
         if (Get-ChildItem -Path $Dir -Filter $p -File -Force -ErrorAction SilentlyContinue) { return $true }
@@ -1441,7 +1467,7 @@ function Test-AnyFile([string]$Dir, [string[]]$Patterns) {
 }
 
 # Returns one object per detected stack:
-#   Stack       base | go | web | godot | proto | python | rust | dotnet | cpp | custom
+#   Stack       base | go | web | godot | proto | python | rust | dotnet | cpp | powershell | custom
 #   Dir         absolute directory holding the marker
 #   Rel         path relative to the repo root, forward slashes, '' for the root
 #   Marker      the file whose presence created this phase (provenance)
@@ -1580,6 +1606,15 @@ function Get-Stacks([string]$Root) {
             $warn = 'no Godot binary -- set GODOT_BIN; the gate cannot verify this stack until then'
         }
         $stacks += [pscustomobject]@{ Stack = 'godot'; Dir = $dir; Rel = (& $rel $dir); Marker = 'project.godot'; Implemented = $true; Warn = $warn }
+    }
+
+    # #142: one stack per repository, at the root -- the files are the marker (see
+    # Get-PowerShellFiles), so there is no directory of its own to scope it to. A
+    # repository with no PowerShell source gets no stack at all. Advisory by default
+    # (Invoke-PowerShellStack); the parser needs no tool, so there is nothing to warn about.
+    $psFiles = @(Get-PowerShellFiles $Root)
+    if ($psFiles) {
+        $stacks += [pscustomobject]@{ Stack = 'powershell'; Dir = $Root; Rel = ''; Marker = "$($psFiles.Count) PowerShell file(s), e.g. $($psFiles[0])"; Implemented = $true; Warn = '' }
     }
 
     # The one stack whose marker is not a file the language brought with it: the

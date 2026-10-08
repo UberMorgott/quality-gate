@@ -50,7 +50,7 @@ Gate flags: -All  -Fast  -Full  -Only <stack[,stack]>  -Quiet  -Why  -Baseline <
        A [WARN] about the gate's own unreadable config is not silenced.
   -Fix  rewrites first (Go: gofmt -w, golangci-lint run --fix), then runs the normal gate.
        Explicit only: hooks and CI never pass it, the gate itself never rewrites.
-  -Only takes base go web rust proto godot dotnet cpp custom: -Only go,web ("go,web" and `go web` are the same)
+  -Only takes base go web rust proto godot dotnet cpp powershell custom: -Only go,web ("go,web" and `go web` are the same)
        base has no marker file -- it is every git work tree, and -Only base runs it alone
        python is detected but not checked, so a run that names it alone checks
        nothing and FAILS (-All flags it only when a real stack ran too)

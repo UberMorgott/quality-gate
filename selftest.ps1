@@ -42,7 +42,7 @@ $env:QGATE_NO_REUSE = '1'
 # every Go fixture. Its own checks (section go) use a fake aegis and clear this.
 $env:QGATE_NO_AEGIS = '1'
 
-$sections = 'detect', 'go', 'go2', 'core', 'wiring', 'rust', 'dotnet', 'dotnet2', 'dotnet3', 'proto', 'godot', 'hooks', 'custom', 'cpp', 'base', 'web', 'bootstrap'
+$sections = 'detect', 'go', 'go2', 'core', 'wiring', 'rust', 'dotnet', 'dotnet2', 'dotnet3', 'proto', 'powershell', 'godot', 'hooks', 'custom', 'cpp', 'base', 'web', 'bootstrap'
 $parts = @{ go = @('go2'); dotnet = @('dotnet2', 'dotnet3') }
 # `pwsh -File` hands "go,base" over as one string.
 $Only = @($Only -split ',' | ForEach-Object Trim | Where-Object { $_ })
@@ -175,6 +175,7 @@ Check 'detects web stack'  ([bool]($stacks | Where-Object { $_.Stack -eq 'web' -
 Check 'detects rust stack'  ([bool]($stacks | Where-Object { $_.Stack -eq 'rust' -and $_.Implemented }))
 Check 'detects proto stack' ([bool]($stacks | Where-Object { $_.Stack -eq 'proto' -and $_.Implemented }))
 Check 'detects godot stack' ([bool]($stacks | Where-Object { $_.Stack -eq 'godot' -and $_.Implemented }))
+Check 'detects powershell stack by its .ps1 files' ([bool]($stacks | Where-Object { $_.Stack -eq 'powershell' -and $_.Rel -eq '' -and $_.Implemented }))
 # The one marker that is a PATTERN: a csproj is named after its project, and one .NET
 # repo carries several of them. The marker recorded has to be the file, not the glob.
 Check 'detects dotnet stack by its csproj name' `
@@ -2284,6 +2285,52 @@ if (Get-Command buf -ErrorAction SilentlyContinue) {
     Write-Output '[skip] buf not on PATH'
 }
 
+}
+
+if (Want 'powershell') {
+# #142: PowerShell, both sides. The parser is part of pwsh, so nothing here can skip.
+# Advisory by default (a new stack must not turn installed repositories red), blocking
+# with qgate.json {"powershell": {"findings": "fail"}}.
+$psr = Join-Path $tmp 'powershell'
+New-Item -ItemType Directory -Path (Join-Path $psr 'tools') -Force | Out-Null
+& git -C $psr init -q 2>&1 | Out-Null
+$psGate = { (& pwsh -NoProfile -File $gate -Root $psr -Only powershell 2>&1 | Out-String) }
+[IO.File]::WriteAllText((Join-Path $psr 'tools\pack.ps1'), "param([string]`$Name)`nWrite-Output `"packing `$Name`"`n")
+[IO.File]::WriteAllText((Join-Path $psr 'tools\Pack.psm1'), "function Get-Pack { 'pack' }`nExport-ModuleMember -Function Get-Pack`n")
+# A broken script git ignores is not the repository's code.
+[IO.File]::WriteAllText((Join-Path $psr '.gitignore'), "out/`n")
+New-Item -ItemType Directory -Path (Join-Path $psr 'out') -Force | Out-Null
+[IO.File]::WriteAllText((Join-Path $psr 'out\gen.ps1'), "function Broken {`n")
+$psStack = @(Get-Stacks $psr | Where-Object { $_.Stack -eq 'powershell' })
+Check 'a repository with PowerShell files has one powershell stack at its root' (($psStack.Count -eq 1) -and ($psStack[0].Rel -eq '') -and $psStack[0].Implemented) "$($psStack | Out-String)"
+Check 'a gitignored .ps1 is not a PowerShell file of the repository' ((@(Get-PowerShellFiles $psr) -join ',') -eq 'tools/pack.ps1,tools/Pack.psm1') "$(@(Get-PowerShellFiles $psr) -join ',')"
+$out = & $psGate
+Check 'clean PowerShell passes the parse phase' (($LASTEXITCODE -eq 0) -and ($out -match '\[PASS\] parse') -and ($out -notmatch '\[WARN\] parse')) $out
+
+$bad = Join-Path $psr 'tools\update.ps1'
+[IO.File]::WriteAllText($bad, "function Update-Mods {`n    if (`$true) {`n        'x'`n}`n")
+$out = & $psGate
+Check 'a syntax error is an advisory [WARN] by default, exit 0' `
+    (($LASTEXITCODE -eq 0) -and ($out -match '\[WARN\] parse -- \d+ finding') -and ($out -match 'tools/update\.ps1:\d+:\d+: ') -and ($out -match '"findings": "fail"') -and ($out -notmatch '\[FAIL\]')) $out
+[IO.File]::WriteAllText((Join-Path $psr 'qgate.json'), '{"powershell": {"findings": "fail"}}')
+$out = & $psGate
+Check 'the same syntax error FAILs with qgate.json powershell.findings "fail"' `
+    (($LASTEXITCODE -ne 0) -and ($out -match '\[FAIL\] parse') -and ($out -match 'tools/update\.ps1:\d+:\d+: ')) $out
+[IO.File]::WriteAllText($bad, "function Update-Mods {`n    if (`$true) {`n        'x'`n    }`n}`n")
+$out = & $psGate
+Check 'fixed PowerShell passes again under the opt-in' (($LASTEXITCODE -eq 0) -and ($out -match '\[PASS\] parse')) $out
+
+# A repository without PowerShell gains no stack: not detected, not runnable by -Only.
+$nops = Join-Path $tmp 'no-powershell'
+New-Item -ItemType Directory -Path $nops -Force | Out-Null
+& git -C $nops init -q 2>&1 | Out-Null
+[IO.File]::WriteAllText((Join-Path $nops 'README.md'), "# none`n")
+[IO.File]::WriteAllText((Join-Path $nops 'run.cmd'), "@echo off`n")
+Check 'a repository with no PowerShell files has no powershell stack' (-not (Get-Stacks $nops | Where-Object { $_.Stack -eq 'powershell' }))
+
+# The gate's own sources pass their own stack.
+$out = (& pwsh -NoProfile -File $gate -Root $PSScriptRoot -Only powershell 2>&1 | Out-String)
+Check "the gate's own PowerShell sources parse clean" (($LASTEXITCODE -eq 0) -and ($out -match '\[PASS\] parse') -and ($out -notmatch '\[WARN\] parse')) $out
 }
 
 if (Want 'godot') {
