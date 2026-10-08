@@ -1,7 +1,7 @@
 # Graph Report - quality-gate  (2026-10-08)
 
 ## Corpus Check
-- 51 files · ~142,232 words
+- 51 files · ~142,524 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 17 file(s) not represented in the graph (top: (none) 5, .toml 3, .gd 2)
 
@@ -11,7 +11,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `d466d193`
+- Built from commit: `b78387e2`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -66,8 +66,8 @@
 1. `QGateHarmony` - 78 edges
 2. `Invoke-GoStackOnce()` - 33 edges
 3. `Invoke-DotnetStack()` - 17 edges
-4. `Invoke-BaseStack()` - 15 edges
-5. `Lookups` - 15 edges
+4. `Lookups` - 15 edges
+5. `Invoke-BaseStack()` - 15 edges
 6. `Invoke-WebStack()` - 14 edges
 7. `Phase()` - 13 edges
 8. `Invoke-CppStack()` - 12 edges
