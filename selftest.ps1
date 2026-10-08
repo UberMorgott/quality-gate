@@ -3481,6 +3481,44 @@ Check 'a hung advisory is cut off, named under -Quiet, and does not fail the run
     ($out -match '\[WARN\] dependency update advisory timed out -- still running 30s after the checks finished \(\d+s in all\); update status is unknown')) `
     "code=$advCode elapsed=$($sw.Elapsed.TotalSeconds) childAlive=$childAlive $out"
 
+# #136: no exit path is non-zero and silent. Gate copies with a defect planted in the
+# dot-sourced smoke.ps1 (or, for the last net, the verdict flipped with no [FAIL] line).
+$ieGate = Join-Path $tmp 'iegate'
+Copy-Item (Join-Path $PSScriptRoot 'gate') $ieGate -Recurse
+$ieSmoke = Join-Path $ieGate 'smoke.ps1'
+$smokeText = [IO.File]::ReadAllText($ieSmoke)
+[IO.File]::AppendAllText($ieSmoke, "`nthrow 'selftest planted throw'`n")
+$out = (& pwsh -NoProfile -File (Join-Path $ieGate 'check.ps1') -Root $advRepo -All -Quiet 2>&1 | Out-String)
+Check 'a throw inside the gate exits 1 with a [FAIL] naming it and its line' `
+    (($LASTEXITCODE -eq 1) -and ($out -match '\[FAIL\] internal error in the gate -- selftest planted throw \(smoke\.ps1:\d+\)')) $out
+[IO.File]::WriteAllText($ieSmoke, $smokeText + "`n`$null = [int]::Parse('selftest-not-a-number')`n")
+$out = (& pwsh -NoProfile -File (Join-Path $ieGate 'check.ps1') -Root $advRepo -All -Quiet 2>&1 | Out-String)
+Check 'an error the gate used to pass over keeps the verdict and is named under -Quiet' `
+    (($LASTEXITCODE -eq 0) -and ($out -match '\[WARN\] internal error in the gate \(passed over, verdict unchanged\) -- .+\(smoke\.ps1:\d+\)')) $out
+[IO.File]::WriteAllText($ieSmoke, $smokeText)
+$ieCheck = Join-Path $ieGate 'check.ps1'
+$ieText = [IO.File]::ReadAllText($ieCheck)
+[IO.File]::WriteAllText($ieCheck, $ieText.Replace('# #136: a red run always says why.', "`$script:Failed = `$true`n# #136: a red run always says why."))
+$out = (& pwsh -NoProfile -File $ieCheck -Root $advRepo -All -Quiet 2>&1 | Out-String)
+Check 'a red run with no [FAIL] line gets one' `
+    (($LASTEXITCODE -eq 1) -and ($out -match '\[FAIL\] the run failed but no check printed a \[FAIL\] line')) $out
+[IO.File]::WriteAllText($ieCheck, $ieText)
+$out = (& pwsh -NoProfile -File $ieCheck -Root $advRepo -All 2>&1 | Out-String)
+Check 'a clean gate copy reports no internal error' `
+    (($LASTEXITCODE -eq 0) -and ($out -notmatch 'internal error') -and ($out -notmatch 'no check printed')) $out
+# qgate: a child exit code the script never returns (a crash, a kill) is named, not passed on mutely.
+$ieHome = Join-Path $tmp 'iehome'
+New-Item -ItemType Directory -Path (Join-Path $ieHome 'bin'), (Join-Path $ieHome 'gate') | Out-Null
+Copy-Item (Join-Path $PSScriptRoot 'bin\qgate.ps1') (Join-Path $ieHome 'bin')
+$ieStub = Join-Path $ieHome 'gate\check.ps1'
+[IO.File]::WriteAllText($ieStub, "'[PASS] stub'; exit -1073741819`n")
+$out = (& pwsh -NoProfile -File (Join-Path $ieHome 'bin\qgate.ps1') -All 2>&1 | Out-String); $ieCode = $LASTEXITCODE
+Check 'qgate names a gate exit code that is no verdict (0xC0000005) and keeps it' `
+    (($ieCode -eq -1073741819) -and ($out -match '\[FAIL\] qgate: gate\\check\.ps1 ended with exit code -1073741819 \(0xC0000005\)')) "code=$ieCode $out"
+[IO.File]::WriteAllText($ieStub, "'[FAIL] stub'; exit 1`n")
+$out = (& pwsh -NoProfile -File (Join-Path $ieHome 'bin\qgate.ps1') -All 2>&1 | Out-String); $ieCode = $LASTEXITCODE
+Check 'qgate adds nothing to an ordinary red verdict' (($ieCode -eq 1) -and ($out -notmatch 'qgate: gate')) "code=$ieCode $out"
+
 # 26. An unreadable qgate.deferrals.json must say so ONCE. `@($null)` iterates one
 # null element, so the correct "not readable" line was followed by a second warning
 # about "entry 1" that no entry ever produced -- a right outcome with an invented

@@ -38,6 +38,31 @@ param(
 )
 
 $ErrorActionPreference = 'Continue'
+# quality-gate#136: no exit path may be non-zero and silent. Reported from the field: a
+# pre-commit `qgate -All -Full` exited non-zero with no [FAIL] line, then passed on retry.
+# A stack's crash is already a [FAIL] (the try around the stack loop); this catches what
+# escapes everywhere else. A `throw` used to end the process with exit 1 and the reason
+# only on stderr: now the same exit 1 says why on stdout, after releasing the slot and
+# killing the advisory. Any other terminating error used to be printed and passed over:
+# it is still passed over (no verdict changes), and reported as an advisory [WARN] with
+# file and line, shown even under -Quiet. One difference a trap cannot avoid: such an
+# error inside a function called from here now leaves that function at once instead of
+# running its remaining statements -- the [WARN] names where.
+$script:InternalErrors = @()
+trap {
+    $ii = $_.InvocationInfo
+    $where = "$(if ($ii.ScriptName) { Split-Path -Leaf $ii.ScriptName } else { 'check.ps1' }):$($ii.ScriptLineNumber)"
+    $why = "$($_.Exception.Message) ($where)"
+    # A `throw` (of a string or an exception object) is OperationStopped; a .NET method or
+    # null-call error is not, and those used to be printed and passed over.
+    if ($_.CategoryInfo.Category -eq 'OperationStopped' -or ($_.Exception -is [Management.Automation.RuntimeException] -and $_.Exception.WasThrownFromThrowStatement)) {
+        Write-Output "[FAIL] internal error in the gate -- $why; the run stopped here, so nothing after it was checked"
+        foreach ($c in 'Exit-GateSlot', 'Stop-GateAdvisory') { if (Get-Command $c -CommandType Function -ErrorAction SilentlyContinue) { & $c } }
+        exit 1
+    }
+    $script:InternalErrors += $why
+    continue
+}
 . (Join-Path $PSScriptRoot 'detect.ps1')
 . (Join-Path $PSScriptRoot 'smoke.ps1')
 
@@ -3662,8 +3687,16 @@ if ($script:PassKey -and -not $script:Failed) {
         } catch { Write-Verbose "tree reuse record: $_" }
     }
 }
+# #136: an error the trap at the top passed over is the gate's own defect -- named with its
+# line even on a green -Quiet run, or nobody would ever see it.
+foreach ($ie in $script:InternalErrors) { $report += "[WARN] internal error in the gate (passed over, verdict unchanged) -- $ie" }
+# #136: a red run always says why. Every path that sets the verdict prints a [FAIL] today;
+# this is the net under the next one that forgets.
+if ($script:Failed -and -not @($report | Where-Object { "$_" -match '(?m)^\[FAIL\]' })) {
+    $report += '[FAIL] the run failed but no check printed a [FAIL] line -- an internal error in the gate, not a verdict on the code; rerun, and report it with this output'
+}
 # A cache trim touches every session on the machine (#137): seen even from a -Quiet hook.
-if ($Quiet -and -not $script:Failed) { $report =@($report | Where-Object { $_ -match '^\[WARN\] (qgate\.|dependency update advisory timed out|no full-gate slot freed|slow tests:|CI parity:)' -or $_ -match '^\[INFO\] go build cache ' }) }
+if ($Quiet -and -not $script:Failed) { $report =@($report | Where-Object { $_ -match '^\[WARN\] (qgate\.|dependency update advisory timed out|no full-gate slot freed|internal error in the gate|slow tests:|CI parity:)' -or $_ -match '^\[INFO\] go build cache ' }) }
 # A broken qgate.deferrals.json is read by outdated and by every vuln phase; say it once.
 $seenDefer = [Collections.Generic.HashSet[string]]::new()
 $report = @($report | Where-Object { "$_" -notmatch '^\[WARN\] qgate\.deferrals\.json (is not|.*entry)' -or $seenDefer.Add("$_") })

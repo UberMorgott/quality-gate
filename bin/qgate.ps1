@@ -58,10 +58,26 @@ A run that executed zero check phases is never green.
 Exit codes: 0 pass, 1 fail, 2 from `stop-hook` blocks the agent's turn.
 '@
 
+# The exit codes each script returns on its own (1 also covers pwsh's own uncaught error).
+# quality-gate#136: a pre-commit `qgate -All -Full` exited non-zero with no [FAIL] line;
+# any other code is a process that crashed or was killed (0xC0000005, out of memory, a
+# closed console), and passing it through mutely left the reader nothing to act on.
+# install.ps1 and selftest.ps1 forward other tools' codes, so they are not listed.
+$knownCodes = @{
+    'gate\check.ps1' = 0, 1; 'gate\stop-hook.ps1' = 0, 1, 2; 'gate\hold.ps1' = 0, 1, 64
+    'gate\global.ps1' = 0, 1, 64; 'gate\trust.ps1' = 0, 1; 'gate\outdated.ps1' = 0, 1
+}
 function Invoke-Child([string]$script, [object[]]$argv) {
     # -File keeps $LASTEXITCODE meaningful; child scripts own their own output.
     & pwsh -NoProfile -File (Join-Path $home_ $script) @argv
-    exit $LASTEXITCODE
+    $code = $LASTEXITCODE
+    if ($knownCodes.ContainsKey($script) -and $code -notin $knownCodes[$script]) {
+        $msg = "[FAIL] qgate: $script ended with exit code $code ($('0x{0:X8}' -f $code)), a code it never returns itself -- " +
+            'the process crashed or was killed (out of memory, a killed hook, a closed console), so any output above is incomplete. Not a verdict on the code: rerun.'
+        # The gate's report is stdout; stop-hook's stdout belongs to Claude Code, so the rest say it on stderr.
+        if ($script -eq 'gate\check.ps1') { Write-Output $msg } else { [Console]::Error.WriteLine($msg) }
+    }
+    exit $code
 }
 
 switch ($cmd) {
