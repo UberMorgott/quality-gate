@@ -5187,6 +5187,26 @@ if (Get-Command typos -ErrorAction SilentlyContinue) {
     Check 'the excluded fixture is green because of the exclusion, not because it is clean' `
         (($LASTEXITCODE -ne 0) -and ($txNone -match '\[FAIL\] typos')) "code=$LASTEXITCODE $txNone"
 
+    # #138: a committed web bundle (web/dist, embedded by Go) is minified output, and the
+    # full level read its mangled names as misspellings. Both sides: the bundle is quiet,
+    # the same word in the web sources it is built from is still red.
+    $tw = Join-Path $tmp 'typos-dist'
+    New-Item -ItemType Directory -Path (Join-Path $tw 'web\dist\assets'), (Join-Path $tw 'web\src') -Force | Out-Null
+    git -C $tw init -q 2>$null
+    [IO.File]::WriteAllText((Join-Path $tw 'web\package.json'), "{`"name`":`"w`",`"private`":true}`n")
+    [IO.File]::WriteAllText((Join-Path $tw 'web\vite.config.js'), "export default {}`n")
+    [IO.File]::WriteAllText((Join-Path $tw 'web\dist\assets\index-Ab12.js'), "var $typo=1;`n")
+    [IO.File]::WriteAllText((Join-Path $tw 'web\src\main.js'), "export const ok = 1`n")
+    git -C $tw add -A 2>$null
+    git -C $tw -c user.email=selftest@local -c user.name=selftest commit -qm init 2>$null
+    $twOut = (& pwsh -NoProfile -File $gate -Root $tw -Only base -Full 2>&1 | Out-String)
+    Check 'typos skips the committed web build output (#138)' `
+        (($LASTEXITCODE -eq 0) -and ($twOut -notmatch 'index-Ab12') -and ($twOut -match '\[PASS\] typos')) "code=$LASTEXITCODE $twOut"
+    [IO.File]::WriteAllText((Join-Path $tw 'web\src\main.js'), "export const $typo = 1`n")
+    $twOut = (& pwsh -NoProfile -File $gate -Root $tw -Only base -Full 2>&1 | Out-String)
+    Check 'typos still fails a typo in the web sources next to the bundle (#138)' `
+        (($LASTEXITCODE -ne 0) -and ($twOut -match '\[FAIL\] typos') -and ($twOut -match 'main\.js') -and ($twOut -notmatch 'index-Ab12')) "code=$LASTEXITCODE $twOut"
+
     # A git hash in prose is not a misspelling. typos splits `6129afe` at the digits and
     # corrects its three-letter tail; the same run reported another such tail inside a
     # go.mod pseudo-version. Every repository puts hashes in docs and lockfiles, so the gate

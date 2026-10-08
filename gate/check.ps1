@@ -1868,6 +1868,18 @@ function Get-WebBuildOut($s) {
     [pscustomobject]@{ Top = $top; Rel = $rel }
 }
 
+# Every web stack's committed build output, relative to $Root with forward slashes -- the
+# tree a whole-repo tool walks from. Every detected stack, not just the selected ones: the
+# bundle sits in the tree whichever stacks this run narrowed to.
+function Get-BuildOutDirs {
+    foreach ($w in @($allStacks | Where-Object { $_.Stack -eq 'web' })) {
+        $d = Get-WebBuildOut $w
+        if (-not $d) { continue }
+        $rel = [IO.Path]::GetRelativePath($Root, (Join-Path $d.Top $d.Rel)) -replace '\\', '/'
+        if ($rel -ne '.' -and $rel -notlike '../*' -and $rel -ne '..') { $rel }
+    }
+}
+
 # After the build: committed output the build changed or deleted, and output it made that
 # was never committed. Advisory unless qgate.json {"web": {"buildDrift": "fail"}}. Changed
 # files are put back and new output removed -- a check must not leave the tree modified.
@@ -2777,6 +2789,10 @@ function Invoke-BaseStack($s) {
             # Nested repositories are other projects (Get-NestedRepos); typos' own walker
             # descends into them. --exclude adds to the repo's extend-exclude, measured.
             foreach ($n in Get-NestedRepos $Root) { $targs += '--exclude'; $targs += "/$($n -replace '([\[\]*?{}])', '\$1')/" }
+            # #138: a committed web bundle (Get-WebBuildOut, the dir build drift judges) is
+            # minified build output -- `ue`, `Pn` are mangled names, not spelling. Excluded
+            # like a nested repo; the sources it is built from are still read.
+            foreach ($b in Get-BuildOutDirs) { $targs += '--exclude'; $targs += "/$($b -replace '([\[\]*?{}])', '\$1')/" }
             # Captured and counted, not handed straight to the report, for the reason the
             # format phase next door is: a first run on a repository that never had a
             # dictionary is hundreds of findings -- measured on a game mod, 387 findings and
