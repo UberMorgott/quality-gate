@@ -5243,6 +5243,37 @@ if (Get-Command typos -ErrorAction SilentlyContinue) {
     Check 'typos still fails a typo in the web sources next to the bundle (#138)' `
         (($LASTEXITCODE -ne 0) -and ($twOut -match '\[FAIL\] typos') -and ($twOut -match 'main\.js') -and ($twOut -notmatch 'index-Ab12')) "code=$LASTEXITCODE $twOut"
 
+    # #135: inside a commit (GIT_INDEX_FILE set, as git does for its hooks) the per-file base
+    # checks judge the staged snapshot. Both sides: another session's unstaged and untracked
+    # typos do not fail a commit that does not hold them, and a staged typo whose work-tree
+    # copy is already fixed still fails. The snapshot dir is gone afterwards either way.
+    $hs = Join-Path $tmp 'typos-staged'
+    New-Item -ItemType Directory -Path $hs | Out-Null
+    git -C $hs init -q 2>$null
+    [IO.File]::WriteAllText((Join-Path $hs 'mine.txt'), "fine`n")
+    [IO.File]::WriteAllText((Join-Path $hs 'theirs.txt'), "fine too`n")
+    git -C $hs add -A 2>$null
+    git -C $hs -c user.email=selftest@local -c user.name=selftest commit -qm init 2>$null
+    [IO.File]::WriteAllText((Join-Path $hs 'mine.txt'), "fine, edited`n")
+    git -C $hs add mine.txt 2>$null
+    [IO.File]::WriteAllText((Join-Path $hs 'theirs.txt'), "you will $typo it`n")
+    [IO.File]::WriteAllText((Join-Path $hs 'new.txt'), "untracked $typo`n")
+    $snapBefore = @(Get-ChildItem ([IO.Path]::GetTempPath()) -Filter 'qgate-staged-*' -ErrorAction SilentlyContinue).Count
+    try {
+        $env:GIT_INDEX_FILE = Join-Path $hs '.git\index'
+        $hsOut = (& pwsh -NoProfile -File $gate -Root $hs -Only base -Full 2>&1 | Out-String); $hsCode = $LASTEXITCODE
+        Check 'a commit hook judges the staged snapshot, not unstaged edits beside it (#135)' `
+            (($hsCode -eq 0) -and ($hsOut -match '\[PASS\] typos') -and ($hsOut -match '\[NOTE\] base: secrets and typos judged the staged snapshot [0-9a-f]{12}; .*judged the work tree')) "code=$hsCode $hsOut"
+        [IO.File]::WriteAllText((Join-Path $hs 'mine.txt'), "you will $typo it`n")
+        git -C $hs add mine.txt 2>$null
+        [IO.File]::WriteAllText((Join-Path $hs 'mine.txt'), "fixed in the work tree only`n")
+        $hsOut = (& pwsh -NoProfile -File $gate -Root $hs -Only base -Full 2>&1 | Out-String); $hsCode = $LASTEXITCODE
+        Check 'a staged typo fixed only in the work tree still fails the commit (#135)' `
+            (($hsCode -ne 0) -and ($hsOut -match '\[FAIL\] typos') -and ($hsOut -match 'mine\.txt') -and ($hsOut -notmatch 'theirs\.txt|new\.txt')) "code=$hsCode $hsOut"
+    } finally { $env:GIT_INDEX_FILE = $null }
+    $snapAfter = @(Get-ChildItem ([IO.Path]::GetTempPath()) -Filter 'qgate-staged-*' -ErrorAction SilentlyContinue).Count
+    Check 'the staged snapshot is removed after the run (#135)' ($snapAfter -le $snapBefore) "before=$snapBefore after=$snapAfter"
+
     # A git hash in prose is not a misspelling. typos splits `6129afe` at the digits and
     # corrects its three-letter tail; the same run reported another such tail inside a
     # go.mod pseudo-version. Every repository puts hashes in docs and lockfiles, so the gate

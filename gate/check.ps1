@@ -1880,6 +1880,52 @@ function Get-BuildOutDirs {
     }
 }
 
+# #135: inside a commit hook, a temp dir holding the staged snapshot (the index git hands
+# the hook through GIT_INDEX_FILE) for the per-file base checks; $null when there is no
+# commit in progress or the work tree already holds exactly that content (no unstaged
+# edit, no untracked file), so the common case copies nothing. Gitlinks (other repos)
+# and binary media (no secret or word in pixels; a tracked Unity tree was 2.4 GB of it)
+# are left out. The caller removes the dir. A copy that fails falls back to the work
+# tree, said in a [NOTE].
+function New-StagedSnapshot {
+    if (-not $script:StagedAtStart) { return $null }
+    $prev = $global:LASTEXITCODE
+    try {
+        & git -C $Root diff --quiet 2>$null
+        $same = ($LASTEXITCODE -eq 0) -and -not @(& git -C $Root ls-files -o --exclude-standard 2>$null | Select-Object -First 1)
+        if ($same) { return $null }
+        $media = '(?i)\.(tga|png|jpe?g|gif|bmp|tiff?|psd|exr|hdr|dds|ktx2?|fbx|blend1?|wav|ogg|flac|mp[34]|mov|avi|webm)$'
+        $files = @((& git -C $Root ls-files -z -s 2>$null | Out-String).Split([char]0) |
+                Where-Object { $_ -match '^(\d+) \S+ \d+\t(.+)$' -and $Matches[1] -ne '160000' } |
+                ForEach-Object { ($_ -split "`t", 2)[1] } | Where-Object { $_ -notmatch $media -and $_ -notmatch '[\r\n]' })
+        $dir = Join-Path ([IO.Path]::GetTempPath()) "qgate-staged-$([guid]::NewGuid().ToString('N').Substring(0, 12))"
+        New-Item -ItemType Directory -Path $dir -ErrorAction Stop | Out-Null
+        if ($files) {
+            # Fed through a Process, not a PowerShell pipe: a pipe ends each path in CRLF on
+            # Windows (and the last one in a stray newline under -z), which git reads as part
+            # of the name -- "checkout-index: a.txt" not in the cache, measured.
+            $psi = [Diagnostics.ProcessStartInfo]::new('git')
+            foreach ($a in @('-C', $Root, 'checkout-index', '-z', '--stdin', "--prefix=$($dir -replace '\\', '/')/")) { $psi.ArgumentList.Add($a) }
+            $psi.RedirectStandardInput = $true; $psi.RedirectStandardError = $true; $psi.RedirectStandardOutput = $true
+            $psi.UseShellExecute = $false
+            $psi.StandardInputEncoding = [Text.UTF8Encoding]::new($false)
+            $p = [Diagnostics.Process]::Start($psi)
+            $errTask = $p.StandardError.ReadToEndAsync()
+            $null = $p.StandardOutput.ReadToEndAsync()
+            $p.StandardInput.Write(($files -join [char]0) + [char]0)
+            $p.StandardInput.Close()
+            $p.WaitForExit()
+            $err = $errTask.Result
+            if ($p.ExitCode -ne 0) {
+                Remove-Item -LiteralPath $dir -Recurse -Force -ErrorAction SilentlyContinue
+                $script:Warnings += "[NOTE] base: could not copy the staged snapshot ($(($err.Trim() -split "`r?`n")[0])) -- secrets and typos judged the work tree"
+                return $null
+            }
+        }
+        $dir
+    } finally { $global:LASTEXITCODE = $prev }
+}
+
 # #146: ignored directories whose ignore rule is NOT in a .gitignore file -- .git/info/exclude
 # or core.excludesFile -- repo-relative, forward slashes, no trailing slash. Tools that honour
 # .gitignore files only (osv-scanner) walk into them. `--directory` reports an ignored dir
@@ -2656,6 +2702,14 @@ function Invoke-BaseStack($s) {
     # #97: dead PROJECTS, the thing no per-language check was looking at. Full lane only --
     # it reads every .csproj and .sln in the tree, and the fast lane runs on every agent turn.
     if ($Full -or $All) { $script:Warnings += @(Get-OrphanProjects $Root) }
+    # #135: inside a commit the content being judged is the staged snapshot, not the work
+    # tree -- another session's unstaged edits failed a partial commit that never held them.
+    # secrets and typos read a copy of the index (GIT_INDEX_FILE: the hook's, or git's
+    # temporary one for `git commit -- paths`); everything else still reads the work tree.
+    $snap = New-StagedSnapshot
+    $scan = if ($snap) { $snap } else { $Root }
+    try {
+    Set-Location $scan
     # The gate's own rule set: gitleaks' default, minus three rules that were 51 of 51
     # false positives across nine repositories (the reasoning is in the .toml itself).
     # NOT applied over a repository that ships a gitleaks config of its own -- `-c`
@@ -2777,7 +2831,7 @@ function Invoke-BaseStack($s) {
                 # is a deletion, and handing one to typos is an error about a file
                 # nobody can fix.
                 $paths = @($changed | ForEach-Object { $_ -replace '/', '\' } |
-                    Where-Object { Test-Path -LiteralPath (Join-Path $Root $_) -PathType Leaf })
+                    Where-Object { Test-Path -LiteralPath (Join-Path $scan $_) -PathType Leaf })
             }
         }
         if ($narrow -and -not $paths) {
@@ -2856,6 +2910,13 @@ function Invoke-BaseStack($s) {
                 if ($tCode -ne 0) { $global:LASTEXITCODE = 1 }
             } -Elapsed $tsw.Elapsed.TotalSeconds -Soft
         }
+    }
+    } finally {
+        Set-Location $Root
+        if ($snap) { Remove-Item -LiteralPath $snap -Recurse -Force -ErrorAction SilentlyContinue }
+    }
+    if ($snap) {
+        $script:Warnings += "[NOTE] base: secrets and typos judged the staged snapshot $($script:StagedAtStart.Substring(0, 12)); the advisory linters below and every language stack judged the work tree"
     }
 
     # Advisory linters, one per file kind. Each runs only when files of its kind exist --
