@@ -3245,17 +3245,68 @@ if ($Full -and -not $ParallelStacks) { Start-GateAdvisory }
 # gating at once each ran `go test -race ./...` and golangci-lint, system commit ran
 # out, Go died with "Insufficient system resources" and every run was retried -- more
 # total work than running them one after another. QGATE_MAX_PARALLEL (machine env,
-# like the Go cache limits) is the number of concurrent full runs, default 1, 0 = no
-# queue. Named mutexes, not a semaphore: the OS releases a mutex its holder died with
+# like the Go cache limits) is the number of concurrent full runs, 0 = no queue.
+# Named mutexes, not a semaphore: the OS releases a mutex its holder died with
 # (a killed hook), a semaphore count would leak. The fast lane never queues -- it is
 # every agent turn, and a base-only run (prose) has nothing heavy to wait for.
 # QGATE_SLOT_HELD: a gate run inside this one (a custom check, a -Parallel child)
 # rides on the parent's slot; waiting for it would deadlock.
+# quality-gate#132: 7-13 hooks on one machine sat for hours behind an anonymous
+# slot-0 mutex; nobody could tell which process held it. Each holder now leaves a
+# record (pid, its start time, repo root, since when) beside the mutex, removed on
+# release; a waiting run prints every slot's holder and re-prints while it waits, and a
+# record whose process is gone is named stale and removed (the OS already freed that
+# mutex; the next holder overwrites a crashed run's record). The default slot count
+# scales with the machine: one full run per 8 logical cores, at least 1 -- each runs
+# go test -race and golangci-lint over all cores. The wait is never a verdict: after
+# 30 min the run goes ahead unqueued with a [WARN].
 $script:GateSlot = $null
+$script:GateSlotFile = $null
+function Get-GateSlotDir {
+    # Machine-wide like the mutex: not the per-user (and per-session overridable) TEMP.
+    if ($IsWindows -and $env:ProgramData) { Join-Path $env:ProgramData 'quality-gate\slots' } else { '/tmp/quality-gate-slots' }
+}
+function Read-GateSlotRecord([string]$Path) {
+    try { Get-Content -LiteralPath $Path -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop } catch { $null }
+}
+function Test-GateSlotOwnerAlive($Rec) {
+    $p = Get-Process -Id ([int]$Rec.pid) -ErrorAction SilentlyContinue
+    if (-not $p) { return $false }
+    # A pid the OS has since reused is not the holder: its start time differs.
+    if ($Rec.pidStart) { try { return [Math]::Abs($p.StartTime.ToUniversalTime().Ticks - [long]$Rec.pidStart) -lt 10000000 } catch { return $true } }
+    $true
+}
+function Get-GateSlotHolders([int]$Slots) {
+    $dir = Get-GateSlotDir
+    foreach ($n in 0..($Slots - 1)) {
+        $f = Join-Path $dir "slot-$n.json"
+        $r = Read-GateSlotRecord $f
+        if (-not $r) { "slot ${n}: holder not recorded (a gate older than #132, or another tool holding Global\quality-gate-full-slot-$n)"; continue }
+        if (-not (Test-GateSlotOwnerAlive $r)) {
+            # Re-read first: a new holder may have written its own record a moment ago.
+            $again = Read-GateSlotRecord $f
+            if ($again -and "$($again.pid)" -eq "$($r.pid)" -and "$($again.started)" -eq "$($r.started)") { Remove-Item -LiteralPath $f -Force -ErrorAction SilentlyContinue }
+            "slot ${n}: stale record of pid $($r.pid) ($($r.root)) removed -- that process is gone"
+            continue
+        }
+        $age = [TimeSpan]::FromTicks([Math]::Max(0, [DateTime]::UtcNow.Ticks - [long]$r.started))
+        "slot ${n}: pid $($r.pid), $($r.root), held $([int]$age.TotalMinutes)m$($age.Seconds.ToString('00'))s"
+    }
+}
+function Exit-GateSlot {
+    if (-not $script:GateSlot) { return }
+    $slot = $script:GateSlot; $script:GateSlot = $null
+    if ($script:GateSlotFile) {
+        $r = Read-GateSlotRecord $script:GateSlotFile
+        if ($r -and "$($r.pid)" -eq "$PID") { Remove-Item -LiteralPath $script:GateSlotFile -Force -ErrorAction SilentlyContinue }
+        $script:GateSlotFile = $null
+    }
+    try { $slot.ReleaseMutex() } catch { Write-Verbose "slot release: $_" }
+}
 if ($Full -and -not $ParallelStacks -and -not $env:QGATE_SLOT_HELD -and @($stacks | Where-Object { $_.Stack -ne 'base' })) {
-    $slots = 1
+    $slots = [int][Math]::Max(1, [Math]::Floor([Environment]::ProcessorCount / 8))
     if ($env:QGATE_MAX_PARALLEL -match '^\s*\d+\s*$') { $slots = [Math]::Min(64, [int]$env:QGATE_MAX_PARALLEL) }
-    elseif ($env:QGATE_MAX_PARALLEL) { $script:Warnings += "[WARN] QGATE_MAX_PARALLEL must be a whole number, got '$env:QGATE_MAX_PARALLEL' -- using 1" }
+    elseif ($env:QGATE_MAX_PARALLEL) { $script:Warnings += "[WARN] QGATE_MAX_PARALLEL must be a whole number, got '$env:QGATE_MAX_PARALLEL' -- using $slots (one per 8 cores)" }
     if ($slots -gt 0) {
         try {
             $h = [Threading.WaitHandle[]]@(0..($slots - 1) | ForEach-Object { [Threading.Mutex]::new($false, "Global\quality-gate-full-slot-$_") })
@@ -3271,14 +3322,32 @@ if ($Full -and -not $ParallelStacks -and -not $env:QGATE_SLOT_HELD -and @($stack
             $i = & $waitAny 0
             if ($i -eq [Threading.WaitHandle]::WaitTimeout) {
                 # stderr: the wait is news now, and -Quiet keeps stdout for the verdict.
-                [Console]::Error.WriteLine("[NOTE] qgate: waiting for a machine-wide full-gate slot ($slots busy, QGATE_MAX_PARALLEL) ...")
+                $say = { param([string]$Head) [Console]::Error.WriteLine((@("[NOTE] qgate: $Head -- held by:") + @(Get-GateSlotHolders $slots | ForEach-Object { "         $_" })) -join "`n") }
+                & $say "waiting for a machine-wide full-gate slot ($slots busy, QGATE_MAX_PARALLEL=$slots; this run: pid $PID)"
                 $qsw = [Diagnostics.Stopwatch]::StartNew()
-                $i = & $waitAny (30 * 60 * 1000)
+                $limitMs = 30 * 60 * 1000
+                while ($true) {
+                    $left = $limitMs - [int]$qsw.ElapsedMilliseconds
+                    if ($left -le 0) { break }
+                    $i = & $waitAny ([Math]::Min(60000, $left))
+                    if ($i -ne [Threading.WaitHandle]::WaitTimeout) { break }
+                    if ($qsw.ElapsedMilliseconds -lt $limitMs) { & $say "still waiting for a full-gate slot after $([int]$qsw.Elapsed.TotalSeconds)s" }
+                }
                 $waited = $qsw.Elapsed.TotalSeconds.ToString('0', [Globalization.CultureInfo]::InvariantCulture)
-                if ($i -eq [Threading.WaitHandle]::WaitTimeout) { $script:Warnings += "[WARN] no full-gate slot freed in ${waited}s -- running unqueued (QGATE_MAX_PARALLEL=$slots)" }
+                if ($i -eq [Threading.WaitHandle]::WaitTimeout) { $script:Warnings += "[WARN] no full-gate slot freed in ${waited}s -- running unqueued (QGATE_MAX_PARALLEL=$slots); holders: $((@(Get-GateSlotHolders $slots)) -join '; ')" }
                 elseif (-not $Quiet) { $report += "[NOTE] waited ${waited}s for a full-gate slot (QGATE_MAX_PARALLEL=$slots)" }
             }
-            if ($i -ne [Threading.WaitHandle]::WaitTimeout) { $script:GateSlot = $h[$i]; $env:QGATE_SLOT_HELD = '1' }
+            if ($i -ne [Threading.WaitHandle]::WaitTimeout) {
+                $script:GateSlot = $h[$i]; $env:QGATE_SLOT_HELD = '1'
+                try {
+                    $dir = Get-GateSlotDir
+                    New-Item -ItemType Directory -Force -Path $dir -ErrorAction Stop | Out-Null
+                    $script:GateSlotFile = Join-Path $dir "slot-$i.json"
+                    $me = Get-Process -Id $PID
+                    $rec = [ordered]@{ pid = $PID; pidStart = $me.StartTime.ToUniversalTime().Ticks; root = $Root; started = [DateTime]::UtcNow.Ticks }
+                    [IO.File]::WriteAllText($script:GateSlotFile, ($rec | ConvertTo-Json -Compress))
+                } catch { Write-Verbose "slot record: $_" }
+            }
         } catch { $script:Warnings += "[WARN] machine-wide gate queue unavailable -- $($_.Exception.Message)" }
     }
 }
@@ -3422,7 +3491,7 @@ foreach ($s in $stacks) {
     }
 }
 # The heavy part is over; the next queued run may start.
-if ($script:GateSlot) { try { $script:GateSlot.ReleaseMutex() } catch { Write-Verbose "slot release: $_" } }
+Exit-GateSlot
 # Advisory, never a verdict: printed after the stack lines, shown under -Quiet (below).
 if ($script:Warnings) { $report += $script:Warnings }
 # A worker's report-level warnings came back through $r.Warnings, so this covers both.
@@ -3594,7 +3663,7 @@ if ($script:PassKey -and -not $script:Failed) {
     }
 }
 # A cache trim touches every session on the machine (#137): seen even from a -Quiet hook.
-if ($Quiet -and -not $script:Failed) { $report =@($report | Where-Object { $_ -match '^\[WARN\] (qgate\.|dependency update advisory timed out|slow tests:|CI parity:)' -or $_ -match '^\[INFO\] go build cache ' }) }
+if ($Quiet -and -not $script:Failed) { $report =@($report | Where-Object { $_ -match '^\[WARN\] (qgate\.|dependency update advisory timed out|no full-gate slot freed|slow tests:|CI parity:)' -or $_ -match '^\[INFO\] go build cache ' }) }
 # A broken qgate.deferrals.json is read by outdated and by every vuln phase; say it once.
 $seenDefer = [Collections.Generic.HashSet[string]]::new()
 $report = @($report | Where-Object { "$_" -notmatch '^\[WARN\] qgate\.deferrals\.json (is not|.*entry)' -or $seenDefer.Add("$_") })

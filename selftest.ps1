@@ -3018,17 +3018,57 @@ if ($held) {
     Copy-Item (Join-Path $PSScriptRoot 'gate') $qGateDir -Recurse
     $qStamp = Join-Path $tmp 'queue-adv.ticks'
     [IO.File]::WriteAllText((Join-Path $qGateDir 'outdated.ps1'), "param([string]`$Root, [switch]`$Summary)`n[IO.File]::WriteAllText('$qStamp', [string][DateTime]::UtcNow.Ticks)`n'[INFO] stub queue advisory'`n")
+    # #132: the slot holder is named. The record a gate writes beside its mutex, written
+    # here by hand because this suite is the holder.
+    $slotDir = if ($IsWindows -and $env:ProgramData) { Join-Path $env:ProgramData 'quality-gate\slots' } else { '/tmp/quality-gate-slots' }
+    New-Item -ItemType Directory -Force -Path $slotDir | Out-Null
+    $slotRec = Join-Path $slotDir 'slot-0.json'
     $savedHeld = $env:QGATE_SLOT_HELD; $env:QGATE_SLOT_HELD = $null; $env:QGATE_MAX_PARALLEL = '1'
+    # A record whose process is gone (a crashed holder): named stale and removed. The waiting
+    # run is killed once it said so -- the wait line is printed before any check runs.
+    $dead = Start-Process pwsh -ArgumentList '-NoProfile', '-Command', 'exit 0' -PassThru -WindowStyle Hidden
+    $dead.WaitForExit()
+    [IO.File]::WriteAllText($slotRec, (@{ pid = $dead.Id; pidStart = 1; root = 'C:\selftest\gone-holder'; started = [DateTime]::UtcNow.Ticks } | ConvertTo-Json -Compress))
+    $sOut = Join-Path $tmp 'queue-stale.out'
+    $ps = Start-Process pwsh -ArgumentList '-NoProfile', '-File', "`"$gate`"", '-Root', "`"$qRepo`"", '-Only', 'go', '-Full' `
+        -RedirectStandardOutput $sOut -RedirectStandardError "$sOut.err" -PassThru -NoNewWindow
+    $sText = ''
+    foreach ($n in 1..120) {
+        Start-Sleep -Milliseconds 250
+        $sText = "$(Get-Content "$sOut.err" -Raw -ErrorAction SilentlyContinue)"
+        if ($sText -match 'stale record' -or $ps.HasExited) { break }
+    }
+    $exitedEarly = $ps.HasExited
+    try { $ps.Kill($true) } catch { Write-Verbose "stale waiter: $_" }
+    [void]$ps.WaitForExit(10000)
+    Check 'a waiting run names a dead holder''s record stale and removes it' `
+        ((-not $exitedEarly) -and ($sText -match "stale record of pid $($dead.Id) \(C:\\selftest\\gone-holder\) removed") -and
+        -not (Test-Path $slotRec)) "exitedEarly=$exitedEarly $sText"
+    # A live holder: pid, repo root and age are printed while the run waits.
+    [IO.File]::WriteAllText($slotRec, (@{ pid = $PID; pidStart = (Get-Process -Id $PID).StartTime.ToUniversalTime().Ticks; root = 'C:\selftest\live-holder'; started = [DateTime]::UtcNow.AddMinutes(-3).Ticks } | ConvertTo-Json -Compress))
     $p = Start-Process pwsh -ArgumentList '-NoProfile', '-File', "`"$(Join-Path $qGateDir 'check.ps1')`"", '-Root', "`"$qRepo`"", '-Only', 'go', '-Full' `
         -RedirectStandardOutput $qOut -RedirectStandardError "$qOut.err" -PassThru -NoNewWindow
     $env:QGATE_SLOT_HELD = $savedHeld; $env:QGATE_MAX_PARALLEL = '0'
     $early = $p.WaitForExit(8000)
     $released = [DateTime]::UtcNow.Ticks
+    Remove-Item -LiteralPath $slotRec -Force -ErrorAction SilentlyContinue
     $slot.ReleaseMutex()
+    $wrote = $false
+    while (-not $p.HasExited -and -not $wrote) {
+        $cur = try { Get-Content -LiteralPath $slotRec -Raw -ErrorAction Stop | ConvertFrom-Json } catch { $null }
+        $wrote = $cur -and "$($cur.pid)" -eq "$($p.Id)" -and "$($cur.root)" -eq $qRepo
+        Start-Sleep -Milliseconds 200
+    }
     $p.WaitForExit()
     $qText = "$(Get-Content $qOut -Raw)`n$(Get-Content "$qOut.err" -Raw)"
     Check 'a full run queues while the machine-wide slot is held' ((-not $early) -and ($qText -match 'waiting for a machine-wide full-gate slot')) "early=$early $qText"
+    Check 'the slot holder records its pid and repo root while it runs' $wrote "record not seen for pid $($p.Id)"
+    Check 'a waiting run names the slot holder: pid, repo root, age' `
+        ($qText -match "slot 0: pid $PID, C:\\selftest\\live-holder, held 3m\d\ds") $qText
     Check 'a queued full run runs once the slot frees' (($p.ExitCode -eq 0) -and ($qText -match '\[PASS\] go')) "code=$($p.ExitCode) $qText"
+    # Its own record is gone with its slot (another gate may hold slot 0 by now: not this pid).
+    $after = try { Get-Content -LiteralPath $slotRec -Raw -ErrorAction Stop | ConvertFrom-Json } catch { $null }
+    Check 'a gate removes its slot record on release' ((-not $after) -or ("$($after.pid)" -ne "$($p.Id)")) "record=$($after | ConvertTo-Json -Compress)"
     $advAt = [long](Get-Content $qStamp -ErrorAction SilentlyContinue)
     Check 'the update advisory starts before the stacks and still reaches the report' `
         (($advAt -gt 0) -and ($advAt -lt $released) -and ($qText -match '\[INFO\] stub queue advisory')) "advAt=$advAt released=$released $qText"
