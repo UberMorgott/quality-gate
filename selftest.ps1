@@ -832,6 +832,11 @@ $fullGreen = ($LASTEXITCODE -eq 0)
 # vet and golangci-lint a second time under "GOOS=". The configured side is asserted above.
 Check 'a -Full run with no go.lintGoos key runs no GOOS= phase' `
     (($probeOut -match '\[(PASS|FAIL)\] go vet') -and ($probeOut -notmatch 'GOOS=')) $probeOut
+# #131: the race step bypasses the test cache like the plain -Full step. A cacheable run
+# pays cmd/go's post-test input hashing on every miss -- minutes on Windows.
+$raceCmd = @(Get-Content $gate | Where-Object { $_ -match "Phase 'go test -race'" })
+Check 'the -Full race step runs go test -race with -count=1' `
+    (($raceCmd.Count -eq 1) -and ($raceCmd[0] -match 'go test -race [^}]*-count=1')) ($raceCmd -join "`n")
 
 # 4. RED: a go vet violation. 5. GREEN: the same file restored.
 $main = Join-Path $go 'main.go'

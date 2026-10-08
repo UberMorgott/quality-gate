@@ -925,8 +925,11 @@ function Invoke-GoStackOnce($s) {
         $script:GoCacheSized = $true
         $script:Warnings += @($gc.Warn)
         # A LowSpace skip is named in the guard's own [WARN].
+        # quality-gate#131: -count=1 like the step above. A cacheable run makes cmd/go hash
+        # every file the tests touched AFTER they finished (two EvalSymlinks per test-log
+        # line); measured on Windows: 324s for a module cacheable, 156s with -count=1.
         if ($env:CGO_ENABLED -ne '0' -and (Have 'gcc')) {
-            if (-not $gc.LowSpace) { Invoke-WithoutHookGitEnv { Phase 'go test -race' { go test -race -short -failfast -timeout=15m ./... } } }
+            if (-not $gc.LowSpace) { Invoke-WithoutHookGitEnv { Phase 'go test -race' { go test -race -count=1 -short -failfast -timeout=15m ./... } } }
         } else {
             $script:Lines += '[WARN] no cgo toolchain (gcc) -- go test -race skipped'
         }
