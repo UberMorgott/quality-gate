@@ -154,7 +154,7 @@ Names below match printed phase/advisory labels; angle-bracket suffixes stand fo
 
 Repository linters inspect changed files, or tracked files with `-All`/`-Full`. Secret scanning excludes ignored files, nested repositories, and binary media. Without a project gitleaks config, [qgate's rules](gate/qgate.gitleaks.toml) disable `generic-api-key`, `curl-auth-header`, and `curl-auth-user`; provider-specific rules remain enabled. Typos honors the repository's own `_typos.toml`, `typos.toml` or `.typos.toml`, merged with [the gate's defaults](gate/qgate.typos.toml): a name the project cannot rename, such as a misspelled external API, goes under `[default.extend-identifiers]` (whole identifier, as `ExternalName = "ExternalName"`) or `[default.extend-words]` (a word inside identifiers and prose). A typos failure fails the run but does not skip the build stacks after it.
 
-The runner also validates requested stacks/revisions and tool pins, rejects an unexpected zero-check run, and fails a Git hook if the staged tree changes during its execution. The update advisory is bounded to 30 seconds; `QGATE_NO_ADVISORY=1` disables its summary queries. Detailed `qgate outdated` labels are `go`, `npm`, and `tool`.
+The runner also validates requested stacks/revisions and tool pins, rejects an unexpected zero-check run, and fails a Git hook if the staged tree changes during its execution. The update advisory starts with the full run, beside the checks, and gets 30 more seconds once they finish; `QGATE_NO_ADVISORY=1` disables its summary queries. Detailed `qgate outdated` labels are `go`, `npm`, and `tool`.
 
 ### Docs / Markdown (part of `base`)
 

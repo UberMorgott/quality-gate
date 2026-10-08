@@ -3209,6 +3209,38 @@ function Invoke-DeployStack($s) {
 $cwd = (Get-Location).Path
 $report = @()
 
+# The full run's dependency-update note: newer releases, never a verdict. Bounded, the way
+# the web test phase bounds npm: `go list -m -u all` and `npm outdated` ask a registry, and
+# a stalled one held every full run -- the commit hook included -- for as long as it liked.
+# quality-gate#139: it used to start after the last stack with a fixed 30s, and under a full
+# tier (Godot, native, fuzz) running beside it the same 7s query timed out -- a flaky WARN.
+# Now it starts here, mostly waiting on the network while the stacks run, and the end of the
+# run gives it AdvisoryGraceSec more. The tree is killed on give-up (and on any exit path,
+# Stop-GateRun) because pwsh is only the parent; go or npm is what hangs.
+$script:Advisory = $null
+$script:AdvisoryGraceSec = 30
+function Start-GateAdvisory {
+    $outFile = Join-Path ([IO.Path]::GetTempPath()) "quality-gate-advisory-$PID.out"
+    try {
+        # Quoted by hand: Start-Process joins -ArgumentList with bare spaces, so a root with
+        # a space in it would arrive as two arguments.
+        $p = Start-Process 'pwsh' -ArgumentList '-NoProfile', '-File', "`"$(Join-Path $PSScriptRoot 'outdated.ps1')`"", '-Root', "`"$Root`"", '-Summary' `
+            -NoNewWindow -PassThru -RedirectStandardOutput $outFile -RedirectStandardError "$outFile.err" -ErrorAction Stop
+        $script:Advisory = [pscustomobject]@{ Proc = $p; Out = $outFile; Watch = [Diagnostics.Stopwatch]::StartNew() }
+    } catch { $script:Warnings += "[WARN] dependency update advisory could not start -- $($_.Exception.Message); update status is unknown" }
+}
+function Stop-GateAdvisory {
+    $a = $script:Advisory
+    if (-not $a) { return }
+    $script:Advisory = $null
+    if (-not $a.Proc.HasExited) {
+        try { $a.Proc.Kill($true) } catch { Write-Verbose "advisory kill: $_" }
+        [void]$a.Proc.WaitForExit(5000)
+    }
+    Remove-Item $a.Out, "$($a.Out).err" -Force -ErrorAction SilentlyContinue
+}
+if ($Full -and -not $ParallelStacks) { Start-GateAdvisory }
+
 # #123: a machine-wide queue for -Full runs. Reported from the field: several worktrees
 # gating at once each ran `go test -race ./...` and golangci-lint, system commit ran
 # out, Go died with "Insufficient system resources" and every run was retried -- more
@@ -3504,26 +3536,20 @@ if ($strictHit -or $strictAdv) { $script:Failed = $true }
 
 # Only on the full level, only when everything passed: a note about newer releases,
 # never a verdict. It cannot fail the run, and the Stop hook (-Fast) never sees it.
-# Bounded, the way the web test phase bounds npm: `go list -m -u all` and `npm outdated`
-# ask a registry, and a stalled one held every full run -- the commit hook included --
-# for as long as it liked, over a note that cannot change the verdict. The tree is
-# killed on timeout because pwsh is only the parent; go or npm is what hangs.
-if ($Full -and -not $script:Failed) {
-    $advisoryTimeoutSec = 30
-    $outFile = Join-Path ([IO.Path]::GetTempPath()) "quality-gate-advisory-$PID.out"
-    # Quoted by hand: Start-Process joins -ArgumentList with bare spaces, so a root with
-    # a space in it would arrive as two arguments.
-    $p = Start-Process 'pwsh' -ArgumentList '-NoProfile', '-File', "`"$(Join-Path $PSScriptRoot 'outdated.ps1')`"", '-Root', "`"$Root`"", '-Summary' `
-        -NoNewWindow -PassThru -RedirectStandardOutput $outFile -RedirectStandardError "$outFile.err"
-    if ($p.WaitForExit($advisoryTimeoutSec * 1000)) {
-        $note = @(Get-Content $outFile -ErrorAction SilentlyContinue | Where-Object { $_ })
+# quality-gate#139: started before the stacks (Start-GateAdvisory), so only the grace
+# below is spent waiting at the end. A failed run discards it: no note on a red run.
+if ($script:Advisory) {
+    $adv = $script:Advisory
+    if ($script:Failed) { Stop-GateAdvisory }
+    elseif ($adv.Proc.WaitForExit($script:AdvisoryGraceSec * 1000)) {
+        $note = @(Get-Content $adv.Out -ErrorAction SilentlyContinue | Where-Object { $_ })
         if ($note) { $report += $note }
+        Stop-GateAdvisory
     } else {
-        try { $p.Kill($true) } catch { }
-        [void]$p.WaitForExit(5000)
-        $report += "[WARN] dependency update advisory timed out after ${advisoryTimeoutSec}s; update status is unknown"
+        $total = $adv.Watch.Elapsed.TotalSeconds.ToString('0', [Globalization.CultureInfo]::InvariantCulture)
+        Stop-GateAdvisory
+        $report += "[WARN] dependency update advisory timed out -- still running $($script:AdvisoryGraceSec)s after the checks finished (${total}s in all); update status is unknown"
     }
-    Remove-Item $outFile, "$outFile.err" -Force -ErrorAction SilentlyContinue
 }
 # Indented lines carry no [WARN] tag: whatever counts or filters the report's tagged lines
 # must see each finding once, where it was made.
@@ -3552,7 +3578,7 @@ if ($strict -and ($strictHit -or $strictAdv)) {
 # swallowing it here hid it exactly where it guards a commit. Same rule the
 # qgate.json unknown-key warning already follows; the advisory [INFO] about newer
 # releases and the per-stack notes stay silent on green. A timed-out advisory is shown:
-# it is the reason this commit took 30s longer, and it says nothing was checked. A slow
+# it is the reason this commit took up to 30s longer, and it says nothing was checked. A slow
 # test package is shown: the hook is the only early warning before CI's -race times out.
 # So is a CI Go variant the gate never runs: green here says nothing about that target.
 # The advisories and skipped summaries stay silent on green too; "strict" is the opt-in that makes them heard.

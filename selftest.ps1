@@ -3011,16 +3011,27 @@ if ($held) {
     git -C $qRepo add -A 2>$null
     git -C $qRepo -c user.email=selftest@local -c user.name=selftest commit -qm init 2>$null
     $qOut = Join-Path $tmp 'queue.out'
+    # #139: a gate copy whose update advisory is a stub that stamps when it started. The
+    # stacks cannot start before the slot is released, so a stamp before the release is
+    # an advisory that ran beside the run instead of after it.
+    $qGateDir = Join-Path $tmp 'queuegate'
+    Copy-Item (Join-Path $PSScriptRoot 'gate') $qGateDir -Recurse
+    $qStamp = Join-Path $tmp 'queue-adv.ticks'
+    [IO.File]::WriteAllText((Join-Path $qGateDir 'outdated.ps1'), "param([string]`$Root, [switch]`$Summary)`n[IO.File]::WriteAllText('$qStamp', [string][DateTime]::UtcNow.Ticks)`n'[INFO] stub queue advisory'`n")
     $savedHeld = $env:QGATE_SLOT_HELD; $env:QGATE_SLOT_HELD = $null; $env:QGATE_MAX_PARALLEL = '1'
-    $p = Start-Process pwsh -ArgumentList '-NoProfile', '-File', "`"$gate`"", '-Root', "`"$qRepo`"", '-Only', 'go', '-Full' `
+    $p = Start-Process pwsh -ArgumentList '-NoProfile', '-File', "`"$(Join-Path $qGateDir 'check.ps1')`"", '-Root', "`"$qRepo`"", '-Only', 'go', '-Full' `
         -RedirectStandardOutput $qOut -RedirectStandardError "$qOut.err" -PassThru -NoNewWindow
     $env:QGATE_SLOT_HELD = $savedHeld; $env:QGATE_MAX_PARALLEL = '0'
     $early = $p.WaitForExit(8000)
+    $released = [DateTime]::UtcNow.Ticks
     $slot.ReleaseMutex()
     $p.WaitForExit()
     $qText = "$(Get-Content $qOut -Raw)`n$(Get-Content "$qOut.err" -Raw)"
     Check 'a full run queues while the machine-wide slot is held' ((-not $early) -and ($qText -match 'waiting for a machine-wide full-gate slot')) "early=$early $qText"
     Check 'a queued full run runs once the slot frees' (($p.ExitCode -eq 0) -and ($qText -match '\[PASS\] go')) "code=$($p.ExitCode) $qText"
+    $advAt = [long](Get-Content $qStamp -ErrorAction SilentlyContinue)
+    Check 'the update advisory starts before the stacks and still reaches the report' `
+        (($advAt -gt 0) -and ($advAt -lt $released) -and ($qText -match '\[INFO\] stub queue advisory')) "advAt=$advAt released=$released $qText"
 } else { Write-Output '[skip] machine-wide queue -- a real gate holds the slot right now' }
 $slot.Dispose()
 
@@ -3427,7 +3438,7 @@ $sw.Stop()
 $childAlive = [bool](Get-Process -Id ([int](Get-Content $childPid -ErrorAction SilentlyContinue)) -ErrorAction SilentlyContinue)
 Check 'a hung advisory is cut off, named under -Quiet, and does not fail the run' `
     (($advCode -eq 0) -and ($sw.Elapsed.TotalSeconds -lt 90) -and -not $childAlive -and
-    ($out -match '\[WARN\] dependency update advisory timed out after 30s; update status is unknown')) `
+    ($out -match '\[WARN\] dependency update advisory timed out -- still running 30s after the checks finished \(\d+s in all\); update status is unknown')) `
     "code=$advCode elapsed=$($sw.Elapsed.TotalSeconds) childAlive=$childAlive $out"
 
 # 26. An unreadable qgate.deferrals.json must say so ONCE. `@($null)` iterates one
