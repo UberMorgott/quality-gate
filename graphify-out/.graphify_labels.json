@@ -1,7 +1,6 @@
 {
-  "0": "harmony.cs",
+  "0": "Patches.cs",
   "1": "detect.ps1",
-  "2": "qgate wire (repo wiring, config only)",
   "3": ".Scan",
   "4": "Lookups",
   "5": "selftest.ps1",
@@ -43,12 +42,17 @@
   "41": "Hud",
   "42": ".Callee",
   "43": "bepinex.ps1",
-  "44": ".golangci.yml template",
+  "44": "GitHub Actions quality-gate workflow",
   "45": "global.ps1",
   "46": "hooks/pre-commit",
   "47": "pre-merge-commit",
-  "48": "Invoke-Child",
+  "48": "qgate.ps1",
   "49": "hold.ps1",
   "50": "Box.cs",
-  "51": "Bcl.csproj"
+  "51": "Bcl.csproj",
+  "52": ".golangci.yml template",
+  "53": "harmony.cs",
+  "54": "MethodType",
+  "55": "Fixture",
+  "56": "HealthPatch"
 }

@@ -1,8 +1,8 @@
 {
   "bin/qgate.ps1": {
-    "mtime": 1789987532.8217185,
-    "seen": 1789987937.9407563,
-    "ast_hash": "74b9b629f99a3924e43b738c5bff6300",
+    "mtime": 1791489868.4533212,
+    "seen": 1791490051.267039,
+    "ast_hash": "210b17c71d087a6a7cc44f1f9fa52b92",
     "semantic_hash": ""
   },
   "bootstrap.ps1": {
@@ -12,15 +12,15 @@
     "semantic_hash": ""
   },
   "gate/check.ps1": {
-    "mtime": 1790462878.16218,
-    "seen": 1790463315.5624802,
-    "ast_hash": "6e939d10c55ddaabd440f9f0414099df",
+    "mtime": 1791490013.134425,
+    "seen": 1791490051.2670438,
+    "ast_hash": "20b6aaff342d6c4e842415f34e5954a8",
     "semantic_hash": ""
   },
   "gate/detect.ps1": {
-    "mtime": 1790462875.9175858,
-    "seen": 1790463315.5624812,
-    "ast_hash": "1485a264f581612a371a87b86d908801",
+    "mtime": 1791489947.7534738,
+    "seen": 1791490051.2670448,
+    "ast_hash": "cb653f545720e33cb1b9219096cf13c4",
     "semantic_hash": ""
   },
   "gate/outdated.ps1": {
@@ -36,15 +36,15 @@
     "semantic_hash": ""
   },
   "install.ps1": {
-    "mtime": 1789987527.990289,
-    "seen": 1789987937.9407685,
-    "ast_hash": "4cc452e245d1ffd015edb22c4e719163",
+    "mtime": 1791487316.9479458,
+    "seen": 1791487365.2026606,
+    "ast_hash": "7cbd25c23758321fd1383f3214fb35fe",
     "semantic_hash": ""
   },
   "selftest.ps1": {
-    "mtime": 1790463092.9485414,
-    "seen": 1790463315.5624897,
-    "ast_hash": "5012877c1ec89fd1ad0277a105b8fa10",
+    "mtime": 1791489958.9742064,
+    "seen": 1791490051.2670581,
+    "ast_hash": "63509bac1cde1645d144e33eb536fc1e",
     "semantic_hash": ""
   },
   "templates/.stylelintrc.json": {
@@ -126,9 +126,9 @@
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1790463099.3631742,
-    "seen": 1790463315.5625093,
-    "ast_hash": "1c7c02c898f1e8c842c906372c2fe1b1",
+    "mtime": 1791490013.144701,
+    "seen": 1791490051.2670903,
+    "ast_hash": "614012ba1aaf6573bf1abc1dbbf0d92d",
     "semantic_hash": ""
   },
   "templates/.golangci.yml": {
@@ -180,9 +180,9 @@
     "semantic_hash": ""
   },
   "gate/trust.ps1": {
-    "mtime": 1789139534.171096,
-    "seen": 1789140345.2092388,
-    "ast_hash": "671e3eeebe1b73d2908af4b4a3de79dc",
+    "mtime": 1791487369.1574059,
+    "seen": 1791487591.2596538,
+    "ast_hash": "bad6fbb0b8bcbf0ed2d2b553bb61b131",
     "semantic_hash": ""
   },
   "testdata/cpp-fixture/src/greeting.cpp": {
