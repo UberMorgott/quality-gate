@@ -2398,11 +2398,14 @@ function Invoke-GodotStack($s) {
         # Only the [gd_scene]/[gd_resource] header line, an .import sidecar and a
         # .uid sidecar (scripts and shaders, Godot 4.4+: the bare `uid://...` line)
         # declare one; every other uid= (an [ext_resource], a preload) is a
-        # reference to a file that must exist.
+        # reference to a file that must exist. A .uid sidecar declares only while the
+        # file it belongs to (its name without .uid) exists: Godot drops an orphan
+        # sidecar's UID (quality-gate#35, ResourceUID.has_id is false after import).
         $decl = '^\[gd_(scene|resource)\b'
         $uids = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
         foreach ($f in Get-ChildItem $s.Dir -Recurse -File -ErrorAction SilentlyContinue |
             Where-Object { $_.Extension -in '.tscn', '.tres', '.import', '.uid' -and $_.FullName -notmatch $noGodotDir }) {
+            if ($f.Extension -eq '.uid' -and -not [IO.File]::Exists($f.FullName.Substring(0, $f.FullName.Length - 4))) { continue }
             foreach ($l in [IO.File]::ReadAllLines($f.FullName)) {
                 if ($f.Extension -eq '.uid') {
                     if ($l -match '^\s*uid://(\S+)\s*$') { [void]$uids.Add($Matches[1]) }

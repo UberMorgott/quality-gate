@@ -2365,6 +2365,13 @@ Check 'dangling uid:// reference fails the gate' `
 $r = Invoke-Gate $gdt
 Check 'uid:// declared by a .gd.uid sidecar resolves' ($r.Out -notmatch 'matches nothing') $r.Out
 Remove-Item "$gdMain.uid"
+# quality-gate#35: an orphan sidecar (its .gd is gone) declares nothing -- Godot drops it.
+$gdOrphan = Join-Path $gdt 'orphan.gd.uid'
+[IO.File]::WriteAllText($gdOrphan, "uid://cnotdeclared`n")
+$r = Invoke-Gate $gdt
+Check 'uid:// declared only by an orphan .gd.uid (no .gd) fails the gate' `
+    (($r.Code -ne 0) -and ($r.Out -match 'main\.tscn:\d+: uid://cnotdeclared matches nothing')) $r.Out
+Remove-Item $gdOrphan
 [IO.File]::WriteAllText($gdScene, $scClean)
 $r = Invoke-Gate $gdt
 Check 'res:// scan clean once the reference is fixed' (($r.Out -notmatch 'does not resolve') -and ($r.Out -notmatch 'matches nothing')) $r.Out
