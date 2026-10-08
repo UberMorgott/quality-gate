@@ -3960,7 +3960,8 @@ try {
         '{"checks":[{"name":"quick","run":"exit 0","level":"fast"},{"name":"heavy","run":"exit 0"}]}')
     $r = Invoke-Gate $cust
     Check 'a declared check does not run until the repo is trusted' `
-        (($r.Code -eq 0) -and ($r.Out -match '\[SKIP\] custom -- untrusted qgate\.json checks \(run: qgate trust\)')) $r.Out
+        (($r.Code -eq 0) -and ($r.Out -match '\[SKIP\] custom -- untrusted qgate\.json checks, hash [0-9a-f]{64} \(run: qgate trust\)')) $r.Out
+    $named = if ($r.Out -match 'untrusted qgate\.json checks, hash ([0-9a-f]{64})') { $Matches[1] }
     # The absence half, and it is the whole rule: an untrusted repo is a [SKIP], never a
     # [FAIL]. Refusing to run a command is not a verdict on the code, and a repository
     # nobody has trusted yet must not be one nobody can commit to -- including through
@@ -3972,6 +3973,9 @@ try {
     $t = Invoke-Trust $cust
     Check 'qgate trust prints every check and the store it writes' `
         (($t -match '(?m)^\s+quick\b') -and ($t -match '(?m)^\s+exit 0\s*$') -and ($t -match 'trusted\.json')) $t
+    # #143: the hash the [SKIP] named is the one `qgate trust` then records.
+    Check 'the untrusted [SKIP] names the hash qgate trust records (#143)' `
+        ($named -and ($named -in @(Get-TrustedHashes $cust))) "named=$named stored=$(@(Get-TrustedHashes $cust) -join ',')"
     $r = Invoke-Gate $cust
     Check 'a trusted check runs and passes' (($r.Code -eq 0) -and ($r.Out -match '\[PASS\] quick')) $r.Out
     Check 'a full-level check is not run in the fast lane' `
@@ -4010,7 +4014,7 @@ try {
         '{"checks":[{"name":"quick","run":"exit 1","level":"fast"},{"name":"heavy","run":"exit 0"}]}')
     $r = Invoke-Gate $cust
     Check 'editing the run string of a trusted check revokes the trust' `
-        (($r.Code -eq 0) -and ($r.Out -match 'untrusted qgate\.json checks')) $r.Out
+        (($r.Code -eq 0) -and ($r.Out -match 'untrusted qgate\.json checks, hash [0-9a-f]{64}; [1-9]\d* other version\(s\) of them trusted for this repo')) $r.Out
     # ...and the edited command really did not run: a revocation that still executed it
     # would satisfy the line above and be worth nothing.
     Check 'the edited command is not executed' ($r.Out -notmatch '\[(PASS|FAIL)\] quick') $r.Out

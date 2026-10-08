@@ -3264,7 +3264,12 @@ function Invoke-CustomStack($s) {
     if (-not $custom) { return }
     if ($custom.Error) { Fail "custom -- $($custom.Error)"; return }
     if (-not (Test-ChecksTrusted $Root $custom.Checks)) {
-        $script:Lines += '[SKIP] custom -- untrusted qgate.json checks (run: qgate trust)'
+        # #143: named, so the reader can tell which version is unread and match it against
+        # what `qgate trust` records -- and whether this repo has other versions trusted
+        # (a branch switch) or none at all.
+        $known = @(Get-TrustedHashes $Root).Count
+        $why = if ($known) { "; $known other version(s) of them trusted for this repo" } else { '' }
+        $script:Lines += "[SKIP] custom -- untrusted qgate.json checks, hash $(Get-ChecksHash $custom.Checks)$why (run: qgate trust)"
         $script:CustomDeferred = $true
         return
     }
