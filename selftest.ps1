@@ -4900,6 +4900,42 @@ try {
         (($code -ne 0) -and ($out -match '\[FAIL\] vuln') -and ($out -match 'shimtable') -and ($out -notmatch 'acknowledg')) "code=$code $out"
 } finally { $env:PATH = $priorPath }
 
+# #146: osv-scanner honours .gitignore files only, so a dir ignored through .git/info/exclude
+# (agent worktrees with stale lockfiles) was scanned. Measured on the real 2.6.0: such a dir
+# is walked, a .gitignore'd one is not. Judged on the arguments the gate passes (the real
+# scanner needs the network): the info/exclude dir is excluded, the tracked dir is not.
+$osvArgs = Join-Path $tmp 'osv-args'
+New-Item -ItemType Directory -Path $osvArgs | Out-Null
+$argFile = Join-Path $osvArgs 'args.txt'
+if ($IsWindows) {
+    # The exclude regex carries ^ and | unquoted: echoed bare, cmd would parse them as a
+    # pipe. Captured inside a quoted set and written with delayed expansion, never parsed.
+    [IO.File]::WriteAllText((Join-Path $osvArgs 'osv-scanner.cmd'), "@if `"%1`"==`"--version`" (echo osv-scanner version: 2.6.0& exit /b 0)`r`n@setlocal enabledelayedexpansion`r`n@set `"A=%*`"`r`n@echo(!A!>> `"$argFile`"`r`n@echo No package sources found`r`n@exit /b 128`r`n")
+} else {
+    [IO.File]::WriteAllText((Join-Path $osvArgs 'osv-scanner'), "#!/bin/sh`n[ `"`$1`" = --version ] && { echo 'osv-scanner version: 2.6.0'; exit 0; }`necho `"`$*`" >> '$argFile'`necho 'No package sources found'`nexit 128`n")
+    chmod +x (Join-Path $osvArgs 'osv-scanner')
+}
+$ox = Join-Path $tmp 'osv-exclude'
+New-Item -ItemType Directory -Path (Join-Path $ox 'wt\agent-1\web'), (Join-Path $ox 'app'), (Join-Path $ox 'bin') -Force | Out-Null
+git -C $ox init -q 2>$null
+[IO.File]::WriteAllText((Join-Path $ox 'app\package-lock.json'), "{}`n")
+[IO.File]::WriteAllText((Join-Path $ox 'wt\agent-1\web\package-lock.json'), "{}`n")
+[IO.File]::WriteAllText((Join-Path $ox 'bin\x.txt'), "x`n")
+[IO.File]::WriteAllText((Join-Path $ox '.gitignore'), "bin/`n")
+Add-Content -LiteralPath (Join-Path $ox '.git\info\exclude') -Value 'wt/'
+git -C $ox add -A 2>$null
+git -C $ox -c user.email=selftest@local -c user.name=selftest commit -qm init 2>$null
+$priorPath = $env:PATH
+try {
+    $env:PATH = "$osvArgs$sep$env:PATH"
+    $null = (& pwsh -NoProfile -File $gate -Root $ox -Only base -Full 2>&1 | Out-String)
+    $oa = if (Test-Path $argFile) { Get-Content $argFile -Raw } else { '' }
+    Check 'vuln: a dir ignored via .git/info/exclude is excluded from osv-scanner (#146)' `
+        ($oa -match '--experimental-exclude r:\S*/wt\$') $oa
+    Check 'vuln: tracked and .gitignore''d dirs are not excluded by it (#146)' `
+        (($oa -match 'scan source') -and ($oa -notmatch '/app\$') -and ($oa -notmatch '/bin\$')) $oa
+} finally { $env:PATH = $priorPath }
+
 # The advisory file-kind linters (#53-#58): skipped by name when absent, [WARN] and never
 # [FAIL] when they find something, silent when they do not. The tools are stood in for by
 # shims that exit 1 or 0, so every machine judges the gate's handling, not the tool.

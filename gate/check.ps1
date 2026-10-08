@@ -1880,6 +1880,26 @@ function Get-BuildOutDirs {
     }
 }
 
+# #146: ignored directories whose ignore rule is NOT in a .gitignore file -- .git/info/exclude
+# or core.excludesFile -- repo-relative, forward slashes, no trailing slash. Tools that honour
+# .gitignore files only (osv-scanner) walk into them. `--directory` reports an ignored dir
+# once instead of every file under it; -z because git C-quotes non-ASCII paths otherwise.
+function Get-NonGitignoreIgnoredDirs([string]$Root) {
+    $prev = $global:LASTEXITCODE
+    $dirs = @((& git -C $Root ls-files -z -o -i --exclude-standard --directory 2>$null | Out-String).Split([char]0) |
+            Where-Object { $_.EndsWith('/') })
+    $out = @()
+    if ($dirs) {
+        # check-ignore -v -z: source, line, pattern, path -- four NUL-separated fields per path.
+        $f = @((($dirs -join [char]0) + [char]0 | & git -C $Root check-ignore -v -z --stdin 2>$null | Out-String).Split([char]0))
+        for ($i = 0; $i + 3 -lt $f.Count; $i += 4) {
+            if ($f[$i] -and (Split-Path -Leaf $f[$i]) -ne '.gitignore') { $out += $f[$i + 3].TrimEnd('/') }
+        }
+    }
+    $global:LASTEXITCODE = $prev
+    $out
+}
+
 # After the build: committed output the build changed or deleted, and output it made that
 # was never committed. Advisory unless qgate.json {"web": {"buildDrift": "fail"}}. Changed
 # files are put back and new output removed -- a check must not leave the tree modified.
@@ -2988,7 +3008,12 @@ function Invoke-BaseStack($s) {
     # against the directory path with the volume and leading slash stripped, forward
     # slashes (measured on 2.5.1: `Temp/qg78/ws/deep/inner`), so it is anchored on that.
     $rootRe = ((($Root -replace '^[A-Za-z]:', '') -replace '\\', '/').Trim('/') -replace '([.\\+*?()\[\]{}|^$])', '\$1')
-    $osvEx = @(foreach ($n in Get-NestedRepos $Root) {
+    # #146: osv-scanner honours .gitignore files only (docs: "will not scan files that are
+    # ignored by .gitignore files"); measured on 2.6.0, a dir listed in .git/info/exclude
+    # (agent worktrees) was walked and its stale lockfiles failed this repo. Those dirs
+    # are excluded the same way. Get-NestedRepos cannot see them: `ls-files -o
+    # --exclude-standard` drops ignored dirs.
+    $osvEx = @(foreach ($n in @(Get-NestedRepos $Root) + @(Get-NonGitignoreIgnoredDirs $Root) | Sort-Object -Unique) {
             '--experimental-exclude'; "r:(^|/)$rootRe/$($n -replace '([.\\+*?()\[\]{}|^$])', '\$1')$" })
     $osvOut = (& osv-scanner scan source -r @osvEx $Root 2>&1 | Out-String).TrimEnd()
     $osvCode = $LASTEXITCODE
