@@ -1855,14 +1855,20 @@ function Invoke-DotnetStack($s) {
 # when any file under the build output directory is tracked. `outDir` from the vite config
 # if it names one literally, else `dist`. $null when the output is not in the index --
 # an untracked or ignored bundle is nobody's committed truth -- or outside the work tree.
+# The build output directory of a web stack, absolute, whether or not anything in it is
+# tracked: `outDir` from the vite config if it names one literally, else `dist`.
+function Get-WebOutDir($s) {
+    $out = 'dist'
+    $cfg = Get-ChildItem $s.Dir -File -Filter 'vite.config.*' -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($cfg -and (Get-Content -LiteralPath $cfg.FullName -Raw) -match '\boutDir\s*:\s*[''"`]([^''"`]+)[''"`]') { $out = $Matches[1] }
+    [IO.Path]::GetFullPath((Join-Path $s.Dir $out))
+}
+
 function Get-WebBuildOut($s) {
     $top = (& git -C $s.Dir rev-parse --show-toplevel 2>$null)
     if ($LASTEXITCODE -ne 0 -or -not $top) { return $null }
     $top = $top -replace '/', '\'
-    $out = 'dist'
-    $cfg = Get-ChildItem $s.Dir -File -Filter 'vite.config.*' -ErrorAction SilentlyContinue | Select-Object -First 1
-    if ($cfg -and (Get-Content -LiteralPath $cfg.FullName -Raw) -match '\boutDir\s*:\s*[''"`]([^''"`]+)[''"`]') { $out = $Matches[1] }
-    $rel = [IO.Path]::GetRelativePath($top, [IO.Path]::GetFullPath((Join-Path $s.Dir $out))) -replace '\\', '/'
+    $rel = [IO.Path]::GetRelativePath($top, (Get-WebOutDir $s)) -replace '\\', '/'
     if ($rel -eq '.' -or $rel -like '../*' -or $rel -eq '..' -or [IO.Path]::IsPathRooted($rel)) { return $null }
     if (-not (& git -C $top ls-files -- $rel | Select-Object -First 1)) { return $null }
     [pscustomobject]@{ Top = $top; Rel = $rel }
@@ -1949,13 +1955,48 @@ function Get-NonGitignoreIgnoredDirs([string]$Root) {
 # After the build: committed output the build changed or deleted, and output it made that
 # was never committed. Advisory unless qgate.json {"web": {"buildDrift": "fail"}}. Changed
 # files are put back and new output removed -- a check must not leave the tree modified.
-function Test-WebBuildDrift($Drift, $WasDirty, $WasNew, [string]$Script, $s) {
+# Puts committed build output back the way the run found it: what the build changed or
+# deleted is checked out again, what it made new is removed. Edits already in the tree
+# ($WasDirty/$WasNew, snapshotted before the build) are the user's and stay.
+function Restore-WebBuildOut($Drift, $WasDirty, $WasNew) {
     $top = $Drift.Top
     $dirty = @(& git -C $top diff --name-only -- $Drift.Rel | Where-Object { $_ -and $WasDirty -notcontains $_ })
     $new = @(& git -C $top ls-files --others --exclude-standard -- $Drift.Rel | Where-Object { $_ -and $WasNew -notcontains $_ })
     if ($dirty) { & git -C $top checkout -- @dirty *>&1 | Out-Null }
     # New hashed chunks next to a restored index.html would be orphans a `git add -A` commits.
     foreach ($p in $new) { Remove-Item -LiteralPath (Join-Path $top $p) -Force -ErrorAction SilentlyContinue }
+    [pscustomobject]@{ Dirty = $dirty; New = $new }
+}
+
+# #134: an exclusive lock on a web stack's build output, per worktree: a file in the
+# worktree's own git dir (outside it, the temp dir) named for the output path, opened
+# FileShare.None. The OS drops it with the process, so a killed run never leaves it held.
+# $null after QGATE_WEB_BUILD_LOCK_SEC (default 900) of waiting.
+$script:WebBuildLockWaitSec = 900
+if ($env:QGATE_WEB_BUILD_LOCK_SEC -match '^\d+$') { $script:WebBuildLockWaitSec = [int]$env:QGATE_WEB_BUILD_LOCK_SEC }
+function Lock-WebBuildOut($s) {
+    $out = Get-WebOutDir $s
+    $gd = (& git -C $s.Dir rev-parse --absolute-git-dir 2>$null)
+    $dir = if ($LASTEXITCODE -eq 0 -and $gd) { $gd } else { [IO.Path]::GetTempPath() }
+    $file = Join-Path $dir "qgate-build-$(Get-PathKey $out.ToLowerInvariant()).lock"
+    $sw = [Diagnostics.Stopwatch]::StartNew()
+    $told = $false
+    while ($true) {
+        try {
+            return [IO.FileStream]::new($file, [IO.FileMode]::OpenOrCreate, [IO.FileAccess]::ReadWrite, [IO.FileShare]::None, 1, [IO.FileOptions]::DeleteOnClose)
+        } catch [IO.IOException], [UnauthorizedAccessException] {
+            # A held file is a sharing violation; one being deleted on close is access denied.
+            if ($sw.Elapsed.TotalSeconds -ge $script:WebBuildLockWaitSec) { return $null }
+            # stderr: the wait is news now; -Quiet keeps stdout for the verdict.
+            if (-not $told) { [Console]::Error.WriteLine("[qgate] waiting for another gate run's build into $out"); $told = $true }
+            Start-Sleep -Milliseconds 500
+        }
+    }
+}
+
+function Test-WebBuildDrift($Drift, $Restored, [string]$Script, $s) {
+    $dirty = $Restored.Dirty
+    $new = $Restored.New
     $where = if ($s.Rel) { $s.Rel } else { '.' }
     $detail = @(foreach ($p in $dirty) { "changed by the build: $p" }) + @(foreach ($p in $new) { "built but never committed: $p" })
     $fix = "fix: run ``npm run $Script`` in $where and commit $($Drift.Rel)/"
@@ -2036,15 +2077,35 @@ function Invoke-WebStack($s) {
     if (-not ($Fast -and -not $Full)) {
         $buildScript = @('build-only', 'build') | Where-Object { $scripts -contains $_ } | Select-Object -First 1
         if ($buildScript) {
-            $drift = Get-WebBuildOut $s
-            if ($drift) {
-                # Snapshotted first, as `buf generate drift` does: an edit already in the
-                # tree is the user's, not the build's.
-                $wasDirty = @(& git -C $drift.Top diff --name-only -- $drift.Rel)
-                $wasNew = @(& git -C $drift.Top ls-files --others --exclude-standard -- $drift.Rel)
+            # #134: two gate runs in one worktree must not build into one output dir at
+            # once (vite's emptyOutDir under another run's build: EPERM, tracked files
+            # left deleted). One run builds; the other waits for it.
+            $lock = Lock-WebBuildOut $s
+            if (-not $lock) {
+                $script:Lines += "[SKIP] build -- another gate run held $(Get-WebOutDir $s) for ${script:WebBuildLockWaitSec}s"
+                $script:BaseDeferred = $true
+            } else {
+                try {
+                    $drift = Get-WebBuildOut $s
+                    if ($drift) {
+                        # Snapshotted first, as `buf generate drift` does: an edit already in the
+                        # tree is the user's, not the build's.
+                        $wasDirty = @(& git -C $drift.Top diff --name-only -- $drift.Rel)
+                        $wasNew = @(& git -C $drift.Top ls-files --others --exclude-standard -- $drift.Rel)
+                    }
+                    Phase 'build' { npm run $buildScript }
+                } finally {
+                    # #134: restored whatever happened -- a failed build left every tracked
+                    # dist/assets file deleted, because the restore lived in the drift check
+                    # that only a green run reaches.
+                    $restored = if ($drift) { Restore-WebBuildOut $drift $wasDirty $wasNew }
+                    $lock.Dispose()
+                }
+                if ($drift -and -not $script:Failed) { Test-WebBuildDrift $drift $restored $buildScript $s }
+                elseif ($drift -and ($restored.Dirty -or $restored.New)) {
+                    $script:Warnings += "[NOTE] build: committed $($drift.Rel)/ was changed by a build in a failed run -- put back ($(@($restored.Dirty).Count + @($restored.New).Count) file(s))"
+                }
             }
-            Phase 'build' { npm run $buildScript }
-            if ($drift -and -not $script:Failed) { Test-WebBuildDrift $drift $wasDirty $wasNew $buildScript $s }
         }
     }
     # The repository's own declared test script, full level only -- the same split
@@ -3500,7 +3561,18 @@ if ($script:QGateEnv -and @($script:QGateEnv.Vars.Values | Where-Object { $_.Con
 $script:ChildResults = @{}
 $parallelKeys = @()
 if ($Parallel -and -not $ParallelStacks) {
-    $groups = @($stacks | Where-Object { $_.Implemented -and $_.Stack -in 'go', 'web', 'rust', 'dotnet', 'cpp', 'godot' } | Group-Object Stack)
+    $pool = @($stacks | Where-Object { $_.Implemented -and $_.Stack -in 'go', 'web', 'rust', 'dotnet', 'cpp', 'godot' })
+    # #134: a web build writes its output dir; when that dir sits inside another stack's
+    # directory (dist embedded by Go via go:embed) the two children raced on it -- vite
+    # emptied dist under go test (404 on embedded assets), or go held it under vite
+    # (EPERM). Such a web stack runs in-process after the children, never beside them.
+    $others = @($pool | Where-Object { $_.Stack -ne 'web' } | ForEach-Object { [IO.Path]::GetFullPath($_.Dir).TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar })
+    $pool = @($pool | Where-Object {
+            if ($_.Stack -ne 'web') { return $true }
+            $o = (Get-WebOutDir $_).TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar
+            -not @($others | Where-Object { $o.StartsWith($_, [StringComparison]::OrdinalIgnoreCase) })
+        })
+    $groups = @($pool | Group-Object Stack)
     if ($groups.Count -gt 1) {
         $pdir = Join-Path ([IO.Path]::GetTempPath()) "quality-gate-parallel-$PID"
         New-Item -ItemType Directory -Force $pdir | Out-Null

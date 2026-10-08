@@ -5768,6 +5768,34 @@ if (Get-Command node -ErrorAction SilentlyContinue) {
     Check 'qgate.json web.buildDrift "fail" makes a stale dist/ a failure' `
         (($wdCode -ne 0) -and ($out -match '(?m)^\[FAIL\] build drift') -and ($out -match 'changed by the build: dist/app\.js') -and
             ($out -notmatch '\[WARN\] build drift')) "code=$wdCode $out"
+    # #134: a build that fails part-way left every tracked dist file it had deleted gone --
+    # the restore lived in the drift check only a green run reaches. Both sides: the run is
+    # still red, and the committed dist/ is back.
+    Remove-Item (Join-Path $wd 'qgate.json')
+    [IO.File]::WriteAllText((Join-Path $wd 'build.js'),
+        "const fs = require('fs'); fs.rmSync('dist/app.js'); fs.writeFileSync('dist/half.js', 'x\n'); process.exit(1);`n")
+    $out = (& pwsh -NoProfile -File $gate -Root $wd -Only 'web' -Full 2>&1 | Out-String); $wdCode = $LASTEXITCODE
+    Check 'a failed web build still fails, and its committed dist/ is put back (#134)' `
+        (($wdCode -ne 0) -and ($out -match '(?m)^\[FAIL\] build') -and (Test-Path (Join-Path $wd 'dist\app.js')) -and
+            -not (Test-Path (Join-Path $wd 'dist\half.js')) -and -not (& git -C $wd diff --name-only -- dist) -and
+            ($out -match '\[NOTE\] build: committed dist/ was changed by a build in a failed run -- put back \(2 file')) "code=$wdCode $out $(& git -C $wd status --short | Out-String)"
+    # #134: two gate runs in one worktree must not build into one dist/ at once. The other
+    # run is stood in for by holding its lock; this run waits, then gives up without building.
+    git -C $wd checkout -q -- build.js 2>&1 | Out-Null
+    $lockFile = Join-Path (& git -C $wd rev-parse --absolute-git-dir) "qgate-build-$(Get-PathKey ([IO.Path]::GetFullPath((Join-Path $wd 'dist')).ToLowerInvariant())).lock"
+    $held = [IO.FileStream]::new($lockFile, [IO.FileMode]::OpenOrCreate, [IO.FileAccess]::ReadWrite, [IO.FileShare]::None)
+    try {
+        $env:QGATE_WEB_BUILD_LOCK_SEC = '2'
+        [IO.File]::WriteAllText((Join-Path $wd 'src.txt'), "v3`n")
+        $out = (& pwsh -NoProfile -File $gate -Root $wd -Only 'web' -Full 2>&1 | Out-String); $wdCode = $LASTEXITCODE
+        Check 'a web build waits for another run building the same dist/, and never builds beside it (#134)' `
+            (($out -match '\[SKIP\] build -- another gate run held .*dist for 2s') -and ($out -notmatch '(?m)^\[(PASS|FAIL)\] build') -and
+                -not (Test-Path (Join-Path $wd 'dist\chunk-v3.js'))) "code=$wdCode $out"
+    } finally { $held.Dispose(); Remove-Item $lockFile -ErrorAction SilentlyContinue; $env:QGATE_WEB_BUILD_LOCK_SEC = $null }
+    $out = (& pwsh -NoProfile -File $gate -Root $wd -Only 'web' -Full 2>&1 | Out-String); $wdCode = $LASTEXITCODE
+    Check 'with the lock free the same run builds (#134)' `
+        (($out -match '(?m)^\[PASS\] build') -and ($out -match 'built but never committed: dist/chunk-v3\.js')) "code=$wdCode $out"
+    [IO.File]::WriteAllText((Join-Path $wd 'src.txt'), "v1`n")
     # An untracked, ignored bundle is nobody's committed truth: no check at all.
     git -C $wd rm -r -q --cached dist 2>&1 | Out-Null
     Add-Content (Join-Path $wd '.gitignore') 'dist/'
