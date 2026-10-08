@@ -859,6 +859,10 @@ Check 'go vet violation fails the gate' (($r.Code -ne 0) -and ($r.Out -match '\[
 Set-GoFile $main $clean
 $r = Invoke-Gate $go
 Check 'gate green again after the fix' ($r.Code -eq 0) $r.Out
+# #140: the default level is not -Full, and the report says so -- once; the -Full run does not.
+Check 'a run without -Full names the fast level it ran' `
+    ((@([regex]::Matches($r.Out, '(?m)^\[INFO\] level: fast -- go test -short')).Count -eq 1) -and
+    ($probeOut -notmatch '\[INFO\] level:')) "$($r.Out)`n--- -Full:`n$probeOut"
 
 # A phase killed because the HOST ran out of memory is not a finding about the code,
 # but the raw runtime dump reads exactly like one. Reported from the field: a

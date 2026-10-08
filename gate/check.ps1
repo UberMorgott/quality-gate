@@ -4,9 +4,11 @@
 # output with its detail capped at 6000 chars (status lines are never cut). Fail-fast -- the first failing phase stops the
 # rest, because a linter report on non-compiling code is noise.
 #
-# Levels: -Fast drops the expensive bundling phase and is what the agent Stop
-# hook runs on every turn. -Full (the default) adds it back and is what the
-# pre-commit hook and CI run.
+# Levels: the default (no level switch) is the fast level -- Go tests run -short, with
+# the test cache and without -race. -Fast also drops the expensive bundling phase and
+# is what the agent Stop hook runs on every turn. -Full is opt-in, never the default:
+# every test uncached and shuffled, -race, fuzz, the update advisory -- what the
+# generated pre-commit hook passes. A non-Quiet run without -Full says which level ran.
 #
 # With no stack switch the changed side is auto-detected from git status.
 [CmdletBinding(PositionalBinding = $false)]
@@ -3404,6 +3406,14 @@ if ($script:SoftFailed) { $script:Failed = $true }
 if ($script:FmtSlnDir) { Remove-Item $script:FmtSlnDir -Recurse -Force -ErrorAction SilentlyContinue }
 if ($script:QGateEnvTmp) { Remove-Item -LiteralPath $script:QGateEnvTmp -Recurse -Force -ErrorAction SilentlyContinue }
 if ($ParallelStacks) { $childRec | Export-Clixml -LiteralPath $ParallelOut; exit 0 }
+
+# quality-gate#140: the level is not on the command line, so the report names it. Measured:
+# `qgate -All` exited 0 over a deterministically failing test that skips under -short --
+# the fast level was read as the full one. Go only: it is the stack whose tests the level
+# narrows. -Quiet stays silent; a hook that wants the full level passes -Full.
+if (-not $Full -and -not $Quiet -and @($stacks | Where-Object { $_.Stack -eq 'go' })) {
+    $report += '[INFO] level: fast -- go test -short, test cache on, no -race; -Full runs the full level (every test uncached, -race, fuzz), as the pre-commit hook does'
+}
 
 # THE INVARIANT: a run that executed zero check phases is not a green run.
 # Every false green this gate has shipped was a different door into this one room --
