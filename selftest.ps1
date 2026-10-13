@@ -2465,6 +2465,25 @@ if ($IsWindows) {
     Check 'godot.warningsFail that is not a boolean warns and is ignored' `
         (($warnBad.Code -eq 0) -and ($warnBad.Out -match 'godot\.warningsFail must be true or false')) $warnBad.Out
 
+    # #150: in a test run the engine's lower-case `ConfigFile parse error` is a rejection
+    # path working, the capitalised `Parse Error:` is a file that did not parse. Both lines
+    # are Godot 4.7.1's own; the stand-ins print them for `--script` runs only, because the
+    # import and the smoke boot fail on any ERROR: line.
+    $onScript = "@echo off`r`necho %* | findstr /C:`"--script`" >nul && echo "
+    $cfgErr = Join-Path $gdShims 'godot-cfgerr.cmd'
+    [IO.File]::WriteAllText($cfgErr, $onScript + "ERROR: ConfigFile parse error at user://settings.cfg_corrupt:0: Unexpected EOF while parsing simple tag.`r`nexit /b 0`r`n")
+    $parseErr = Join-Path $gdShims 'godot-parseerr.cmd'
+    [IO.File]::WriteAllText($parseErr, $onScript + "ERROR: Parse Error: Parse error. [Resource file res://broken.tscn:4]`r`nexit /b 0`r`n")
+    try {
+        $cfgErrRun = & $runGd $cfgErr
+        $parseErrRun = & $runGd $parseErr
+    } finally { $env:GODOT_BIN = $priorGodot }
+    Check 'a godot test that makes the engine print a ConfigFile parse error passes' `
+        (($cfgErrRun.Code -eq 0) -and ($cfgErrRun.Out -match '\[PASS\] godot test boot_headless_test\.gd')) $cfgErrRun.Out
+    Check 'a godot test run that prints Parse Error: still fails and names the line' `
+        (($parseErrRun.Code -ne 0) -and ($parseErrRun.Out -match '\[PASS\] godot import') -and
+        ($parseErrRun.Out -match '\[FAIL\] godot test boot_headless_test\.gd') -and ($parseErrRun.Out -match 'Resource file res://broken\.tscn:4')) $parseErrRun.Out
+
     # #124: qgate.json "env" reaches the engine, {tmp} is a real directory for the run and
     # is gone after it, {root} is the repository, and only placeholder values are
     # normalised. A shim writes what it saw to a probe file.
