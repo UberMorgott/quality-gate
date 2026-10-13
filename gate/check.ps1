@@ -2473,7 +2473,10 @@ function Invoke-GodotStack($s) {
     # test working. So here only a script that failed to load or parse is a
     # verdict from the output; the test itself speaks through its exit code, which
     # Phase already checks.
-    $scriptErrs = 'SCRIPT ERROR|Parse Error|Failed to load script'
+    # quality-gate#150: `Parse Error:` is case-SENSITIVE. Godot 4.7.1 prints a GDScript
+    # or text-resource parse failure capitalised with a colon; the lower-case
+    # `ERROR: ConfigFile parse error at ...` is a data file the test fed it on purpose.
+    $scriptErrs = 'SCRIPT ERROR|(?-i:Parse Error:)|Failed to load script'
     # #124, opt-in: qgate.json {"godot": {"warningsFail": true}} also fails the test and
     # smoke runs on an engine WARNING: line. A project that reports its own boot failure
     # through push_warning() (CodeDungeon: BOOT_ERROR_CORE_START_FAILED) otherwise passed
