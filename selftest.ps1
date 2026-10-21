@@ -4879,6 +4879,47 @@ Set-Content $ckDb (ConvertTo-Json -Depth 5 -InputObject @(
         @{ directory = "$ckOwner\build"; file = "$ckOwner\build\_deps\godotcpp-src\src\x.cpp"; command = 'clang-cl /c x.cpp' }))
 Check 'a database with no own translation unit gives nothing to analyse' `
     ($null -eq (Write-CppOwnDb $ckDb $ckOwner (Join-Path $ckTree 'none')))
+# #148: "owns no unit" is read only off a database that was read. A malformed one is
+# unknown coverage, never an empty list; a relative file resolves against its directory.
+Set-Content $ckDb '{ not json'
+$ckBad = Get-CppOwnUnits $ckDb $ckOwner
+Check 'an unreadable compile database is not read as owning nothing' ((-not $ckBad.Ok) -and ($ckBad.Why -match 'unreadable')) ($ckBad | ConvertTo-Json)
+Set-Content $ckDb (ConvertTo-Json -Depth 5 -InputObject @(@{ directory = $ckOwner; file = 'test/b.cpp'; command = 'clang-cl /c test/b.cpp' }))
+$ckRel = Get-CppOwnUnits $ckDb $ckOwner
+Check 'a relative compile database file is resolved against its directory' (($ckRel.Ok) -and (@($ckRel.Files).Count -eq 1) -and (@($ckRel.Files)[0] -like "$ckOwner*b.cpp")) ($ckRel | ConvertTo-Json)
+
+# #148 end to end: a CMake helper that owns no C/C++ file (it only builds a dependency,
+# here under _deps/) passes "strict": format/tidy/cppcheck are [INFO], not [SKIP], and
+# configure and build still run. An own header brings format back (no .clang-format: a
+# SKIP, strict red); an own .cpp the build leaves out keeps tidy's SKIP, strict red.
+if ((Get-Command cmake -ErrorAction SilentlyContinue) -and (Get-Command clang-tidy -ErrorAction SilentlyContinue) -and
+    (Get-Command cppcheck -ErrorAction SilentlyContinue) -and ($cdbOk -or -not $IsWindows)) {
+    $helper = Join-Path $tmp 'cpp-helper'
+    New-Item -ItemType Directory -Path (Join-Path $helper '_deps\dep-src') -Force | Out-Null
+    Set-Content (Join-Path $helper 'CMakeLists.txt') "cmake_minimum_required(VERSION 3.16)`nproject(qgate_helper CXX)`nadd_library(qgate_dep STATIC _deps/dep-src/dep.cpp)"
+    [IO.File]::WriteAllText((Join-Path $helper '_deps\dep-src\dep.cpp'), "int qgate_dep() { return 1; }`n")
+    Set-Content (Join-Path $helper 'qgate.json') '{"strict": true}'
+    $runHelper = { $o = (& pwsh -NoProfile -File $gate -Root $helper -Only cpp -All -Full 2>&1 | Out-String); [pscustomobject]@{ Code = $LASTEXITCODE; Out = $o } }
+    $hr = & $runHelper
+    Check 'a cpp stack that owns no source passes strict, the three phases not applicable' `
+        (($hr.Code -eq 0) -and ($hr.Out -match '\[PASS\] configure') -and ($hr.Out -match '\[PASS\] build') -and
+        ($hr.Out -match '\[INFO\] format -- this stack owns no C/C\+\+ source') -and ($hr.Out -match '\[INFO\] tidy -- no translation unit') -and
+        ($hr.Out -match '\[INFO\] cppcheck -- no translation unit') -and ($hr.Out -notmatch '\[SKIP\]|\[FAIL\] strict')) $hr.Out
+    New-Item -ItemType Directory -Path (Join-Path $helper 'include') -Force | Out-Null
+    [IO.File]::WriteAllText((Join-Path $helper 'include\own.hpp'), "#pragma once`nint qgate_own();`n")
+    $hr = & $runHelper
+    Check 'an own header makes format required again (no .clang-format fails strict)' `
+        (($hr.Code -ne 0) -and ($hr.Out -match '\[SKIP\] format -- no \.clang-format') -and ($hr.Out -match '\[FAIL\] strict -- ') -and
+        ($hr.Out -match '\[INFO\] tidy -- no translation unit')) $hr.Out
+    Remove-Item (Join-Path $helper 'include') -Recurse -Force
+    New-Item -ItemType Directory -Path (Join-Path $helper 'src') -Force | Out-Null
+    [IO.File]::WriteAllText((Join-Path $helper 'src\own.cpp'), "int qgate_own() { return 2; }`n")
+    $hr = & $runHelper
+    Check 'an own .cpp the compile database leaves out keeps the tidy/cppcheck SKIP and fails strict' `
+        (($hr.Code -ne 0) -and ($hr.Out -match '\[SKIP\] tidy -- no sources of this stack in the compile database') -and
+        ($hr.Out -match '\[SKIP\] cppcheck -- no sources of this stack') -and ($hr.Out -match '\[FAIL\] strict -- ') -and
+        ($hr.Out -notmatch '\[INFO\] (tidy|cppcheck)')) $hr.Out
+}
 
 # ...and end to end: the database cppcheck was handed, and the own finding still reported.
 if ((Get-Command cppcheck -ErrorAction SilentlyContinue) -and ($cdbOk -or -not $IsWindows)) {

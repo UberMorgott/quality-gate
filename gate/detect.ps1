@@ -70,6 +70,23 @@ function Test-CppOwn([string]$Path, [string]$Dir) {
     return ($p.Substring($d.Length) -notmatch $script:CppSkipDir)
 }
 
+# The stack's own translation units in a compile database: { Ok; Why; Entries; Files }.
+# A relative `file` is resolved against its entry's `directory`, the way CMake writes
+# it, for tidy and cppcheck alike. Ok is false when the database cannot be read: then
+# nobody knows what it lists, and quality-gate#148's "owns nothing" must not be inferred.
+function Get-CppOwnUnits([string]$Db, [string]$Dir) {
+    try { $all = @(Get-Content -LiteralPath $Db -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop) }
+    catch { return @{ Ok = $false; Why = "compile database unreadable -- $($_.Exception.Message)"; Entries = @(); Files = @() } }
+    $entries = [Collections.Generic.List[object]]::new()
+    $files = [Collections.Generic.List[string]]::new()
+    foreach ($e in $all) {
+        $f = "$($e.file)"
+        if ($f -and -not [IO.Path]::IsPathRooted($f)) { $f = Join-Path "$($e.directory)" $f }
+        if (Test-CppOwn $f $Dir) { $entries.Add($e); $files.Add($f) }
+    }
+    @{ Ok = $true; Why = $null; Entries = @($entries); Files = @($files | Sort-Object -Unique) }
+}
+
 # The compile database cut down to the stack's own translation units (#106). Filtering
 # cppcheck's FINDINGS afterwards is not enough: `--project` analyses every entry first,
 # and on CodeDungeon 1022 of 1027 were godot-cpp sources under build/_deps -- 45 minutes
@@ -78,11 +95,7 @@ function Test-CppOwn([string]$Path, [string]$Dir) {
 # reaches outside the stack are still dropped by the Test-CppOwn filter on the output.
 # Written to <Out>\compile_commands.json; $null when no entry is the stack's own.
 function Write-CppOwnDb([string]$Db, [string]$Dir, [string]$Out) {
-    $own = @(Get-Content -LiteralPath $Db -Raw | ConvertFrom-Json | Where-Object {
-            $f = "$($_.file)"
-            if ($f -and -not [IO.Path]::IsPathRooted($f)) { $f = Join-Path "$($_.directory)" $f }
-            Test-CppOwn $f $Dir
-        })
+    $own = @((Get-CppOwnUnits $Db $Dir).Entries)
     if ($own.Count -eq 0) { return $null }
     New-Item -ItemType Directory -Path $Out -Force | Out-Null
     $path = Join-Path $Out 'compile_commands.json'

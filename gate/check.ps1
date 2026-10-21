@@ -2653,7 +2653,22 @@ function Invoke-CppStack($s) {
     # The repo root first: a native subdirectory inside a bigger repository keeps its
     # style at the top, which is also where clang-format's own upward search finds it.
     $cfg = @($Root, $s.Dir) | Where-Object { Test-Path (Join-Path $_ '.clang-format') } | Select-Object -First 1
-    if (-not $cfg) {
+    # quality-gate#148: a CMake project that owns no C/C++ file (a helper that only fetches
+    # and builds a dependency) has nothing to judge. That is not a check that did not run,
+    # so it is an [INFO], not a [SKIP] strict fails on. format: no own source or header on
+    # disk, outside the build trees -- decided before the style file and the tool, so a
+    # stack with files keeps both SKIPs. tidy/cppcheck: a compile database that was READ
+    # and lists no own translation unit, AND no own .c/.cc/.cpp/.cxx on disk (asked after
+    # the build: a configure may generate one). A missing or unreadable database, or an own
+    # unit the database leaves out, is unknown coverage and keeps its SKIP.
+    $ownSrc = { param([string[]]$Inc = $exts) @(Get-ChildItem $s.Dir -Recurse -File -Include $Inc -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName.Substring($s.Dir.Length) -notmatch $script:CppSkipDir }) }
+    $tuExts = '*.c', '*.cc', '*.cpp', '*.cxx'
+    $noOwn = 'this stack owns no C/C++ source (only build files) -- nothing to check'
+    $noOwnTu = 'no translation unit of this stack in the compile database, and it owns none on disk (dependencies or headers only) -- nothing to analyse'
+    if (-not (& $ownSrc)) {
+        $script:Lines += "[INFO] format -- $noOwn"
+    } elseif (-not $cfg) {
         # There is no house style to check against, and inventing one would make the
         # gate the author of a diff nobody asked for. Said out loud: a phase that did
         # not run must never read like a phase that passed.
@@ -2661,8 +2676,7 @@ function Invoke-CppStack($s) {
     } elseif (-not (Have 'clang-format')) {
         $script:Lines += '[SKIP] format -- clang-format not found'
     } else {
-        $src = @(Get-ChildItem $s.Dir -Recurse -File -Include $exts -ErrorAction SilentlyContinue |
-            Where-Object { $_.FullName.Substring($s.Dir.Length) -notmatch $script:CppSkipDir })
+        $src = & $ownSrc
         # -All means "every detected stack, ignore git status", so it ignores it here
         # too -- the same rule the Godot runner follows, and for the reason measured
         # there: narrowing under -All left the phase out of a run that asked for
@@ -2761,9 +2775,13 @@ function Invoke-CppStack($s) {
     } elseif (-not $cdb) {
         $script:Lines += "[SKIP] tidy -- $noCdb"
     } else {
-        $files = @((Get-Content $cdb -Raw | ConvertFrom-Json).file | Sort-Object -Unique |
-            Where-Object { Test-CppOwn $_ $s.Dir })
-        if ($files.Count -eq 0) {
+        $units = Get-CppOwnUnits $cdb $s.Dir
+        $files = @($units.Files)
+        if (-not $units.Ok) {
+            $script:Lines += "[SKIP] tidy -- $($units.Why)"
+        } elseif ($files.Count -eq 0 -and -not (& $ownSrc $tuExts)) {
+            $script:Lines += "[INFO] tidy -- $noOwnTu"
+        } elseif ($files.Count -eq 0) {
             $script:Lines += '[SKIP] tidy -- no sources of this stack in the compile database'
         } else {
             $target = Get-CppTidyTarget $cdb
@@ -2809,11 +2827,16 @@ function Invoke-CppStack($s) {
     # which is handed its file list, `--project` analyses every entry, so it gets a copy
     # of the database holding only the stack's own translation units (#106).
     $ownDb = $null
-    if ((Have 'cppcheck') -and $cdb) { $ownDb = Write-CppOwnDb $cdb $s.Dir (Join-Path $build 'qgate-cppcheck') }
+    $ckUnits = if ((Have 'cppcheck') -and $cdb) { Get-CppOwnUnits $cdb $s.Dir }
+    if ($ckUnits -and $ckUnits.Ok) { $ownDb = Write-CppOwnDb $cdb $s.Dir (Join-Path $build 'qgate-cppcheck') }
     if (-not (Have 'cppcheck')) {
         $script:Lines += '[SKIP] cppcheck -- cppcheck not found'
     } elseif (-not $cdb) {
         $script:Lines += "[SKIP] cppcheck -- $noCdb"
+    } elseif (-not $ckUnits.Ok) {
+        $script:Lines += "[SKIP] cppcheck -- $($ckUnits.Why)"
+    } elseif (-not $ownDb -and -not (& $ownSrc $tuExts)) {
+        $script:Lines += "[INFO] cppcheck -- $noOwnTu"
     } elseif (-not $ownDb) {
         $script:Lines += '[SKIP] cppcheck -- no sources of this stack in the compile database'
     } else {
