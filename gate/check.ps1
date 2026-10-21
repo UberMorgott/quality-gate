@@ -936,7 +936,79 @@ function Invoke-GoStackOnce($s) {
         $pw = $env:GOWORK; $env:GOWORK = $rep.Work
         try { & $Body } finally { $env:GOWORK = $pw }
     }
+    # quality-gate#159: file entries -- their packages are linted in phases of their own,
+    # and only findings located in the listed files are the verdict; the rest of those
+    # packages is pristine upstream code, counted in one INFO line.
+    $repFilePkgs = @(if ($rep -and -not $rep.Error) { $rep.FilePkgs })
+    $repFiles = @(if ($rep -and -not $rep.Error) { $rep.Files })
+    $repFileDirs = @(if ($rep -and -not $rep.Error) { $rep.FilePkgDirs })
+    foreach ($ig in @(if ($rep -and -not $rep.Error) { $rep.Ignored })) {
+        $script:Warnings += "[WARN] go.lintReplacements file $ig is excluded by build constraints on this host -- not checked (go.lintGoos adds other targets)"
+    }
+    $script:GoFileDropped = 0
+    # go vet: a vet finding is the verdict even where golangci-lint's exclusions or //nolint
+    # would hide it, and it runs on an aegis pass too -- the file filter is the only narrowing.
+    $vetFiles = { param([string]$Name, [scriptblock]$Wrap)
+        Phase $Name {
+            $o = (& $inWork { & $Wrap { go vet @repFilePkgs } } 2>&1 | Out-String).TrimEnd()
+            $c = $LASTEXITCODE
+            $sel = Select-GoVetListed $o $s.Dir $repFiles $repFileDirs
+            $script:GoFileDropped += $sel.Dropped
+            if ($sel.Kept) { $sel.Kept; $global:LASTEXITCODE = 1 }
+            elseif ($c -ne 0 -and -not $sel.Dropped) { $o; $global:LASTEXITCODE = $c }
+            else { $global:LASTEXITCODE = 0 }
+        }
+    }
+    # golangci-lint: its JSON report (absolute paths), filtered after its own exclusions
+    # and //nolint; the console keeps its errors for a run that could not judge.
+    $glFiles = { param([string]$Name, [scriptblock]$Wrap)
+        Phase $Name {
+            $jf = Join-Path ([IO.Path]::GetTempPath()) "qgate-gl-$PID-$([IO.Path]::GetRandomFileName()).json"
+            $cfgArgs = @()
+            $ovl = $null
+            try {
+                # A listed file that is generated is still judged: the run gets the repository's
+                # config with the generated-file exclusion disabled, written beside it (so its
+                # relative paths mean the same) under a temporary name, removed afterwards.
+                if (@($repFiles | Where-Object { Test-GoGeneratedFile $_ })) {
+                    # `config path` prints to stderr (measured, 2.14.0); exit 6 = no config file.
+                    $cp = "$(@(& golangci-lint config path 2>&1 | ForEach-Object { "$_".Trim() } | Where-Object { $_ -and $_ -notmatch '^level=' }) | Select-Object -Last 1)"
+                    $cp = if ($LASTEXITCODE -eq 0 -and $cp) { [IO.Path]::GetFullPath((Join-Path $s.Dir $cp)) } else { $null }
+                    $txt = if ("$(& golangci-lint version 2>&1)" -match 'version v?2\.') { Get-GolangciNoGeneratedConfig $cp } else { $null }
+                    if ($null -eq $txt) {
+                        "a listed go.lintReplacements file is generated, and golangci-lint's generated-file exclusion could not be disabled for $(if ($cp) { $cp } else { 'this golangci-lint' }) (needs golangci-lint v2 and a block-style YAML or JSON v2 config) -- the file would go unjudged"
+                        $global:LASTEXITCODE = 1
+                        return
+                    }
+                    $ext = if ($cp) { [IO.Path]::GetExtension($cp) } else { '.yml' }
+                    $ovl = Join-Path $(if ($cp) { Split-Path $cp } else { [IO.Path]::GetTempPath() }) ".qgate-golangci-$PID-$([IO.Path]::GetRandomFileName())$ext"
+                    [IO.File]::WriteAllText($ovl, $txt)
+                    $cfgArgs = @('-c', $ovl)
+                }
+                $o = (& $inWork { & $Wrap {
+                            golangci-lint run --allow-serial-runners --output.json.path=$jf --path-mode=abs @cfgArgs `
+                                --max-issues-per-linter=0 --max-same-issues=0 @newFrom @repFilePkgs } } 2>&1 | Out-String).TrimEnd()
+                $c = $LASTEXITCODE
+                $sel = Select-GolangciListed $(if (Test-Path -LiteralPath $jf) { Get-Content -LiteralPath $jf -Raw }) $s.Dir $repFiles $repFileDirs
+                $script:GoFileDropped += $sel.Dropped
+                if ($sel.Error -or $c -notin 0, 1) { $o; if ($sel.Error) { $sel.Error }; $global:LASTEXITCODE = $(if ($c) { $c } else { 1 }) }
+                elseif ($sel.Kept) { $sel.Kept; $global:LASTEXITCODE = 1 }
+                else { $global:LASTEXITCODE = 0 }
+            } finally {
+                Remove-Item -LiteralPath $jf -Force -ErrorAction SilentlyContinue
+                if ($ovl) { Remove-Item -LiteralPath $ovl -Force -ErrorAction SilentlyContinue }
+            }
+        }
+    }
+    $noWrap = { param([scriptblock]$B) & $B }
+    $fileNote = {
+        if ($script:GoFileDropped) {
+            $script:Lines += "[INFO] go.lintReplacements files: $($script:GoFileDropped) finding(s) outside the listed files of $($repFilePkgs -join ', ') not counted"
+            $script:GoFileDropped = 0
+        }
+    }
     if (-not $aePass) { Phase 'go vet' { & $inWork { go vet ./... @repPkgs } } }
+    if ($repFilePkgs) { & $vetFiles 'go vet (go.lintReplacements files)' $noWrap; & $fileNote }
     # The `go` directive, not the `toolchain` one: it is what both tools compare
     # themselves against, and it is what the error messages call "the targeted Go
     # version".
@@ -990,6 +1062,11 @@ function Invoke-GoStackOnce($s) {
                 }
             }
         }
+        if ($repFilePkgs) {
+            # Also on an aegis pass, like the package entries above.
+            & $glFiles 'golangci-lint (go.lintReplacements files)' $noWrap
+            & $fileNote
+        }
         # Advisory, full level only: a note about the config, not about this change.
         if ($Full) { $script:Warnings += @(Get-GolangciFloorGaps $s.Dir $s.Rel (Join-Path $PSScriptRoot '..\templates\.golangci.yml')) }
     } elseif ($Full -and -not $aePass) {
@@ -998,13 +1075,18 @@ function Invoke-GoStackOnce($s) {
         Fail 'golangci-lint not on PATH -- required at the full level (go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest)'
     } elseif (-not $aePass) {
         $script:Lines += '[WARN] golangci-lint not on PATH -- phase skipped'
+    } elseif ($repPkgs -or $repFilePkgs) {
+        # #159: an aegis pass does not judge the declared replacements with golangci config;
+        # without golangci-lint that declared scope would go unlinted.
+        $m = 'golangci-lint not on PATH -- qgate.json go.lintReplacements needs it (go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest)'
+        if ($Full) { Fail $m } else { $script:Lines += "[WARN] $m" }
     }
     # Report-level, not a stack line: -Quiet drops a green stack's lines, findings included.
     if ($aeFlagged -and -not $script:Failed -and (Have 'golangci-lint')) {
         # #158: the two scopes differ when go.mod replaces a module with a local directory
         # nobody declared: ./... never reaches it, aegis lint may. Said, not guessed from
         # the findings: the disagreement may be exactly that unlinted scope.
-        $narrow = @(if (-not $repPkgs) { Get-GoLocalReplaces $s.Dir })
+        $narrow = @(if (-not $repPkgs -and -not $repFilePkgs) { Get-GoLocalReplaces $s.Dir })
         $scope = if ($narrow) { @("       golangci-lint linted ./... only; not the local replacement module(s) $($narrow -join ', ') -- qgate.json {`"go`": {`"lintReplacements`": [`"<import path>/...`"]}} adds the owned ones to the verdict") } else { @() }
         $script:Warnings += (@("[WARN] aegis lint $($ae.Version) flagged findings golangci-lint + go vet pass -- engines disagree, golangci verdict kept (report it to aegis):") +
             @($aeFlagged -split "`r?`n" | Select-Object -First 20 | ForEach-Object { "       $_" }) + $scope) -join "`n"
@@ -1029,6 +1111,12 @@ function Invoke-GoStackOnce($s) {
                         }
                     }
                 }
+            }
+            if ($repFilePkgs) {
+                $osWrap = { param([scriptblock]$B) Invoke-WithGoos $os $B }
+                & $vetFiles "go vet (go.lintReplacements files) GOOS=$os" $osWrap
+                if (Have 'golangci-lint') { & $glFiles "golangci-lint (go.lintReplacements files) GOOS=$os" $osWrap }
+                & $fileNote
             }
         }
     }

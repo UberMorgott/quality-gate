@@ -1097,6 +1097,90 @@ if (Get-Command golangci-lint -ErrorAction SilentlyContinue) {
         $r = & $aeRun '0.1.7' 1
         Check 'a go.lintReplacements pattern that does not resolve fails the run' `
             (($r.Code -ne 0) -and ($r.Out -match "go\.lintReplacements 'example\.com/nope/\.\.\.' does not resolve")) $r.Out
+
+        # #159: a file entry (<package>/<file>.go) lints its package but only findings in the
+        # listed file count -- an owned file beside pristine upstream files of one package.
+        # up.go is the upstream sibling: an errcheck AND a vet (printf) finding.
+        Set-GoFile (Join-Path $aeDep 'sub\sub.go') "// Package sub is upstream code.`npackage sub`n`n// Up returns two.`nfunc Up() int { return 2 }`n"
+        $upGo = Join-Path $aeDep 'up.go'
+        $upBad = "package dep`n`nimport (`n`t`"fmt`"`n`t`"os`"`n)`n`n// Up writes a file.`nfunc Up() {`n`tos.WriteFile(`"y.txt`", nil, 0o600)`n`tfmt.Printf(`"%d`", `"x`")`n}`n"
+        Set-GoFile (Join-Path $aeDep 'dep.go') $depBad
+        Set-GoFile $upGo "package dep`n`n// Up returns two.`nfunc Up() int { return 2 }`n"
+        [IO.File]::WriteAllText($aeCfg, '{"go":{"lintReplacements":["example.com/dep/dep.go"]}}')
+        foreach ($c in 1, 0) {
+            $r = & $aeRun '0.1.7' $c
+            Check "a go.lintReplacements file entry fails on a finding in the listed file (aegis exit $c)" `
+                (($r.Code -ne 0) -and ($r.Out -match '\[FAIL\] golangci-lint \(go\.lintReplacements files\)') -and
+                ($r.Out -match 'dep\.go:\d+:\d+: Error return value of .os\.WriteFile. is not checked')) $r.Out
+        }
+        Set-GoFile (Join-Path $aeDep 'dep.go') $depOk
+        Set-GoFile $upGo $upBad
+        $r = & $aeRun '0.1.7' 1
+        Check 'a finding only in an unlisted sibling file of a go.lintReplacements file entry passes, counted in INFO' `
+            (($r.Code -eq 0) -and ($r.Out -match '\[PASS\] go vet \(go\.lintReplacements files\)') -and ($r.Out -match '\[PASS\] golangci-lint \(go\.lintReplacements files\)') -and
+            ($r.Out -match '\[INFO\] go\.lintReplacements files: \d+ finding\(s\) outside the listed files of \./third_party/vendor/dep not counted') -and
+            ($r.Out -notmatch 'up\.go:\d+')) $r.Out
+        [IO.File]::WriteAllText($aeCfg, '{"go":{"lintReplacements":["example.com/dep","example.com/dep/dep.go"]}}')
+        $r = & $aeRun '0.1.7' 1
+        Check 'a package entry beside a file entry of the same package wins: all its findings count' `
+            (($r.Code -ne 0) -and ($r.Out -match '\[FAIL\] go vet \(\d') -and ($r.Out -match 'up\.go:\d+:\d+: fmt\.Printf format') -and ($r.Out -notmatch 'go\.lintReplacements files')) $r.Out
+        [IO.File]::WriteAllText($aeCfg, '{"go":{"lintReplacements":["example.com/dep/dep.go"]}}')
+        Set-GoFile $upGo "package dep`n`n// Up returns two.`nfunc Up() int { return 2 }`n"
+        Set-GoFile $aeMain "package main`n`nimport `"os`"`n`n// Add returns the sum of a and b.`nfunc Add(a, b int) int { return a + b }`n`nfunc main() {`n`tos.WriteFile(`"x.txt`", nil, 0o600)`n`t_ = Add(1, 2)`n}"
+        $r = & $aeRun '0.1.7' 1
+        Check 'beside a go.lintReplacements file entry, a root finding still fails the run' `
+            (($r.Code -ne 0) -and ($r.Out -match '\[FAIL\] golangci-lint \(\d') -and ($r.Out -match 'main\.go:\d+:\d+: Error return value')) $r.Out
+        Set-GoFile $aeMain $aeClean
+        Set-GoFile (Join-Path $aeDep 'dep.go') "// Package dep is owned by this repository.`npackage dep`n`nimport `"os`"`n`n// Do writes a file.`nfunc Do() { os.WriteFile(`"x.txt`", nil, 0o600) } //nolint:errcheck // fixture`n"
+        $r = & $aeRun '0.1.7' 1
+        Check 'a //nolint finding in a go.lintReplacements listed file passes' `
+            (($r.Code -eq 0) -and ($r.Out -match '\[PASS\] golangci-lint \(go\.lintReplacements files\)')) $r.Out
+        Set-GoFile (Join-Path $aeDep 'dep.go') $depOk
+        # A sibling that does not type-check leaves the listed file unanalyzed: FAIL. The root
+        # does not import dep here, so it is the file-entry phase that says it, not the build.
+        $useDep = Join-Path $aeg 'usedep.go'
+        $useDepText = Get-Content $useDep -Raw
+        Remove-Item $useDep
+        Set-GoFile $upGo "package dep`n`n// Up calls nothing.`nfunc Up() { undefinedThing() }`n"
+        $r = & $aeRun '0.1.7' 1
+        Check 'a type error in an unlisted sibling of a go.lintReplacements file entry fails the run' `
+            (($r.Code -ne 0) -and ($r.Out -match '\[FAIL\] go vet \(go\.lintReplacements files\)') -and ($r.Out -match 'up\.go:\d+:\d+: undefined: undefinedThing')) $r.Out
+        Set-GoFile $useDep $useDepText
+        Set-GoFile $upGo "package dep`n`n// Up returns two.`nfunc Up() int { return 2 }`n"
+        # A listed file that is generated is owned code all the same (Aegis loc_generated.go):
+        # judged, with golangci-lint's generated-file exclusion disabled for that run only --
+        # the template config says `generated: strict`, and the fixture's header matches it.
+        # go vet never skipped generated files: its printf finding fails there first.
+        $genGo = Join-Path $aeDep 'gen.go'
+        $genHead = "// Code generated by fixture. DO NOT EDIT.`n`npackage dep`n`n"
+        Set-GoFile $genGo "$($genHead)import `"os`"`n`n// Gen writes a file.`nfunc Gen() { os.WriteFile(`"g.txt`", nil, 0o600) }`n"
+        [IO.File]::WriteAllText($aeCfg, '{"go":{"lintReplacements":["example.com/dep/gen.go"]}}')
+        $r = & $aeRun '0.1.7' 1
+        Check 'a generated go.lintReplacements listed file is judged: its golangci finding fails the run' `
+            (($r.Code -ne 0) -and ($r.Out -match '\[FAIL\] golangci-lint \(go\.lintReplacements files\)') -and ($r.Out -match 'gen\.go:\d+:\d+: Error return value')) $r.Out
+        Check 'the generated-exclusion config overlay is removed after the run' `
+            (-not @(Get-ChildItem $aeg -Filter '.qgate-golangci-*' -Force -ErrorAction SilentlyContinue)) 'a .qgate-golangci-* overlay was left beside the config'
+        Set-GoFile $genGo "$($genHead)import `"fmt`"`n`n// Gen prints.`nfunc Gen() { fmt.Printf(`"%d`", `"x`") }`n"
+        $r = & $aeRun '0.1.7' 1
+        Check 'go vet judges a generated go.lintReplacements listed file' `
+            (($r.Code -ne 0) -and ($r.Out -match '\[FAIL\] go vet \(go\.lintReplacements files\)') -and ($r.Out -match 'gen\.go:\d+:\d+: fmt\.Printf format')) $r.Out
+        Set-GoFile $genGo "$genHead// Gen returns three.`nfunc Gen() int { return 3 }`n"
+        $r = & $aeRun '0.1.7' 1
+        Check 'a clean generated go.lintReplacements listed file passes' `
+            (($r.Code -eq 0) -and ($r.Out -match '\[PASS\] golangci-lint \(go\.lintReplacements files\)')) $r.Out
+        Remove-Item $genGo
+        # A listed file the host's build constraints exclude is said, not passed silently.
+        Set-GoFile (Join-Path $aeDep 'tagged.go') "//go:build ignore`n`npackage dep`n"
+        [IO.File]::WriteAllText($aeCfg, '{"go":{"lintReplacements":["example.com/dep/tagged.go"]}}')
+        $r = & $aeRun '0.1.7' 1
+        Check 'a build-constraint-excluded go.lintReplacements file is reported as not checked' `
+            (($r.Out -match '\[WARN\] go\.lintReplacements file .*tagged\.go is excluded by build constraints')) $r.Out
+        Remove-Item (Join-Path $aeDep 'tagged.go')
+        [IO.File]::WriteAllText($aeCfg, '{"go":{"lintReplacements":["example.com/dep/missing.go"]}}')
+        $r = & $aeRun '0.1.7' 1
+        Check 'a go.lintReplacements file entry naming no existing file fails the run' `
+            (($r.Code -ne 0) -and ($r.Out -match "go\.lintReplacements 'example\.com/dep/missing\.go': no file missing\.go in package example\.com/dep")) $r.Out
+        Remove-Item $upGo
         Remove-Item $aeCfg
         Set-GoFile (Join-Path $aeDep 'dep.go') $depBad
         $r = & $aeRun '0.1.7' 1

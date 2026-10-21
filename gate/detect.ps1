@@ -943,7 +943,9 @@ function Get-GoLintGoos([string]$Root, [string]$HostGoos) {
 # upstream one is not this repository's to lint). The lint runs from the stack directory
 # over its own ./... plus those package directories, through a throwaway go.work that
 # uses the stack and each replacement module (a repository's own go.work is used as it
-# is). $null when the key is absent; else .Pkgs (directories, relative to $Dir), .Mods,
+# is). $null when the key is absent; else .Pkgs (directories, relative to $Dir), .FilePkgs
+# (#159: packages of file entries, './rel'), .FilePkgDirs (their full directories), .Files
+# (the listed files, full paths), .Ignored (listed files build constraints exclude), .Mods,
 # .Work (the go.work path, $null when the repository has its own) and .Error.
 function Get-GoLintReplacements([string]$Root, [string]$Dir) {
     $file = Join-Path $Root 'qgate.json'
@@ -957,12 +959,21 @@ function Get-GoLintReplacements([string]$Root, [string]$Dir) {
     }
     $pkgs = [Collections.Generic.List[string]]::new()
     $mods = [Collections.Generic.List[string]]::new()
+    # quality-gate#159: an entry naming a .go file (<package import path>/<file>.go) lints
+    # its package, but only findings in the listed files count -- an owned file beside
+    # pristine upstream files of the same package. Path -> package dir ('./rel').
+    $files = [ordered]@{}
+    $pkgDir = @{}
+    $ignored = [Collections.Generic.List[string]]::new()
     $prev = $global:LASTEXITCODE
     Push-Location -LiteralPath $Dir
     try {
         foreach ($pat in $raw) {
             $fmt = '{{.ImportPath}}{{"\t"}}{{.Dir}}{{"\t"}}{{with .Module}}{{.Dir}}{{"\t"}}{{with .Replace}}{{.Path}}{{end}}{{end}}'
-            $rows = @(& go list -find -f $fmt $pat.Trim() 2>&1 | ForEach-Object { "$_" })
+            $p = $pat.Trim()
+            $file = $null
+            if ($p -match '^(?<pkg>[^\s]+)/(?<file>[^/\\]+\.go)$' -and $p -notmatch '\.\.\.') { $p = $Matches.pkg; $file = $Matches.file }
+            $rows = @(& go list -find -f $fmt $p 2>&1 | ForEach-Object { "$_" })
             if ($LASTEXITCODE -ne 0 -or -not $rows) { return (& $bad "qgate.json go.lintReplacements '$pat' does not resolve from $Dir -- $((@($rows) | Select-Object -Last 1) -join '')") }
             # `go list` warns "matched no packages" on stderr and still exits 0.
             if (-not @($rows | Where-Object { $_ -match "`t" })) { return (& $bad "qgate.json go.lintReplacements '$pat' does not resolve from $Dir -- $((@($rows) | Select-Object -Last 1) -join '')") }
@@ -970,11 +981,23 @@ function Get-GoLintReplacements([string]$Root, [string]$Dir) {
                 $f = $row -split "`t"
                 $local = ($f.Count -ge 4) -and $f[3] -and ($f[3].StartsWith('.') -or [IO.Path]::IsPathRooted($f[3]))
                 if (-not $local) { return (& $bad "qgate.json go.lintReplacements '$pat': $($f[0]) is not in a module go.mod replaces with a local directory") }
-                $rel = [IO.Path]::GetRelativePath($Dir, $f[1])
-                $pkgs.Add('./' + ($rel -replace '\\', '/'))
+                $rel = './' + ([IO.Path]::GetRelativePath($Dir, $f[1]) -replace '\\', '/')
+                if ($file) {
+                    $fp = [IO.Path]::GetFullPath((Join-Path $f[1] $file))
+                    if (-not (Test-Path -LiteralPath $fp -PathType Leaf)) { return (& $bad "qgate.json go.lintReplacements '$pat': no file $file in package $($f[0]) ($($f[1]))") }
+                    $files[$fp] = $rel
+                    $pkgDir[$rel] = [IO.Path]::GetFullPath($f[1])
+                    # Excluded by build constraints on this host: go vet and golangci-lint never see it.
+                    $ign = "$(& go list -find -f '{{join .IgnoredGoFiles "|"}}' $p 2>$null)".Trim() -split '\|'
+                    if ($file -in $ign) { $ignored.Add($fp) }
+                } else { $pkgs.Add($rel) }
                 if (-not $mods.Contains($f[2])) { $mods.Add($f[2]) }
             }
         }
+        # A package also listed whole wins: all its findings count.
+        foreach ($k in @($files.Keys)) { if ($pkgs.Contains($files[$k])) { $files.Remove($k); [void]$ignored.Remove($k) } }
+        $filePkgs = @($files.Values | Sort-Object -Unique)
+        $filePkgDirs = @($filePkgs | ForEach-Object { $pkgDir[$_] })
         $work = $null
         $own = "$(& go env GOWORK 2>$null)".Trim()
         if (-not $own -or $own -eq 'off') {
@@ -987,8 +1010,131 @@ function Get-GoLintReplacements([string]$Root, [string]$Dir) {
             $lines = @($use | ForEach-Object { "`t" + '"' + ($_ -replace '\\', '\\') + '"' })
             [IO.File]::WriteAllText($work, "go $ver`n`nuse (`n" + ($lines -join "`n") + "`n)`n")
         }
-        [pscustomobject]@{ Pkgs = @($pkgs | Sort-Object -Unique); Mods = @($mods); Work = $work; Error = '' }
+        [pscustomobject]@{ Pkgs = @($pkgs | Sort-Object -Unique); FilePkgs = $filePkgs; FilePkgDirs = $filePkgDirs; Files = @($files.Keys); Ignored = @($ignored); Mods = @($mods); Work = $work; Error = '' }
     } finally { Pop-Location; $global:LASTEXITCODE = $prev }
+}
+
+# quality-gate#159: where a finding of a go.lintReplacements file-entry package belongs.
+# 'keep' -- a listed file, or a path that is not a .go file of those packages (a cgo or
+# otherwise unknown location is never written off as upstream); 'drop' -- an existing .go
+# file directly in one of $PkgDirs that is not listed (a pristine upstream sibling). Paths
+# are normalized (separators, `..`) and compared case-insensitively, as Windows paths are.
+function Get-GoListedVerdict([string]$Path, [string]$Base, $Files, $PkgDirs) {
+    if (-not $Path) { return 'keep' }
+    $full = try { [IO.Path]::GetFullPath($(if ([IO.Path]::IsPathRooted($Path)) { $Path } else { Join-Path $Base $Path })) } catch { return 'keep' }
+    if (@($Files | Where-Object { [string]::Equals($_, $full, [StringComparison]::OrdinalIgnoreCase) })) { return 'keep' }
+    $dir = [IO.Path]::GetDirectoryName($full)
+    $own = @($PkgDirs | Where-Object { [string]::Equals($_.TrimEnd('\', '/'), $dir, [StringComparison]::OrdinalIgnoreCase) })
+    if ($own -and $full -like '*.go' -and (Test-Path -LiteralPath $full -PathType Leaf)) { return 'drop' }
+    'keep'
+}
+
+# quality-gate#159: `go vet` output of file-entry packages, run from $Base. A finding line is
+# `path.go:line[:col]: ` relative to $Base; indented lines continue it. A load, syntax or
+# type error is printed by the vet driver as `vet: `/`vet.exe: ` and is kept whatever file it
+# names: a package that does not type-check leaves the listed file unanalyzed. Every other
+# line but a `# pkg` header is kept too (unknown output is not upstream noise).
+function Select-GoVetListed([string]$Out, [string]$Base, $Files, $PkgDirs) {
+    $kept = [Collections.Generic.List[string]]::new()
+    $dropped = 0
+    $cur = $null
+    foreach ($line in @($Out -split "`r?`n")) {
+        if (-not $line.Trim() -or $line -match '^# ') { $cur = $null; continue }
+        if ($line -match '^vet(?:\.exe)?: ') { $kept.Add($line); $cur = 'keep'; continue }
+        if ($line -match '^(?<p>(?:[A-Za-z]:)?[^:\s][^:]*?\.go):\d+(?::\d+)?: ') {
+            $cur = Get-GoListedVerdict $Matches.p $Base $Files $PkgDirs
+            if ($cur -eq 'keep') { $kept.Add($line) } else { $dropped++ }
+            continue
+        }
+        if ($cur -and $line -match '^\s+\S') { if ($cur -eq 'keep') { $kept.Add($line) }; continue }
+        $cur = 'keep'; $kept.Add($line)
+    }
+    [pscustomobject]@{ Kept = @($kept); Dropped = $dropped }
+}
+
+# quality-gate#159: golangci-lint JSON report (--output.json.path) of file-entry packages.
+# Its issues are what remains after the repository's exclusions and //nolint, so the
+# ownership filter only narrows that. A typecheck issue is kept whatever file it names;
+# Report.Error or an unreadable report is .Error (the run fails with the console output).
+function Select-GolangciListed([string]$Json, [string]$Base, $Files, $PkgDirs) {
+    $r = try { $Json | ConvertFrom-Json } catch { $null }
+    if ($null -eq $r -or $r.PSObject.Properties.Name -notcontains 'Issues') { return [pscustomobject]@{ Kept = @(); Dropped = 0; Error = 'unreadable golangci-lint JSON report' } }
+    if ($r.Report -and $r.Report.Error) { return [pscustomobject]@{ Kept = @(); Dropped = 0; Error = "$($r.Report.Error)" } }
+    $kept = [Collections.Generic.List[string]]::new()
+    $dropped = 0
+    foreach ($i in @($r.Issues | Where-Object { $_ })) {
+        $p = "$($i.Pos.Filename)"
+        $v = if ($i.FromLinter -eq 'typecheck') { 'keep' } else { Get-GoListedVerdict $p $Base $Files $PkgDirs }
+        if ($v -eq 'keep') { $kept.Add("$(if ($p) { $p } else { '<no position>' }):$($i.Pos.Line):$($i.Pos.Column): $($i.Text) ($($i.FromLinter))") } else { $dropped++ }
+    }
+    [pscustomobject]@{ Kept = @($kept); Dropped = $dropped; Error = '' }
+}
+
+# quality-gate#159: the repository's golangci-lint v2 config text with
+# linters.exclusions.generated set to `disable` (golangci-lint.run/docs/configuration/file:
+# strict | lax | disable; no CLI flag or env override exists, and -c reads one file). A
+# listed file is owned code even when generated (Aegis loc_generated.go: generated, then
+# modified), so it is judged; the ownership filter keeps that from adding upstream noise.
+# Block-style YAML is edited by indentation (value replaced, or the key inserted); JSON
+# through ConvertFrom-Json. $null when it cannot be done (flow-style mapping, TOML, a
+# config without `version: "2"`) -- the caller fails the run: a listed file left unjudged.
+function Get-GolangciNoGeneratedConfig([string]$Path) {
+    if (-not $Path) { return "version: `"2`"`nlinters:`n  exclusions:`n    generated: disable`n" }
+    $text = Get-Content -LiteralPath $Path -Raw
+    if ($Path -match '\.json$') {
+        $j = try { $text | ConvertFrom-Json } catch { return $null }
+        if ("$($j.version)" -ne '2') { return $null }
+        if (-not $j.linters) { $j | Add-Member linters ([pscustomobject]@{}) }
+        if (-not $j.linters.exclusions) { $j.linters | Add-Member exclusions ([pscustomobject]@{}) -Force }
+        $j.linters.exclusions | Add-Member generated 'disable' -Force
+        return ($j | ConvertTo-Json -Depth 64)
+    }
+    if ($Path -notmatch '\.ya?ml$' -or $text -notmatch '(?m)^version:\s*[''"]?2[''"]?\s*(#.*)?$') { return $null }
+    $l = [Collections.Generic.List[string]]::new([string[]]@($text -split "`r?`n"))
+    $content = { param($s) $s.Trim() -and -not $s.TrimStart().StartsWith('#') }
+    $ind = { param($s) $s.Length - $s.TrimStart().Length }
+    $li = -1
+    for ($i = 0; $i -lt $l.Count; $i++) {
+        if ($l[$i] -match '^linters:\s*(#.*)?$') { $li = $i; break }
+        if ($l[$i] -match '^linters:\s*\S') { return $null }
+    }
+    if ($li -lt 0) { return ($text.TrimEnd() + "`nlinters:`n  exclusions:`n    generated: disable`n") }
+    $end = $l.Count
+    for ($i = $li + 1; $i -lt $l.Count; $i++) { if ((& $content $l[$i]) -and (& $ind $l[$i]) -eq 0) { $end = $i; break } }
+    $ci = 2
+    for ($i = $li + 1; $i -lt $end; $i++) { if (& $content $l[$i]) { $ci = & $ind $l[$i]; break } }
+    $pad = ' ' * $ci
+    $ei = -1
+    for ($i = $li + 1; $i -lt $end; $i++) {
+        if ($l[$i] -match "^$pad" + 'exclusions:\s*(#.*)?$') { $ei = $i; break }
+        if ($l[$i] -match "^$pad" + 'exclusions:\s*\S') { return $null }
+    }
+    if ($ei -lt 0) {
+        $l.Insert($li + 1, "${pad}exclusions:"); $l.Insert($li + 2, "$pad${pad}generated: disable")
+        return ($l -join "`n")
+    }
+    $eEnd = $end
+    for ($i = $ei + 1; $i -lt $end; $i++) { if ((& $content $l[$i]) -and (& $ind $l[$i]) -le $ci) { $eEnd = $i; break } }
+    $gi = $ci * 2
+    for ($i = $ei + 1; $i -lt $eEnd; $i++) { if (& $content $l[$i]) { $gi = & $ind $l[$i]; break } }
+    $gpad = ' ' * $gi
+    for ($i = $ei + 1; $i -lt $eEnd; $i++) {
+        if ($l[$i] -match "^$gpad" + 'generated:') { $l[$i] = "${gpad}generated: disable"; return ($l -join "`n") }
+    }
+    $l.Insert($ei + 1, "${gpad}generated: disable")
+    $l -join "`n"
+}
+
+# quality-gate#159: a listed file golangci-lint's generated-file exclusion would skip (the
+# `lax` markers, a superset of `strict`: a `Code generated`/`DO NOT EDIT`/`autogenerated
+# file` comment before `package`).
+function Test-GoGeneratedFile([string]$Path) {
+    $head = @(Get-Content -LiteralPath $Path -TotalCount 200 -ErrorAction SilentlyContinue)
+    foreach ($l in $head) {
+        if ($l -match '^\s*package\s') { return $false }
+        if ($l -match '(?i)^\s*(//|/\*).*(code generated|do not edit|autogenerated file)') { return $true }
+    }
+    $false
 }
 
 # The local `replace` targets of the module in $Dir (go mod edit -json): what the #158
