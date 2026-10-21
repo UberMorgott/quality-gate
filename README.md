@@ -117,6 +117,7 @@ Place one optional `qgate.json` at the repository root. Tool-specific rules rema
 | `godot.warningsFail` | Opt-in, default `false`: `true` fails the `godot test` and `godot smoke` runs on any engine `WARNING:` line (leading whitespace allowed), listing them; `godot import` is unaffected. |
 | `go.tags` | Array of build-tag sets (`["valheim", "windrose"]`; `"a,b"` = both at once); every Go phase runs once per set via `GOFLAGS=-tags=<set>`, for tag-per-binary modules. |
 | `go.lintGoos` | Array of extra GOOS targets for full vet/lint; host target is omitted and cross-target runs disable cgo. |
+| `go.lintReplacements` | Array of import path patterns (e.g. `["example.com/dep/..."]`) of owned packages in modules `go.mod` replaces with a local directory. `go vet` + `golangci-lint` lint them beside `./...` (through a temporary `go.work`), also when `aegis lint` passed; a pattern that does not resolve to such a package fails the run. |
 | `go.lintEngine` | `"auto"` (default) or `"golangci"`: `"golangci"` keeps `go vet` + `golangci-lint run` even when `aegis lint` is installed. |
 | `go.deterministic` | Array of root-relative package directories for purity/property-test advisories. |
 | `go.flaky` | `true` or options: `count` (20; 1..500), `budget` seconds (180; 10..3600), `cpu` (`"1,2"`), `race` (true), `fail` (false), `packages` (root-relative directories; otherwise changed test packages). |

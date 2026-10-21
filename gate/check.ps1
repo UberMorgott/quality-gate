@@ -848,7 +848,19 @@ function Invoke-GoStackOnce($s) {
     } elseif ($ae) {
         $script:Lines += "[INFO] lint engine: golangci-lint + go vet -- aegis not used: $($ae.Why)"
     }
-    if (-not $aePass) { Phase 'go vet' { go vet ./... } }
+    # quality-gate#158: qgate.json go.lintReplacements -- owned local-replacement packages
+    # the fallback lints beside ./... (Get-GoLintReplacements), so its verdict covers what
+    # aegis lint's does. A pattern that does not resolve is a FAIL: a declared scope that
+    # cannot be checked is not a pass.
+    $rep = Get-GoLintReplacements $Root $s.Dir
+    if ($rep -and $rep.Error) { Fail $rep.Error }
+    $repPkgs = @(if ($rep -and -not $rep.Error) { $rep.Pkgs })
+    $inWork = { param([scriptblock]$Body)
+        if (-not ($rep -and $rep.Work)) { return (& $Body) }
+        $pw = $env:GOWORK; $env:GOWORK = $rep.Work
+        try { & $Body } finally { $env:GOWORK = $pw }
+    }
+    if (-not $aePass) { Phase 'go vet' { & $inWork { go vet ./... @repPkgs } } }
     # The `go` directive, not the `toolchain` one: it is what both tools compare
     # themselves against, and it is what the error messages call "the targeted Go
     # version".
@@ -887,8 +899,19 @@ function Invoke-GoStackOnce($s) {
         # Every `golangci-lint run` the gate issues carries it (selftest asserts).
         if (-not $aePass) {
             Phase 'golangci-lint' {
-                golangci-lint run --allow-serial-runners --output.text.print-issued-lines=false --output.text.colors=false `
-                    --max-issues-per-linter=0 --max-same-issues=0 @newFrom ./...
+                & $inWork {
+                    golangci-lint run --allow-serial-runners --output.text.print-issued-lines=false --output.text.colors=false `
+                        --max-issues-per-linter=0 --max-same-issues=0 @newFrom ./... @repPkgs
+                }
+            }
+        } elseif ($repPkgs) {
+            # aegis passed, and its ownership is its own judgement: the declared scope still
+            # gets the repository's golangci config, so the declaration is a verdict either way.
+            Phase 'golangci-lint (go.lintReplacements)' {
+                & $inWork {
+                    golangci-lint run --allow-serial-runners --output.text.print-issued-lines=false --output.text.colors=false `
+                        --max-issues-per-linter=0 --max-same-issues=0 @newFrom @repPkgs
+                }
             }
         }
         # Advisory, full level only: a note about the config, not about this change.
@@ -902,8 +925,13 @@ function Invoke-GoStackOnce($s) {
     }
     # Report-level, not a stack line: -Quiet drops a green stack's lines, findings included.
     if ($aeFlagged -and -not $script:Failed -and (Have 'golangci-lint')) {
+        # #158: the two scopes differ when go.mod replaces a module with a local directory
+        # nobody declared: ./... never reaches it, aegis lint may. Said, not guessed from
+        # the findings: the disagreement may be exactly that unlinted scope.
+        $narrow = @(if (-not $repPkgs) { Get-GoLocalReplaces $s.Dir })
+        $scope = if ($narrow) { @("       golangci-lint linted ./... only; not the local replacement module(s) $($narrow -join ', ') -- qgate.json {`"go`": {`"lintReplacements`": [`"<import path>/...`"]}} adds the owned ones to the verdict") } else { @() }
         $script:Warnings += (@("[WARN] aegis lint $($ae.Version) flagged findings golangci-lint + go vet pass -- engines disagree, golangci verdict kept (report it to aegis):") +
-            @($aeFlagged -split "`r?`n" | Select-Object -First 20 | ForEach-Object { "       $_" })) -join "`n"
+            @($aeFlagged -split "`r?`n" | Select-Object -First 20 | ForEach-Object { "       $_" }) + $scope) -join "`n"
     } elseif ($aeFlagged -and $script:Failed) {
         $script:Lines += "[NOTE] failing lint verdict from golangci-lint + go vet (aegis lint flagged too)"
     }
@@ -915,17 +943,20 @@ function Invoke-GoStackOnce($s) {
         # No lintGoos key is $null, and @($null.Goos) is one $null element: every -Full run
         # repeated go vet and golangci-lint under an empty "GOOS=" heading (#84, measured).
         foreach ($os in @($lg.Goos | Where-Object { $_ })) {
-            Phase "go vet GOOS=$os" { Invoke-WithGoos $os { go vet ./... } }
+            Phase "go vet GOOS=$os" { Invoke-WithGoos $os { & $inWork { go vet ./... @repPkgs } } }
             if (Have 'golangci-lint') {
                 Phase "golangci-lint GOOS=$os" {
                     Invoke-WithGoos $os {
-                        golangci-lint run --allow-serial-runners --output.text.print-issued-lines=false --output.text.colors=false `
-                            --max-issues-per-linter=0 --max-same-issues=0 @newFrom ./...
+                        & $inWork {
+                            golangci-lint run --allow-serial-runners --output.text.print-issued-lines=false --output.text.colors=false `
+                                --max-issues-per-linter=0 --max-same-issues=0 @newFrom ./... @repPkgs
+                        }
                     }
                 }
             }
         }
     }
+    if ($rep -and $rep.Work) { Remove-Item -LiteralPath $rep.Work -Force -ErrorAction SilentlyContinue }
     # Every `go test` below runs the repository's own test code, and inside a commit hook
     # that code inherited the committing repo's GIT_INDEX_FILE (#116): a test that `git
     # init`s a scratch repo in t.TempDir() and commits there built its trees from the

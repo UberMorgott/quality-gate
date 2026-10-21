@@ -933,6 +933,75 @@ function Get-GoLintGoos([string]$Root, [string]$HostGoos) {
     [pscustomobject]@{ Goos = $goos; Error = '' }
 }
 
+# quality-gate#158: qgate.json {"go": {"lintReplacements": ["example.com/dep/..."]}} -- the
+# packages of local `replace` modules this repository owns, as import paths the stack's
+# go.mod resolves (its replace applied). `./...` never reaches another module, so without
+# this the golangci-lint + go vet fallback judged a narrower scope than aegis lint, whose
+# no-pattern run covers owned replacements, and its "engines disagree" WARN downgraded a
+# real finding. Each pattern is resolved from the stack directory, never walked out of
+# go.mod: only a package of a module replaced by a LOCAL directory is accepted (an
+# upstream one is not this repository's to lint). The lint runs from the stack directory
+# over its own ./... plus those package directories, through a throwaway go.work that
+# uses the stack and each replacement module (a repository's own go.work is used as it
+# is). $null when the key is absent; else .Pkgs (directories, relative to $Dir), .Mods,
+# .Work (the go.work path, $null when the repository has its own) and .Error.
+function Get-GoLintReplacements([string]$Root, [string]$Dir) {
+    $file = Join-Path $Root 'qgate.json'
+    if (-not (Test-Path $file)) { return $null }
+    $json = try { Get-Content $file -Raw | ConvertFrom-Json } catch { $null }
+    if ($null -eq $json -or $null -eq $json.go -or $json.go.PSObject.Properties.Name -notcontains 'lintReplacements') { return $null }
+    $raw = $json.go.lintReplacements
+    $bad = { param($m) [pscustomobject]@{ Pkgs = @(); Mods = @(); Work = $null; Error = $m } }
+    if ($raw -isnot [Array] -or -not $raw -or @($raw | Where-Object { $_ -isnot [string] -or -not $_.Trim() })) {
+        return (& $bad 'qgate.json "go.lintReplacements" must be a non-empty array of import path patterns, e.g. ["example.com/dep/..."]')
+    }
+    $pkgs = [Collections.Generic.List[string]]::new()
+    $mods = [Collections.Generic.List[string]]::new()
+    $prev = $global:LASTEXITCODE
+    Push-Location -LiteralPath $Dir
+    try {
+        foreach ($pat in $raw) {
+            $fmt = '{{.ImportPath}}{{"\t"}}{{.Dir}}{{"\t"}}{{with .Module}}{{.Dir}}{{"\t"}}{{with .Replace}}{{.Path}}{{end}}{{end}}'
+            $rows = @(& go list -find -f $fmt $pat.Trim() 2>&1 | ForEach-Object { "$_" })
+            if ($LASTEXITCODE -ne 0 -or -not $rows) { return (& $bad "qgate.json go.lintReplacements '$pat' does not resolve from $Dir -- $((@($rows) | Select-Object -Last 1) -join '')") }
+            # `go list` warns "matched no packages" on stderr and still exits 0.
+            if (-not @($rows | Where-Object { $_ -match "`t" })) { return (& $bad "qgate.json go.lintReplacements '$pat' does not resolve from $Dir -- $((@($rows) | Select-Object -Last 1) -join '')") }
+            foreach ($row in @($rows | Where-Object { $_ -match "`t" })) {
+                $f = $row -split "`t"
+                $local = ($f.Count -ge 4) -and $f[3] -and ($f[3].StartsWith('.') -or [IO.Path]::IsPathRooted($f[3]))
+                if (-not $local) { return (& $bad "qgate.json go.lintReplacements '$pat': $($f[0]) is not in a module go.mod replaces with a local directory") }
+                $rel = [IO.Path]::GetRelativePath($Dir, $f[1])
+                $pkgs.Add('./' + ($rel -replace '\\', '/'))
+                if (-not $mods.Contains($f[2])) { $mods.Add($f[2]) }
+            }
+        }
+        $work = $null
+        $own = "$(& go env GOWORK 2>$null)".Trim()
+        if (-not $own -or $own -eq 'off') {
+            $ver = "$(& go env GOVERSION 2>$null)".Trim() -replace '^go', '' -replace '[^0-9.].*$', ''
+            $work = Join-Path ([IO.Path]::GetTempPath()) "qgate-lint-$PID-$([IO.Path]::GetRandomFileName()).work"
+            $use = @((Resolve-Path -LiteralPath $Dir).Path) + @($mods)
+            # Native separators, Go-quoted (\ escaped): measured on go1.27.2/Windows, a
+            # forward-slash path is not matched to the module directory ("directory prefix
+            # . does not contain modules listed in go.work").
+            $lines = @($use | ForEach-Object { "`t" + '"' + ($_ -replace '\\', '\\') + '"' })
+            [IO.File]::WriteAllText($work, "go $ver`n`nuse (`n" + ($lines -join "`n") + "`n)`n")
+        }
+        [pscustomobject]@{ Pkgs = @($pkgs | Sort-Object -Unique); Mods = @($mods); Work = $work; Error = '' }
+    } finally { Pop-Location; $global:LASTEXITCODE = $prev }
+}
+
+# The local `replace` targets of the module in $Dir (go mod edit -json): what the #158
+# advisory names when the fallback linted ./... alone.
+function Get-GoLocalReplaces([string]$Dir) {
+    $prev = $global:LASTEXITCODE
+    try {
+        $j = try { (& go mod edit -json (Join-Path $Dir 'go.mod') 2>$null | Out-String) | ConvertFrom-Json } catch { $null }
+        @(@($j.Replace) | Where-Object { $_ -and $_.New.Path -and ($_.New.Path.StartsWith('.') -or [IO.Path]::IsPathRooted($_.New.Path)) } |
+            ForEach-Object { "$($_.Old.Path) => $($_.New.Path)" })
+    } finally { $global:LASTEXITCODE = $prev }
+}
+
 # quality-gate#111: qgate.json {"go": {"tags": ["valheim", "windrose"]}} -- build-tag sets.
 # A repo whose main package lives entirely behind tags (one binary per tag) could never be
 # green, and its tagged files were never vetted or linted. Each entry is one set, as

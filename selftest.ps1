@@ -1050,6 +1050,59 @@ if (Get-Command golangci-lint -ErrorAction SilentlyContinue) {
         $r = & $aeRun '0.1.7' 0
         Check 'a golangci exclusion naming govet stays on go vet (aegis-engine#15)' `
             (($r.Code -eq 0) -and -not $r.Called -and ($r.Out -match 'excludes govet findings') -and ($r.Out -match '\[PASS\] go vet')) $r.Out
+        Remove-Item (Join-Path $aeg '.golangci.yml')
+        Copy-Item (Join-Path $PSScriptRoot 'templates\.golangci.yml') $aeg
+
+        # #158: an owned local replacement (go.mod replace => ./third_party/vendor/dep, its
+        # own module) is outside ./... . Declared in qgate.json go.lintReplacements, the
+        # fallback lints it from the root module, so its errcheck finding fails the run
+        # whether aegis flagged (1), could not judge (2), passed (0) or is off. Fixed, the
+        # run passes; an upstream package of the same module that is not declared adds no
+        # FAIL; undeclared, the disagreement WARN names the unlinted replacement.
+        # Under vendor/ so detection does not make it a Go stack of its own (SkipDirs), and the
+        # template's vendor/ exclusion dropped: an owned replacement is this repo's code.
+        $aeYml = Join-Path $aeg '.golangci.yml'
+        [IO.File]::WriteAllText($aeYml, ([IO.File]::ReadAllText($aeYml) -replace "(?m)^\s*- 'vendor/'\r?\n", ''))
+        $aeDep = Join-Path $aeg 'third_party\vendor\dep'
+        New-Item -ItemType Directory -Path (Join-Path $aeDep 'sub') -Force | Out-Null
+        Set-Content (Join-Path $aeg 'go.mod') "module gatefixture`n`ngo 1.27.1`n`nrequire example.com/dep v0.0.0`n`nreplace example.com/dep => ./third_party/vendor/dep`n"
+        Set-Content (Join-Path $aeDep 'go.mod') "module example.com/dep`n`ngo 1.27.1`n"
+        $depBad = "// Package dep is owned by this repository.`npackage dep`n`nimport `"os`"`n`n// Do writes a file.`nfunc Do() { os.WriteFile(`"x.txt`", nil, 0o600) }`n"
+        $depOk = "// Package dep is owned by this repository.`npackage dep`n`n// Do returns one.`nfunc Do() int { return 1 }`n"
+        Set-GoFile (Join-Path $aeDep 'dep.go') $depBad
+        Set-GoFile (Join-Path $aeDep 'sub\sub.go') "// Package sub is upstream code.`npackage sub`n`n// Up returns two.`nfunc Up() int { return 2 }`n"
+        Set-GoFile (Join-Path $aeg 'usedep.go') "package main`n`nimport `"example.com/dep`"`n`nvar _ = dep.Do`n"
+        $aeCfg = Join-Path $aeg 'qgate.json'
+        [IO.File]::WriteAllText($aeCfg, '{"go":{"lintReplacements":["example.com/dep"]}}')
+        foreach ($c in 1, 2, 0) {
+            $r = & $aeRun '0.1.7' $c
+            Check "an owned replacement's lint finding fails the run (aegis exit $c)" `
+                (($r.Code -ne 0) -and ($r.Out -match '\[FAIL\] golangci-lint') -and ($r.Out -match 'dep\.go:\d+:\d+: Error return value of .os\.WriteFile. is not checked') -and
+                ($r.Out -notmatch 'engines disagree')) $r.Out
+        }
+        $env:QGATE_NO_AEGIS = '1'
+        $r = & $aeRun '0.1.7' 0
+        $env:QGATE_NO_AEGIS = $null
+        Check "an owned replacement's lint finding fails the run (aegis off)" `
+            (($r.Code -ne 0) -and -not $r.Called -and ($r.Out -match '\[FAIL\] golangci-lint') -and ($r.Out -match 'dep\.go:\d+:\d+: Error return value')) $r.Out
+        Check 'the go.lintReplacements go.work is removed after the run' `
+            (-not @(Get-ChildItem ([IO.Path]::GetTempPath()) -Filter 'qgate-lint-*.work' -ErrorAction SilentlyContinue | Where-Object { $_.LastWriteTime -gt (Get-Date).AddMinutes(-2) })) 'a qgate-lint-*.work was left in TEMP'
+        Set-GoFile (Join-Path $aeDep 'dep.go') $depOk
+        Set-GoFile (Join-Path $aeDep 'sub\sub.go') "// Package sub is upstream code.`npackage sub`n`nimport `"os`"`n`n// Up writes a file.`nfunc Up() { os.WriteFile(`"y.txt`", nil, 0o600) }`n"
+        $r = & $aeRun '0.1.7' 1
+        Check 'a fixed owned replacement passes; an undeclared upstream package adds no FAIL' `
+            (($r.Code -eq 0) -and ($r.Out -match '\[PASS\] golangci-lint') -and ($r.Out -notmatch 'sub\.go') -and
+            ($r.Out -match 'engines disagree') -and ($r.Out -notmatch 'linted \./\.\.\. only')) $r.Out
+        [IO.File]::WriteAllText($aeCfg, '{"go":{"lintReplacements":["example.com/nope/..."]}}')
+        $r = & $aeRun '0.1.7' 1
+        Check 'a go.lintReplacements pattern that does not resolve fails the run' `
+            (($r.Code -ne 0) -and ($r.Out -match "go\.lintReplacements 'example\.com/nope/\.\.\.' does not resolve")) $r.Out
+        Remove-Item $aeCfg
+        Set-GoFile (Join-Path $aeDep 'dep.go') $depBad
+        $r = & $aeRun '0.1.7' 1
+        Check 'undeclared, the disagreement warning names the local replacement golangci did not lint' `
+            (($r.Code -eq 0) -and ($r.Out -match 'engines disagree') -and
+            ($r.Out -match 'linted \./\.\.\. only; not the local replacement module\(s\) example\.com/dep => \./third_party/vendor/dep')) $r.Out
     } finally {
         $env:PATH = $aeSaved.PATH; $env:QGATE_NO_AEGIS = $aeSaved.QGATE_NO_AEGIS
         Remove-Item Env:FAKE_AEGIS_VER, Env:FAKE_AEGIS_CODE, Env:FAKE_AEGIS_LOG -ErrorAction SilentlyContinue
