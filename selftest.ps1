@@ -2450,7 +2450,9 @@ if ($IsWindows) {
         $warnOn = & $runGd $warn
         $quietOn = & $runGd $quiet
         $gdTestText = [IO.File]::ReadAllText($gdTest)
-        Remove-Item $gdTest, "$gdTest.uid"
+        # #152: the .gd.uid sidecar is written by a real engine run and gitignored -- a fresh
+        # clone has none.
+        Remove-Item $gdTest, "$gdTest.uid" -ErrorAction SilentlyContinue
         try { $warnSmoke = & $runGd $warn } finally { [IO.File]::WriteAllText($gdTest, $gdTestText) }
         Set-Content $gdCfg '{"godot": {"warningsFail": "yes"}}'
         $warnBad = & $runGd $warn
@@ -2466,23 +2468,44 @@ if ($IsWindows) {
         (($warnBad.Code -eq 0) -and ($warnBad.Out -match 'godot\.warningsFail must be true or false')) $warnBad.Out
 
     # #150: in a test run the engine's lower-case `ConfigFile parse error` is a rejection
-    # path working, the capitalised `Parse Error:` is a file that did not parse. Both lines
-    # are Godot 4.7.1's own; the stand-ins print them for `--script` runs only, because the
-    # import and the smoke boot fail on any ERROR: line.
+    # path working (Godot 4.7.1's own line); the stand-in prints it for `--script` runs only,
+    # because the import and the smoke boot fail on any ERROR: line. (#150 also asserted that a
+    # bare "ERROR: Parse Error: ... [Resource file]" fails a test run; #152 reversed that --
+    # a negative test loads a corrupt .tscn on purpose -- see the checks below.)
     $onScript = "@echo off`r`necho %* | findstr /C:`"--script`" >nul && echo "
     $cfgErr = Join-Path $gdShims 'godot-cfgerr.cmd'
     [IO.File]::WriteAllText($cfgErr, $onScript + "ERROR: ConfigFile parse error at user://settings.cfg_corrupt:0: Unexpected EOF while parsing simple tag.`r`nexit /b 0`r`n")
-    $parseErr = Join-Path $gdShims 'godot-parseerr.cmd'
-    [IO.File]::WriteAllText($parseErr, $onScript + "ERROR: Parse Error: Parse error. [Resource file res://broken.tscn:4]`r`nexit /b 0`r`n")
-    try {
-        $cfgErrRun = & $runGd $cfgErr
-        $parseErrRun = & $runGd $parseErr
-    } finally { $env:GODOT_BIN = $priorGodot }
+    try { $cfgErrRun = & $runGd $cfgErr } finally { $env:GODOT_BIN = $priorGodot }
     Check 'a godot test that makes the engine print a ConfigFile parse error passes' `
         (($cfgErrRun.Code -eq 0) -and ($cfgErrRun.Out -match '\[PASS\] godot test boot_headless_test\.gd')) $cfgErrRun.Out
-    Check 'a godot test run that prints Parse Error: still fails and names the line' `
-        (($parseErrRun.Code -ne 0) -and ($parseErrRun.Out -match '\[PASS\] godot import') -and
-        ($parseErrRun.Out -match '\[FAIL\] godot test boot_headless_test\.gd') -and ($parseErrRun.Out -match 'Resource file res://broken\.tscn:4')) $parseErrRun.Out
+
+    # #152: engine errors are line-anchored. A stand-in whose test run (arg 4 = --script)
+    # prints the error words mid-line and the resource parse error a negative test causes
+    # passes; a GDScript parse error or a failed script load at the start of a line still
+    # fails the test, and an engine ERROR: (ANSI-coloured too) still fails import and smoke.
+    $esc = [char]27
+    $mkGd = { param($Name, [string[]]$TestLines, [string[]]$OtherLines)
+        $p = Join-Path $gdShims $Name
+        $body = @('@echo off', 'if "%4"=="--script" goto test') + @($OtherLines | ForEach-Object { "echo $_" }) + @('exit /b 0', ':test') + @($TestLines | ForEach-Object { "echo $_" }) + @('exit /b 0')
+        [IO.File]::WriteAllText($p, ($body -join "`r`n") + "`r`n"); $p }
+    $gdNoise = & $mkGd 'godot-noise.cmd' @('test: the words SCRIPT ERROR: and Failed to load script appear mid-line', 'ERROR: Parse Error: Parse error. [Resource file res://broken.tscn:3]', '   at: load (scene/resources/resource_format_text.cpp:1)') @('checked that no ERROR: is printed')
+    $gdParse = & $mkGd 'godot-parse.cmd' @('SCRIPT ERROR: Parse Error: Expected end of statement', '   at: GDScript::reload (res://main.gd:3)') @()
+    $gdLoad = & $mkGd 'godot-load.cmd' @('ERROR: Failed to load script "res://main.gd" with error "Parse error".') @()
+    $gdAnsi = & $mkGd 'godot-ansi.cmd' @() @("$esc[1;31mERROR:$esc[0;91m Cannot open file res://x.tres$esc[0m")
+    try {
+        $noise = & $runGd $gdNoise
+        $parse = & $runGd $gdParse
+        $load = & $runGd $gdLoad
+        $ansi = & $runGd $gdAnsi
+    } finally { $env:GODOT_BIN = $priorGodot }
+    Check 'godot error words printed mid-line and a resource parse error in a test pass' `
+        (($noise.Code -eq 0) -and ($noise.Out -match '\[PASS\] godot test boot_headless_test\.gd') -and ($noise.Out -match '\[PASS\] godot smoke')) $noise.Out
+    Check 'a GDScript parse error at the start of a line still fails the godot test' `
+        (($parse.Code -ne 0) -and ($parse.Out -match '\[FAIL\] godot test boot_headless_test\.gd') -and ($parse.Out -match 'SCRIPT ERROR: Parse Error')) $parse.Out
+    Check 'a failed script load still fails the godot test' `
+        (($load.Code -ne 0) -and ($load.Out -match '\[FAIL\] godot test boot_headless_test\.gd') -and ($load.Out -match 'Failed to load script')) $load.Out
+    Check 'an ANSI-coloured engine ERROR: still fails the godot import' `
+        (($ansi.Code -ne 0) -and ($ansi.Out -match '\[FAIL\] godot import \(') -and ($ansi.Out -match 'Cannot open file')) $ansi.Out
 
     # #124: qgate.json "env" reaches the engine, {tmp} is a real directory for the run and
     # is gone after it, {root} is the repository, and only placeholder values are

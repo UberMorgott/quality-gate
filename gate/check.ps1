@@ -2456,7 +2456,11 @@ function Invoke-GodotStack($s) {
     # large class of them, so an exit-code-only check reports false green. Every
     # phase below filters its run down to the error lines and fails on any output;
     # a clean run prints nothing.
-    $errs = 'SCRIPT ERROR|ERROR:'
+    # quality-gate#152: anchored to the start of a line, the way the engine prints them
+    # (an optional ANSI colour first), so a test that print()s "... ERROR: ..." mid-line
+    # is not a verdict. SCRIPT/SHADER/USER-prefixed errors are engine errors too.
+    $lead = '^\s*(\x1b\[[0-9;]*m)*\s*'
+    $errs = "$lead((USER|SCRIPT|SHADER) )*ERROR:"
     # quality-gate#104: every engine run below is bounded. `--import` sat at 100 % CPU
     # for 73 minutes on CodeDungeon (a broken %APPDATA%\Godot junction hung every
     # user:// write inside the editor) and the gate waited with it, in the pre-commit
@@ -2473,10 +2477,10 @@ function Invoke-GodotStack($s) {
     # test working. So here only a script that failed to load or parse is a
     # verdict from the output; the test itself speaks through its exit code, which
     # Phase already checks.
-    # quality-gate#150: `Parse Error:` is case-SENSITIVE. Godot 4.7.1 prints a GDScript
-    # or text-resource parse failure capitalised with a colon; the lower-case
-    # `ERROR: ConfigFile parse error at ...` is a data file the test fed it on purpose.
-    $scriptErrs = 'SCRIPT ERROR|(?-i:Parse Error:)|Failed to load script'
+    # #152: a GDScript parse error always arrives as SCRIPT ERROR (then "Failed to load
+    # script"); a bare "ERROR: Parse Error: ... [Resource file ...]" is a .tscn/.tres the
+    # test may load corrupt on purpose -- its exit code says whether that was expected.
+    $scriptErrs = "$lead(USER )?SCRIPT ERROR:|$lead" + "ERROR:\s*(\x1b\[[0-9;]*m)*\s*(Failed to load script|Can't load (the )?script)"
     # #124, opt-in: qgate.json {"godot": {"warningsFail": true}} also fails the test and
     # smoke runs on an engine WARNING: line. A project that reports its own boot failure
     # through push_warning() (CodeDungeon: BOOT_ERROR_CORE_START_FAILED) otherwise passed
