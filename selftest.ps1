@@ -3117,8 +3117,9 @@ if ($held) {
     Check 'a waiting run names a dead holder''s record stale and removes it' `
         ((-not $exitedEarly) -and ($sText -match "stale record of pid $($dead.Id) \(C:\\selftest\\gone-holder\) removed") -and
         -not (Test-Path $slotRec)) "exitedEarly=$exitedEarly $sText"
-    # A live holder: pid, repo root and age are printed while the run waits.
-    [IO.File]::WriteAllText($slotRec, (@{ pid = $PID; pidStart = (Get-Process -Id $PID).StartTime.ToUniversalTime().Ticks; root = 'C:\selftest\live-holder'; started = [DateTime]::UtcNow.AddMinutes(-3).Ticks } | ConvertTo-Json -Compress))
+    # A live holder: pid, repo root and age are printed while the run waits. #153: held 6 min,
+    # over 2^31 ticks -- an Int32 Max() overflowed there and took the queue down.
+    [IO.File]::WriteAllText($slotRec, (@{ pid = $PID; pidStart = (Get-Process -Id $PID).StartTime.ToUniversalTime().Ticks; root = 'C:\selftest\live-holder'; started = [DateTime]::UtcNow.AddMinutes(-6).Ticks } | ConvertTo-Json -Compress))
     $p = Start-Process pwsh -ArgumentList '-NoProfile', '-File', "`"$(Join-Path $qGateDir 'check.ps1')`"", '-Root', "`"$qRepo`"", '-Only', 'go', '-Full' `
         -RedirectStandardOutput $qOut -RedirectStandardError "$qOut.err" -PassThru -NoNewWindow
     $env:QGATE_SLOT_HELD = $savedHeld; $env:QGATE_MAX_PARALLEL = '0'
@@ -3137,7 +3138,7 @@ if ($held) {
     Check 'a full run queues while the machine-wide slot is held' ((-not $early) -and ($qText -match 'waiting for a machine-wide full-gate slot')) "early=$early $qText"
     Check 'the slot holder records its pid and repo root while it runs' $wrote "record not seen for pid $($p.Id)"
     Check 'a waiting run names the slot holder: pid, repo root, age' `
-        ($qText -match "slot 0: pid $PID, C:\\selftest\\live-holder, held 3m\d\ds") $qText
+        ($qText -match "slot 0: pid $PID, C:\\selftest\\live-holder, held 6m\d\ds") $qText
     Check 'a queued full run runs once the slot frees' (($p.ExitCode -eq 0) -and ($qText -match '\[PASS\] go')) "code=$($p.ExitCode) $qText"
     # Its own record is gone with its slot (another gate may hold slot 0 by now: not this pid).
     $after = try { Get-Content -LiteralPath $slotRec -Raw -ErrorAction Stop | ConvertFrom-Json } catch { $null }

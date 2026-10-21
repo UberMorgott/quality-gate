@@ -3560,7 +3560,10 @@ function Get-GateSlotHolders([int]$Slots) {
             "slot ${n}: stale record of pid $($r.pid) ($($r.root)) removed -- that process is gone"
             continue
         }
-        $age = [TimeSpan]::FromTicks([Math]::Max(0, [DateTime]::UtcNow.Ticks - [long]$r.started))
+        # quality-gate#153: [long]0, not 0 -- with an Int32 first argument pwsh binds
+        # Max(int, int) and a holder older than ~3.6 min (2^31 ticks) threw, taking the
+        # whole queue down with an "unavailable" [WARN].
+        $age = [TimeSpan]::FromTicks([Math]::Max([long]0, [DateTime]::UtcNow.Ticks - [long]$r.started))
         "slot ${n}: pid $($r.pid), $($r.root), held $([int]$age.TotalMinutes)m$($age.Seconds.ToString('00'))s"
     }
 }
