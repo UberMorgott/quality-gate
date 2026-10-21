@@ -1467,7 +1467,14 @@ function Get-TrustStore {
     $store
 }
 
-function Get-TrustKey([string]$Root) { (Resolve-Path $Root).Path.TrimEnd('\', '/') }
+function Get-TrustKey([string]$Root) {
+    $p = (Resolve-Path $Root).Path.TrimEnd('\', '/')
+    # quality-gate#147: the stagedTree child gates a temporary worktree of the repo its
+    # parent was asked about; trust is still that repo's, and still per checks hash.
+    if ($env:QGATE_STAGED_CHILD -and $env:QGATE_STAGED_AS -and $env:QGATE_STAGED_DIR -and
+        $p -eq $env:QGATE_STAGED_DIR.TrimEnd('\', '/')) { return (Resolve-Path $env:QGATE_STAGED_AS).Path.TrimEnd('\', '/') }
+    $p
+}
 
 # The checks, re-serialised deterministically: sorted by name, the four known fields
 # only, no whitespace. So reformatting qgate.json, reordering the array or adding a

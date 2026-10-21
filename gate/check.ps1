@@ -567,6 +567,82 @@ if ($script:StagedAtStart -and -not $env:QGATE_NO_REUSE -and -not $ParallelStack
     }
 }
 
+# quality-gate#147: qgate.json {"stagedTree": true} (opt-in) -- inside a commit, the whole
+# gate judges the STAGED tree, in a throwaway detached worktree of this repository whose
+# files are exactly the index git hands the hook. Several sessions sharing one checkout
+# blocked each other's commits: dotnet build and dotnet format read another session's
+# unstaged and untracked files (#135 moved only secrets and typos to a staged snapshot).
+# Opt-in, not the default: the worktree has no untracked state -- no node_modules, no
+# obj/ or build/ trees, no gitignored local config, no submodule checkouts -- so a repo
+# whose stacks need any of that would go red; global package caches (Go, NuGet, cargo)
+# are shared as usual. The worktree is made with --no-checkout (no post-checkout hook),
+# filled by `read-tree -u` of the staged tree, and removed however the run ends. The gate
+# runs there as a child; this process keeps the concurrency guard on the real index.
+# Read from the index, so another session's unstaged qgate.json does not decide it.
+if ($script:StagedAtStart -and -not $env:QGATE_STAGED_CHILD) {
+    $prevCode = $global:LASTEXITCODE
+    $stCfg = try { (& git -C $Root show ':qgate.json' 2>$null | Out-String) | ConvertFrom-Json -ErrorAction Stop } catch { $null }
+    $global:LASTEXITCODE = $prevCode
+    $stOn = $stCfg -and $stCfg.PSObject.Properties.Name -contains 'stagedTree' -and $stCfg.stagedTree -eq $true -and $stCfg.stagedTree -is [bool]
+    if ($stCfg -and $stCfg.PSObject.Properties.Name -contains 'stagedTree' -and $stCfg.stagedTree -isnot [bool]) {
+        [Console]::Error.WriteLine("[WARN] qgate.json stagedTree must be true or false, got '$($stCfg.stagedTree)' -- ignored")
+    }
+    if ($stOn) {
+        & git -C $Root diff --quiet 2>$null
+        $stSame = ($LASTEXITCODE -eq 0) -and -not @(& git -C $Root ls-files -o --exclude-standard 2>$null | Select-Object -First 1)
+        $stTop = "$(& git -C $Root rev-parse --show-toplevel 2>$null)".Trim()
+        $stHead = "$(& git -C $Root rev-parse -q --verify HEAD 2>$null)".Trim()
+        $global:LASTEXITCODE = $prevCode
+        if (-not $stSame -and $stTop -and $stHead) {
+            $stWt = Join-Path ([IO.Path]::GetTempPath()) "qgate-staged-wt-$([guid]::NewGuid().ToString('N').Substring(0, 12))"
+            $stRel = [IO.Path]::GetRelativePath(($stTop -replace '/', '\'), $Root)
+            $stRoot = if ($stRel -eq '.') { $stWt } else { Join-Path $stWt $stRel }
+            # The hook's git variables (GIT_INDEX_FILE above all) would aim every git call
+            # below, and the child's, at the real index.
+            $stSaved = @{}
+            foreach ($v in @(& git rev-parse --local-env-vars 2>$null)) {
+                $item = Get-Item "env:$v" -ErrorAction SilentlyContinue
+                if ($item) { $stSaved[$v] = $item.Value; Remove-Item "env:$v" }
+            }
+            $stCode = 1
+            $stMade = $false
+            try {
+                $o = (& git -C $Root worktree add --detach --no-checkout $stWt $stHead 2>&1 | Out-String)
+                $stMade = ($LASTEXITCODE -eq 0)
+                if ($stMade) { $o = (& git -C $stWt read-tree --reset -u $script:StagedAtStart 2>&1 | Out-String) }
+                if (-not $stMade -or $LASTEXITCODE -ne 0) {
+                    [Console]::Error.WriteLine("[NOTE] qgate: could not build the staged worktree ($(($o.Trim() -split "`r?`n")[0])) -- the gate judges the work tree")
+                } else {
+                    [Console]::Error.WriteLine("[NOTE] qgate: qgate.json stagedTree -- every stack judges the staged tree $($script:StagedAtStart.Substring(0, 12)) in a temporary worktree; unstaged and untracked files are not part of this commit")
+                    $env:QGATE_STAGED_CHILD = '1'
+                    $env:QGATE_STAGED_AS = $Root
+                    $env:QGATE_STAGED_DIR = $stRoot
+                    $stArgv = @(Get-SelfArgv $PSBoundParameters 'Root', 'Extra')
+                    if ($Extra) { $stArgv += $Extra }
+                    try { & pwsh -NoProfile -File $PSCommandPath -Root $stRoot @stArgv; $stCode = $LASTEXITCODE }
+                    finally { Remove-Item env:QGATE_STAGED_CHILD, env:QGATE_STAGED_AS, env:QGATE_STAGED_DIR -ErrorAction SilentlyContinue }
+                    $stMade = 'ran'
+                }
+            } finally {
+                if ($stMade) { & git -C $Root worktree remove --force $stWt 2>&1 | Out-Null }
+                if (Test-Path -LiteralPath $stWt) { Remove-Item -LiteralPath $stWt -Recurse -Force -ErrorAction SilentlyContinue }
+                & git -C $Root worktree prune 2>&1 | Out-Null
+                foreach ($v in $stSaved.Keys) { Set-Item "env:$v" $stSaved[$v] }
+            }
+            if ($stMade -eq 'ran') {
+                # The concurrency guard (see the end of this script) on the real index.
+                $stNow = (& git -C $Root write-tree 2>$null)
+                if ($LASTEXITCODE -eq 0 -and $stNow -ne $script:StagedAtStart) {
+                    Write-Output '[FAIL] the staged files changed while the gate was running -- another commit is running in this worktree'
+                    Write-Output '       Committing now would take the other one''s staged changes with it. Wait for it, re-read `git status`, then commit again.'
+                    $stCode = 1
+                }
+                exit $(if ($stCode -eq 0) { 0 } else { 1 })
+            }
+        }
+    }
+}
+
 function Phase {
     # -Elapsed: seconds the TOOL took, for a phase whose command ran before the block.
     # `dotnet msbuild` and `dotnet format` run ahead of their Phase (their output has to

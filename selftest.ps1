@@ -3225,6 +3225,58 @@ if ($held) {
 } else { Write-Output '[skip] machine-wide queue -- a real gate holds the slot right now' }
 $slot.Dispose()
 
+# #147: qgate.json "stagedTree" (opt-in) gates the staged tree in a temporary worktree.
+# Both sides: another session's unstaged compile error and untracked broken file do not
+# fail a commit that does not hold them, a staged compile error fixed only in the work
+# tree still fails, a staged rename + delete is what is judged, and the worktree is gone
+# afterwards (red run included). Without the key the work tree is judged, as before.
+$stRepo = Join-Path $tmp 'staged-tree'
+Copy-Item (Join-Path $PSScriptRoot 'testdata\go-fixture') $stRepo -Recurse
+Set-GoFile (Join-Path $stRepo 'extra.go') "package main`n`n// Extra returns one.`nfunc Extra() int { return 1 }`n"
+Set-GoFile (Join-Path $stRepo 'gone.go') "package main`n`n// Gone returns two.`nfunc Gone() int { return 2 }`n"
+[IO.File]::WriteAllText((Join-Path $stRepo 'qgate.json'), '{"stagedTree": true}')
+git -C $stRepo init -q 2>$null
+# The worktree is a real checkout: with a machine-wide core.autocrlf=true it would be CRLF
+# (gofmt red) where these hand-written LF files are not. A real repo pins eol in .gitattributes.
+git -C $stRepo config core.autocrlf false 2>$null
+git -C $stRepo add -A 2>$null
+git -C $stRepo -c user.email=selftest@local -c user.name=selftest commit -qm init 2>$null
+$stGate = { $o = (& pwsh -NoProfile -File $gate -Root $stRepo -Only go 2>&1 | Out-String); [pscustomobject]@{ Code = $LASTEXITCODE; Out = $o } }
+$stWts = { @(git -C $stRepo worktree list --porcelain 2>$null | Where-Object { $_ -like 'worktree *' }).Count }
+try {
+    $env:GIT_INDEX_FILE = Join-Path $stRepo '.git\index'
+    git -C $stRepo mv extra.go renamed.go 2>$null
+    git -C $stRepo rm -q gone.go 2>$null
+    # Another session: an unstaged compile error and an untracked broken file.
+    Set-GoFile (Join-Path $stRepo 'renamed.go') "package main`n`n// Extra returns one.`nfunc Extra() int { return undefinedName }`n"
+    Set-GoFile (Join-Path $stRepo 'theirs.go') "package main`n`nfunc Theirs() int { return alsoUndefined }`n"
+    $r = & $stGate
+    Check 'stagedTree: unstaged and untracked breakage beside a clean staged tree passes the commit (#147)' `
+        (($r.Code -eq 0) -and ($r.Out -match 'stagedTree -- every stack judges the staged tree [0-9a-f]{12}') -and ($r.Out -match '\[PASS\] go build') -and
+        ($r.Out -notmatch 'undefinedName|alsoUndefined')) "code=$($r.Code) $($r.Out)"
+    Check 'stagedTree: the temporary worktree is removed after a green run (#147)' ((& $stWts) -eq 1) (git -C $stRepo worktree list 2>&1 | Out-String)
+    # The staged rename/delete is what was judged: a staged file referencing the deleted one fails.
+    Remove-Item (Join-Path $stRepo 'theirs.go')
+    Set-GoFile (Join-Path $stRepo 'renamed.go') "package main`n`n// Extra returns one.`nfunc Extra() int { return Gone() }`n"
+    git -C $stRepo add renamed.go 2>$null
+    Set-GoFile (Join-Path $stRepo 'gone.go') "package main`n`n// Gone returns two.`nfunc Gone() int { return 2 }`n"
+    $r = & $stGate
+    Check 'stagedTree: a staged break the work tree hides (deleted file restored unstaged) fails (#147)' `
+        (($r.Code -ne 0) -and ($r.Out -match '\[FAIL\] go build') -and ($r.Out -match 'undefined: Gone')) "code=$($r.Code) $($r.Out)"
+    Check 'stagedTree: the temporary worktree is removed after a red run (#147)' ((& $stWts) -eq 1) (git -C $stRepo worktree list 2>&1 | Out-String)
+    [IO.File]::WriteAllText((Join-Path $stRepo 'qgate.json'), '{}')
+    git -C $stRepo add qgate.json 2>$null
+    Set-GoFile (Join-Path $stRepo 'renamed.go') "package main`n`n// Extra returns one.`nfunc Extra() int { return 1 }`n"
+    git -C $stRepo add renamed.go 2>$null
+    Remove-Item (Join-Path $stRepo 'gone.go')
+    Set-GoFile (Join-Path $stRepo 'theirs.go') "package main`n`nfunc Theirs() int { return alsoUndefined }`n"
+    $r = & $stGate
+    Check 'without stagedTree a commit still judges the work tree (#147 is opt-in)' `
+        (($r.Code -ne 0) -and ($r.Out -notmatch 'stagedTree') -and ($r.Out -match 'alsoUndefined')) "code=$($r.Code) $($r.Out)"
+} finally { $env:GIT_INDEX_FILE = $null }
+Check 'stagedTree: no qgate-staged-wt dir is left in TEMP (#147)' `
+    (-not @(Get-ChildItem ([IO.Path]::GetTempPath()) -Directory -Filter 'qgate-staged-wt-*' -ErrorAction SilentlyContinue | Where-Object { $_.LastWriteTime -gt (Get-Date).AddMinutes(-10) })) 'leftover qgate-staged-wt-*'
+
 # #123: a hook run over a staged tree this gate already passed reuses the verdict; a
 # different tree, or a red one, still runs.
 $rRepo = Join-Path $tmp 'reuse'
