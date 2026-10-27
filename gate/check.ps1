@@ -3313,8 +3313,12 @@ function Invoke-BaseStack($s) {
     # #91: SpacesAfterTabs. dotnet format aligns a comment under the previous line's trailing
     # comment with tabs + 1-3 spaces, and the default checker called that spaces-for-tabs, so
     # applying the format phase's own fix raised this warning. Space-only indentation still fails.
-    $ecCfg = @(if (-not (Get-ChildItem -LiteralPath $Root -Force -ErrorAction SilentlyContinue | Where-Object Name -In '.editorconfig-checker.json', '.ecrc')) {
-            '-config'; (Join-Path $tpl '.editorconfig-checker.json') })
+    # editorconfig-checker v4 no longer discovers `.ecrc` on its own: a repository's own
+    # .ecrc is handed over by name, or v4 would silently run with no config at all.
+    $ecOwn = @(Get-ChildItem -LiteralPath $Root -Force -ErrorAction SilentlyContinue | Where-Object Name -In '.editorconfig-checker.json', '.ecrc' | ForEach-Object Name)
+    $ecCfg = @(if ($ecOwn -contains '.editorconfig-checker.json') { }
+        elseif ($ecOwn -contains '.ecrc') { '-config'; (Join-Path $Root '.ecrc') }
+        else { '-config'; (Join-Path $tpl '.editorconfig-checker.json') })
     $linters = @(
         @{ Name = 'shellcheck'; Exe = 'shellcheck'; Match = '\.(sh|bash)$'; Args = @('-f', 'gcc'); Url = 'https://www.shellcheck.net' }
         @{ Name = 'actionlint'; Exe = 'actionlint'; Match = '^\.github/workflows/[^/]+\.ya?ml$'; Args = @('-no-color'); Url = 'https://github.com/rhysd/actionlint' }
@@ -3334,7 +3338,9 @@ function Invoke-BaseStack($s) {
         $lArgs = $l.Args
         # Its default groups findings under a file header; gcc is `path:line:col:`, which
         # the -Baseline filter can attribute. Only then, so the plain run stays as it was.
-        if ($Baseline -and $l.Name -eq 'editorconfig') { $lArgs = @($lArgs) + @('-format', 'gcc') }
+        # Named either way: v4 switches to `::error file=...` on its own under GitHub
+        # Actions (measured, 4.0.2), so the same repo would print two report shapes.
+        if ($l.Name -eq 'editorconfig') { $lArgs = @($lArgs) + @('-format', $(if ($Baseline) { 'gcc' } else { 'default' })) }
         # core.autocrlf=true (Git for Windows' default) checks an LF script out as CRLF, and
         # shellcheck then flags every line SC1017 over bytes the repository never holds.
         # Measured: Git Bash runs that CRLF copy fine. A script committed CRLF keeps it.

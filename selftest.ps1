@@ -5864,6 +5864,17 @@ if ($blHave['editorconfig-checker']) {
     $out = (& pwsh -NoProfile -File $gate -Root $ect -Only base -Full 2>&1 | Out-String)
     Check 'editorconfig: space-only indentation under indent_style = tab still warns (#91)' `
         (($out -match '\[WARN\] editorconfig') -and ($out -match 'b\.cs') -and ($out -notmatch 'a\.cs')) $out
+    # v4 auto-switches to `::error file=` under GitHub Actions; the gate names the format.
+    $env:GITHUB_ACTIONS = 'true'
+    try { $out = (& pwsh -NoProfile -File $gate -Root $ect -Only base -Full 2>&1 | Out-String) } finally { $env:GITHUB_ACTIONS = $null }
+    Check 'editorconfig: report shape is the same under GitHub Actions' `
+        (($out -match '\[WARN\] editorconfig') -and ($out -match 'b\.cs') -and ($out -notmatch '::error')) $out
+    # v4 dropped `.ecrc` discovery; a repository's own .ecrc must still be the config used.
+    # A repo config replaces the template, so it restates SpacesAfterTabs for a.cs (#91).
+    [IO.File]::WriteAllText((Join-Path $ect '.ecrc'), '{ "SpacesAfterTabs": true, "Exclude": ["b\\.cs$"] }')
+    git -C $ect add -A 2>$null
+    $out = (& pwsh -NoProfile -File $gate -Root $ect -Only base -Full 2>&1 | Out-String)
+    Check 'editorconfig: a repository .ecrc is honored (its Exclude hides b.cs)' ($out -notmatch '\[WARN\] editorconfig') $out
 }
 
 # 38. secrets. Measured across nine real repositories, the phase reported 51 findings
