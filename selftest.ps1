@@ -88,7 +88,9 @@ if (-not $Sequential -and $Only.Count -ne 1) {
     $jobs | ForEach-Object { $_.Watch.Stop() }
     $total = 0; $fails = 0
     foreach ($j in $jobs) {
-        $text = if (Test-Path $j.Out) { Get-Content $j.Out -Raw } else { '' }
+        # [string]: an empty output file reads as $null, and .TrimEnd() on it killed the
+        # whole report instead of failing the one section below.
+        $text = if (Test-Path $j.Out) { [string](Get-Content $j.Out -Raw) } else { '' }
         $secs = [int]$j.Watch.Elapsed.TotalSeconds
         Write-Output "===== section $($j.Name) ($secs s, exit $($j.Proc.ExitCode))"
         Write-Output $text.TrimEnd()
