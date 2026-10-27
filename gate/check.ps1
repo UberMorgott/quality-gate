@@ -1842,7 +1842,11 @@ function Invoke-DotnetStack($s) {
         # is shown as info, not counted; the same rule on the project's own files still WARNs.
         $newApiRules = 'CA1510', 'CA1511', 'CA1512', 'CA1513', 'CA1847', 'CA1865', 'CA1866', 'CA1867', 'CA2249'
         $projDir = [IO.Path]::GetFullPath($s.Dir).TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar
-        $diags = @([regex]::Matches($o, '(?m)^\s*(?:(.+?)\(\d+[\d,]*\))?[^\r\n]*?:\s+warning\s+([A-Z]+\d+)') | ForEach-Object {
+        # Each diagnostic line once: the .NET 10 `dotnet build` prints its warning summary
+        # even with -clp:NoSummary (measured, SDK 10.0.403; `dotnet msbuild` honours it), so
+        # every warning came out twice. An identical line is the same finding repeated.
+        $oUnique = (@($o -split '\r?\n' | Select-Object -Unique) -join "`n")
+        $diags = @([regex]::Matches($oUnique, '(?m)^\s*(?:(.+?)\(\d+[\d,]*\))?[^\r\n]*?:\s+warning\s+([A-Z]+\d+)') | ForEach-Object {
                 $file = $_.Groups[1].Value
                 [pscustomobject]@{
                     Code   = $_.Groups[2].Value
