@@ -1702,12 +1702,13 @@ if ($dnSdks) {
     if ($dnRestored) {
         # <clear /> plus a port nothing listens on: restore is already satisfied from the
         # global packages folder, `dotnet list package --vulnerable` is not. The retry caps
-        # turn NuGet's 18 seconds of backoff into two (measured).
+        # turn NuGet's 18 seconds of backoff into two (measured). HTTPS: since the .NET 9 SDK
+        # an http:// source is restore error NU1302, which fails the build before any vuln check.
         [IO.File]::WriteAllText((Join-Path $dnPkg 'NuGet.config'), @'
 <configuration>
   <packageSources>
     <clear />
-    <add key="unreachable" value="http://127.0.0.1:9/v3/index.json" />
+    <add key="unreachable" value="https://127.0.0.1:9/v3/index.json" />
   </packageSources>
 </configuration>
 '@)
