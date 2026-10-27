@@ -15,7 +15,7 @@ jobs:
   gate:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0 # -Baseline needs history
 
@@ -44,7 +44,7 @@ jobs:
           "rust=$($rust.ToString().ToLower())" | Add-Content $env:GITHUB_OUTPUT
           "dotnet=$($dotnet.ToString().ToLower())" | Add-Content $env:GITHUB_OUTPUT
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         if: steps.stacks.outputs.go == 'true'
         with:
           go-version-file: ${{ steps.stacks.outputs.gomod }}
@@ -60,7 +60,7 @@ jobs:
         shell: pwsh
         run: go install golang.org/x/vuln/cmd/govulncheck@latest
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         if: steps.stacks.outputs.web == 'true'
         with:
           node-version: lts/*
@@ -78,7 +78,7 @@ jobs:
 
       # A game mod's <Reference> HintPath points into a Steam install no runner has, so
       # the gate reports those projects as skipped with the reason and checks the rest.
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v6
         if: steps.stacks.outputs.dotnet == 'true'
         with:
           dotnet-version: '8.0.x'
