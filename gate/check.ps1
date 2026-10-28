@@ -4207,6 +4207,14 @@ if ($script:PassKey -and -not $script:Failed) {
 # #136: an error the trap at the top passed over is the gate's own defect -- named with its
 # line even on a green -Quiet run, or nobody would ever see it.
 foreach ($ie in $script:InternalErrors) { $report += "[WARN] internal error in the gate (passed over, verdict unchanged) -- $ie" }
+# quality-gate#162: a red commit whose work tree is not its staged tree may have failed on
+# files the commit does not hold -- named where it helps, so the #147 opt-in is findable.
+if ($script:Failed -and $script:StagedAtStart -and -not $stOn -and -not $env:QGATE_STAGED_CHILD) {
+    & git -C $Root diff --quiet 2>$null
+    if ($LASTEXITCODE -ne 0 -or @(& git -C $Root ls-files --others --exclude-standard 2>$null | Select-Object -First 1)) {
+        $report += '[INFO] unstaged or untracked files were judged too: language stacks read the work tree -- qgate.json {"stagedTree": true} gates only the staged tree'
+    }
+}
 # #136: a red run always says why. Every path that sets the verdict prints a [FAIL] today;
 # this is the net under the next one that forgets.
 if ($script:Failed -and -not @($report | Where-Object { "$_" -match '(?m)^\[FAIL\]' })) {

@@ -3382,7 +3382,15 @@ try {
     Set-GoFile (Join-Path $stRepo 'theirs.go') "package main`n`nfunc Theirs() int { return alsoUndefined }`n"
     $r = & $stGate
     Check 'without stagedTree a commit still judges the work tree (#147 is opt-in)' `
-        (($r.Code -ne 0) -and ($r.Out -notmatch 'stagedTree') -and ($r.Out -match 'alsoUndefined')) "code=$($r.Code) $($r.Out)"
+        (($r.Code -ne 0) -and ($r.Out -notmatch 'every stack judges the staged tree') -and ($r.Out -match 'alsoUndefined')) "code=$($r.Code) $($r.Out)"
+    # #162: that red commit names the opt-in, since its work tree is not its staged tree...
+    Check 'a red commit with unstaged/untracked files names the stagedTree opt-in (#162)' `
+        ($r.Out -match '\[INFO\] unstaged or untracked files were judged too.*"stagedTree": true') $r.Out
+    # ...and a red commit whose work tree IS the staged tree does not.
+    git -C $stRepo add theirs.go 2>$null
+    $r = & $stGate
+    Check 'a red commit with nothing unstaged does not name stagedTree (#162)' `
+        (($r.Code -ne 0) -and ($r.Out -match 'alsoUndefined') -and ($r.Out -notmatch 'stagedTree')) "code=$($r.Code) $($r.Out)"
 } finally { $env:GIT_INDEX_FILE = $null }
 Check 'stagedTree: no qgate-staged-wt dir is left in TEMP (#147)' `
     (-not @(Get-ChildItem ([IO.Path]::GetTempPath()) -Directory -Filter 'qgate-staged-wt-*' -ErrorAction SilentlyContinue | Where-Object { $_.LastWriteTime -gt (Get-Date).AddMinutes(-10) })) 'leftover qgate-staged-wt-*'
