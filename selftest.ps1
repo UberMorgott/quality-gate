@@ -205,6 +205,18 @@ $ignStacks = @(Get-Stacks $ign | Where-Object { $_.Stack -eq 'go' })
 Check 'a gitignored nested module is not a stack' `
     (($ignStacks.Count -eq 1) -and ($ignStacks[0].Rel -eq '')) `
     (($ignStacks | ForEach-Object { "go '$($_.Rel)'" }) -join ' | ')
+# #173: a build-output name holds our project when git tracks its marker; untracked output
+# there, and a tracked vendor/ (third-party by name), are still skipped.
+$outd = Join-Path $tmp 'outdirs'
+New-Item -ItemType Directory -Path (Join-Path $outd 'build'), (Join-Path $outd 'dist'), (Join-Path $outd 'vendor\dep') -Force | Out-Null
+git -C $outd init -q 2>$null
+Set-Content (Join-Path $outd 'build\go.mod') 'module example.com/tool'
+Set-Content (Join-Path $outd 'dist\go.mod') 'module example.com/out'
+Set-Content (Join-Path $outd 'vendor\dep\go.mod') 'module example.com/dep'
+git -C $outd add build/go.mod vendor/dep/go.mod 2>$null
+$outRels = @(Get-Stacks $outd | Where-Object { $_.Stack -eq 'go' } | ForEach-Object { $_.Rel })
+Check 'a tracked module under build/ is a stack; untracked dist/ and tracked vendor/ are not (#173)' `
+    (($outRels -join ',') -eq 'build') "go stacks: $($outRels -join ',')"
 
 # Not walking in is only half of it: the PHASES must not walk in either. gofmt is the
 # one Go tool with no notion of modules or ignore rules -- `.` is the whole subtree --

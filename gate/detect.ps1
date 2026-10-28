@@ -45,6 +45,10 @@ $script:KnownMarkers = [ordered]@{
 
 # Directories that never hold a project we own.
 $script:SkipDirs = @('node_modules', '.git', 'vendor', 'dist', 'build', '.cache', '.venv', 'target', 'bin', 'obj')
+# quality-gate#173: the build-output names among them hold a project of ours when git
+# tracks its marker -- measured, a tracked Go module at build/ was never built, linted or
+# tested, and nothing said so. Output there is untracked, so it is still skipped.
+$script:OutputDirs = @('dist', 'build', 'target', 'bin', 'obj')
 
 # CMake's own output, not anybody's source. A configured build tree carries a
 # CMakeLists.txt for every dependency it fetched (under `_deps/`) plus generated ones
@@ -211,6 +215,13 @@ function Test-GitIgnored([string]$Root, [string]$Path) {
 # spawning git per file; the case this exists for -- a whole nested checkout -- is a
 # directory.
 $script:IgnoredDirs = @{}
+function Test-GitTracked([string]$Root, [string]$Path) {
+    $prev = $global:LASTEXITCODE
+    $t = @(& git -C $Root ls-files -- $Path 2>$null)
+    $global:LASTEXITCODE = $prev
+    return [bool]$t
+}
+
 function Test-GitIgnoredDir([string]$Root, [string]$Dir) {
     if (-not $script:IgnoredDirs.ContainsKey($Dir)) {
         $script:IgnoredDirs[$Dir] = Test-GitIgnored $Root $Dir
@@ -301,7 +312,8 @@ function Find-Marker([string]$Root, [string[]]$Names, [int]$Depth = 3) {
             # character in it, so every other stack keeps matching exactly as before.
             $f = $_
             ($Names | Where-Object { $f.Name -like $_ }) -and
-            ($_.FullName.Substring($Root.Length) -split '[\\/]' | Where-Object { $script:SkipDirs -contains $_ }).Count -eq 0 -and
+            ((($skipped = @($_.FullName.Substring($Root.Length) -split '[\\/]' | Where-Object { $script:SkipDirs -contains $_ })).Count -eq 0) -or
+                (-not @($skipped | Where-Object { $script:OutputDirs -notcontains $_ }) -and (Test-GitTracked $Root $_.FullName))) -and
             # Last: it spawns a process, and the cheap tests above have already cut
             # the candidates down to the handful of real marker files.
             -not (Test-GitIgnored $Root $_.FullName)
