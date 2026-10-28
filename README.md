@@ -276,7 +276,7 @@ Missing Cargo fails the stack; missing required Cargo components fail their comm
 | `bepinex` | Advisory (full) | None | Checks plugin GUID/version metadata in BepInEx projects to catch malformed plugin identities. |
 | `harmony` | Full | .NET SDK + bundled metadata checker | Resolves Harmony targets against built assemblies and references to catch patches that compile but cannot bind at runtime. |
 | `inspectcode <project>` (pass only); `<project>: <n> InspectCode finding(s)` (findings) | Advisory (full, opt-in) | JetBrains `jb`; skip if missing | Reports dead code and redundancies beyond Roslyn diagnostics. |
-| `test` | Full | dotnet test | Runs projects marked by `IsTestProject` or `Microsoft.NET.Test.Sdk` to catch test failures; a non-test project beside a test project in the same run reports `[INFO]` naming it instead of `[SKIP] test`. |
+| `test` | Full | dotnet test | Runs projects marked by `IsTestProject`, `IsTestingPlatformApplication` or a test package (`Microsoft.NET.Test.Sdk`, `xunit.v3`, `TUnit`, `MSTest`) to catch test failures. A `global.json` with `"test": {"runner": "Microsoft.Testing.Platform"}` (nearest one above the project) switches to the MTP-mode form `dotnet test --project <proj>`. A non-test project beside a test project in the same run reports `[INFO]` naming it instead of `[SKIP] test`. |
 | `test (dotnet run <project>)` | Advisory (full); blocking with `testRunner: "fail"` | dotnet run | Runs executable `.Test`/`.Tests` projects with a 600-second timeout to exercise custom test runners. |
 | `vuln` | Full | dotnet list package + NuGet sources | Checks direct/transitive packages for known vulnerabilities; skips without packages and reports unknown when the scan cannot complete. |
 

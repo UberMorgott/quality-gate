@@ -1787,6 +1787,43 @@ if ($dnSdks) {
     } else {
         Write-Output '[skip] advisory source unreachable -- the vulnerable-package check cannot run'
     }
+
+    # #172: global.json "test": {"runner": "Microsoft.Testing.Platform"} puts the .NET 10 SDK's
+    # `dotnet test` in MTP mode, where an MTP test app (xunit.v3 4.x) is the only kind that
+    # runs at all -- in VSTest mode it errors "Testing with VSTest target is no longer
+    # supported". xunit.v3 also sets neither IsTestProject nor Microsoft.NET.Test.Sdk, so
+    # the project used to fall through to the `dotnet run` runner branch, advisory on red.
+    $dnMtp = Join-Path $tmp 'dotnet-mtp'
+    Copy-Item (Join-Path $PSScriptRoot 'testdata\dotnet-fixture') $dnMtp -Recurse
+    [IO.File]::WriteAllText((Join-Path $dnMtp 'Fixture.csproj'), $dnProjClean.Replace(
+            '<Nullable>enable</Nullable>', "<OutputType>Exe</OutputType>`n    <Nullable>enable</Nullable>").Replace('</Project>', @"
+  <ItemGroup>
+    <PackageReference Include="xunit.v3" Version="4.0.2" />
+  </ItemGroup>
+</Project>
+"@))
+    [IO.File]::WriteAllText((Join-Path $dnMtp 'global.json'), "{ `"test`": { `"runner`": `"Microsoft.Testing.Platform`" } }`n")
+    $mtpTest = Join-Path $dnMtp 'GreeterTests.cs'
+    [IO.File]::WriteAllText($mtpTest, "namespace Fixture;`n`n/// <summary>Greeter tests.</summary>`npublic class GreeterTests`n{`n    /// <summary>Greets by name.</summary>`n    [Xunit.Fact]`n    public void Greets() => Xunit.Assert.Equal(`"Hello, A!`", Greeter.Greet(`"A`"));`n}`n")
+    Push-Location $dnMtp
+    & dotnet restore Fixture.csproj -nologo *> $null
+    $dnMtpOk = ($LASTEXITCODE -eq 0) -and (@($dnSdks | Where-Object { [int](($_ -split '\.')[0]) -ge 10 }).Count -gt 0)
+    Pop-Location
+    if ($dnMtpOk) {
+        Remove-Item (Join-Path $dnMtp 'obj') -Recurse -Force   # the gate meets it unrestored, as a fresh clone
+        $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $dnMtp -All -Full 2>&1 | Out-String)
+        $dnMtpCode = $LASTEXITCODE
+        Check 'an xunit.v3 project in MTP mode passes the dotnet test phase' `
+            (($dnMtpCode -eq 0) -and ($out -match '\[PASS\] test \(') -and ($out -notmatch 'dotnet run')) "code=$dnMtpCode $out"
+        [IO.File]::WriteAllText($mtpTest, ([IO.File]::ReadAllText($mtpTest)).Replace('"Hello, A!"', '"Hi, A!"'))
+        $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $dnMtp -All -Full 2>&1 | Out-String)
+        $dnMtpCode = $LASTEXITCODE
+        Check 'a failing test in MTP mode fails the test phase' `
+            (($dnMtpCode -ne 0) -and ($out -match '\[FAIL\] test') -and ($out -match 'Greets') -and
+            ($out -notmatch '\[FAIL\] (refs|format|build)')) "code=$dnMtpCode $out"
+    } else {
+        Write-Output '[skip] no .NET 10 SDK or xunit.v3 not restorable -- the MTP-mode test check cannot run'
+    }
     }
 
     if (Want 'dotnet2') {

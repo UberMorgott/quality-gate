@@ -1306,7 +1306,7 @@ function Get-DotnetEval([string]$ProjPath) {
     if (-not $script:DnEval.ContainsKey($ProjPath)) {
         $sw = [Diagnostics.Stopwatch]::StartNew()
         $q = (& dotnet msbuild $ProjPath -getProperty:TargetFramework -getProperty:TargetFrameworks -getProperty:TargetFrameworkVersion `
-                -getProperty:IsTestProject -getProperty:OutputType -getItem:Reference -getItem:PackageReference -nologo 2>&1 | Out-String).Trim()
+                -getProperty:IsTestProject -getProperty:IsTestingPlatformApplication -getProperty:OutputType -getItem:Reference -getItem:PackageReference -nologo 2>&1 | Out-String).Trim()
         $code = $LASTEXITCODE
         $sw.Stop()
         $script:DnEval[$ProjPath] = @{ Out = $q; Code = $code; Elapsed = $sw.Elapsed.TotalSeconds }
@@ -1319,6 +1319,20 @@ function Get-QGateDotnetConfig([string]$Repo) {
     $f = Join-Path $Repo 'qgate.json'
     $c = if (Test-Path -LiteralPath $f) { try { (Get-Content -LiteralPath $f -Raw | ConvertFrom-Json).dotnet } catch { $null } }
     if ($c) { $c } else { [pscustomobject]@{} }
+}
+
+# #172: true when `dotnet test` runs in Microsoft.Testing.Platform mode -- "test.runner" of
+# the global.json the SDK resolves, the first one from the working directory up.
+# https://learn.microsoft.com/dotnet/core/tools/dotnet-test#choose-a-test-runner
+function Test-DotnetMtpMode([string]$Dir) {
+    for ($d = [IO.Path]::GetFullPath($Dir); $d; $d = Split-Path $d -Parent) {
+        $f = Join-Path $d 'global.json'
+        if (Test-Path -LiteralPath $f) {
+            $runner = try { (Get-Content -LiteralPath $f -Raw | ConvertFrom-Json).test.runner } catch { $null }
+            return $runner -eq 'Microsoft.Testing.Platform'
+        }
+    }
+    $false
 }
 
 # Highest release version of a package already extracted in the global NuGet folder
@@ -1969,9 +1983,16 @@ function Invoke-DotnetStack($s) {
     # the csproj text: IsTestProject is what the SDK itself sets once the project is
     # restored, and the PackageReference list covers the project before its first restore
     # and everything Directory.Build.props imports into it.
+    # An MTP test app (xunit.v3 4.x default, TUnit) sets IsTestingPlatformApplication and
+    # neither of the other two: measured, xunit.v3 4.0.2 alone evaluates IsTestProject ''.
+    # Before the first restore that property is not there yet either, so the package names it.
     $pkgIds = @($pkgs.Identity)
-    if ($info.Properties.IsTestProject -eq 'true' -or $pkgIds -contains 'Microsoft.NET.Test.Sdk') {
-        Phase 'test' { dotnet test $proj --no-build -nologo -v q }
+    if ($info.Properties.IsTestProject -eq 'true' -or $info.Properties.IsTestingPlatformApplication -eq 'true' -or
+        $pkgIds -contains 'Microsoft.NET.Test.Sdk' -or $pkgIds -match '^(xunit\.v3(\.mtp-(off|v1|v2))?|TUnit|MSTest)$') {
+        # #172: in MTP mode the documented form is `--project`, and -nologo is an MTP-mode
+        # option only from .NET 11 Preview 7 (DOTNET_NOLOGO above covers the banner).
+        if (Test-DotnetMtpMode $s.Dir) { Phase 'test' { dotnet test --project $proj --no-build -v q } }
+        else { Phase 'test' { dotnet test $proj --no-build -nologo -v q } }
     }
     # A self-check runner (#88): `Foo.Tests.csproj`, OutputType Exe, no test SDK, exit code
     # is the verdict. Seen in three BepInEx mod repos, each reported `no test project` while
