@@ -932,7 +932,9 @@ function Invoke-GoStackOnce($s) {
             $aePass = $true
             $script:Lines += "[INFO] lint engine: aegis $($ae.Version) (go vet + golangci config)"
             Phase 'aegis lint' { $aOut } -Elapsed $aSw.Elapsed.TotalSeconds
-        } elseif ($aCode -eq 1) {
+        } elseif ($aCode -eq 1 -and $aOut -match '(?m)^\s*\S.*?:\d+(?::\d+)?: \S') {
+            # Only file:line findings are findings: an exit 1 with a bare error (measured:
+            # "aegis lint: context deadline exceeded" under load) is a tool failure below.
             $aeFlagged = $aOut
             $script:Lines += "[INFO] lint engine: golangci-lint + go vet -- aegis lint $($ae.Version) flagged the findings below; golangci-lint + go vet decide"
             $script:Lines += $aOut

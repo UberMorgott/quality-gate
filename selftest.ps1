@@ -1040,10 +1040,10 @@ if (Get-Command golangci-lint -ErrorAction SilentlyContinue) {
     $aeLog = Join-Path $tmp 'fake-aegis.log'
     New-Item -ItemType Directory -Path $aeBin | Out-Null
     if ($IsWindows) {
-        [IO.File]::WriteAllText((Join-Path $aeBin 'aegis.cmd'), "@if `"%1`"==`"version`" (echo aegis %FAKE_AEGIS_VER%& exit /b 0)`r`n@echo %*>>`"%FAKE_AEGIS_LOG%`"`r`n@echo fake.go:1:1: fake aegis finding`r`n@exit /b %FAKE_AEGIS_CODE%`r`n")
+        [IO.File]::WriteAllText((Join-Path $aeBin 'aegis.cmd'), "@if `"%1`"==`"version`" (echo aegis %FAKE_AEGIS_VER%& exit /b 0)`r`n@echo %*>>`"%FAKE_AEGIS_LOG%`"`r`n@if defined FAKE_AEGIS_MSG (echo %FAKE_AEGIS_MSG%& exit /b %FAKE_AEGIS_CODE%)`r`n@echo fake.go:1:1: fake aegis finding`r`n@exit /b %FAKE_AEGIS_CODE%`r`n")
     } else {
         $p = Join-Path $aeBin 'aegis'
-        [IO.File]::WriteAllText($p, "#!/bin/sh`n[ `"`$1`" = version ] && { echo `"aegis `$FAKE_AEGIS_VER`"; exit 0; }`necho `"`$*`" >> `"`$FAKE_AEGIS_LOG`"`necho 'fake.go:1:1: fake aegis finding'`nexit `$FAKE_AEGIS_CODE`n")
+        [IO.File]::WriteAllText($p, "#!/bin/sh`n[ `"`$1`" = version ] && { echo `"aegis `$FAKE_AEGIS_VER`"; exit 0; }`necho `"`$*`" >> `"`$FAKE_AEGIS_LOG`"`n[ -n `"`$FAKE_AEGIS_MSG`" ] && { echo `"`$FAKE_AEGIS_MSG`"; exit `$FAKE_AEGIS_CODE; }`necho 'fake.go:1:1: fake aegis finding'`nexit `$FAKE_AEGIS_CODE`n")
         chmod +x $p
     }
     $aeg = Join-Path $tmp 'aegis-go'
@@ -1051,8 +1051,8 @@ if (Get-Command golangci-lint -ErrorAction SilentlyContinue) {
     Copy-Item (Join-Path $PSScriptRoot 'templates\.golangci.yml') $aeg
     $aeSaved = @{ PATH = $env:PATH; QGATE_NO_AEGIS = $env:QGATE_NO_AEGIS }
     $aeRun = {
-        param([string]$Ver, [int]$Code)
-        $env:FAKE_AEGIS_VER = $Ver; $env:FAKE_AEGIS_CODE = "$Code"; $env:FAKE_AEGIS_LOG = $aeLog
+        param([string]$Ver, [int]$Code, [string]$Msg = '')
+        $env:FAKE_AEGIS_VER = $Ver; $env:FAKE_AEGIS_CODE = "$Code"; $env:FAKE_AEGIS_LOG = $aeLog; $env:FAKE_AEGIS_MSG = $Msg
         Remove-Item $aeLog -ErrorAction SilentlyContinue
         $r = Invoke-Gate $aeg
         $r | Add-Member Called (Test-Path $aeLog) -PassThru
@@ -1099,6 +1099,11 @@ if (Get-Command golangci-lint -ErrorAction SilentlyContinue) {
         $r = & $aeRun '0.1.7' 2
         Check 'aegis lint exit 2 falls back to go vet + golangci-lint' `
             (($r.Code -eq 0) -and $r.Called -and ($r.Out -match 'aegis lint 0\.1\.7 could not judge \(exit 2\)') -and ($r.Out -match '\[PASS\] go vet') -and ($r.Out -match '\[PASS\] golangci-lint \(')) $r.Out
+        # An exit 1 without file:line findings is a tool failure (timeout), not a disagreement.
+        $r = & $aeRun '0.1.7' 1 'aegis lint: context deadline exceeded'
+        Check 'aegis lint exit 1 without findings is a tool failure, not an engine disagreement' `
+            (($r.Code -eq 0) -and $r.Called -and ($r.Out -match 'aegis lint 0\.1\.7 could not judge \(exit 1\): aegis lint: context deadline exceeded') -and
+            ($r.Out -match '\[PASS\] golangci-lint \(') -and ($r.Out -notmatch 'engines disagree|flagged')) $r.Out
         $r = & $aeRun '0.1.6' 0
         Check 'aegis older than 0.1.7 is not used' `
             (($r.Code -eq 0) -and -not $r.Called -and ($r.Out -match 'aegis not used: aegis 0\.1\.6 is older') -and ($r.Out -match '\[PASS\] golangci-lint \(')) $r.Out
