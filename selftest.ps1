@@ -2018,6 +2018,22 @@ internal class Sealable
     $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $dnRun -All -Full 2>&1 | Out-String)
     Check 'dotnet.testRunner "fail" makes a failing Exe runner fail the gate' `
         (($LASTEXITCODE -ne 0) -and ($out -match '\[FAIL\] test \(dotnet run Fixture\.Tests\.csproj\)') -and ($out -match 'check 2 failed')) $out
+    # #170: a mod project beside its test project is not "unverified" -- the sibling tests it.
+    # The true positive: when that sibling is no test project, the mod keeps its [SKIP].
+    $dnSib = Join-Path $tmp 'dotnet-sibling'
+    Copy-Item (Join-Path $PSScriptRoot 'testdata\dotnet-fixture') (Join-Path $dnSib 'Mod') -Recurse
+    New-Item -ItemType Directory -Force (Join-Path $dnSib 'Mod.Tests') | Out-Null
+    [IO.File]::WriteAllText((Join-Path $dnSib 'Mod.Tests\Mod.Tests.csproj'), $dnProjClean.Replace('<Nullable>enable</Nullable>', "<OutputType>Exe</OutputType>`n    <Nullable>enable</Nullable>"))
+    [IO.File]::WriteAllText((Join-Path $dnSib 'Mod.Tests\Program.cs'), "Console.WriteLine(`"all checks passed`");`nreturn 0;`n")
+    & git -C $dnSib init -q 2>$null
+    $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $dnSib -All -Full 2>&1 | Out-String)
+    Check 'a project beside a test project is not reported as an unrun test (#170)' `
+        (($LASTEXITCODE -eq 0) -and ($out -match '\[PASS\] test \(dotnet run Mod\.Tests\.csproj\)') -and
+            ($out -match '\[INFO\] test -- not a test project; tests run in Mod\.Tests/Mod\.Tests\.csproj') -and ($out -notmatch 'no test project')) $out
+    Move-Item (Join-Path $dnSib 'Mod.Tests\Mod.Tests.csproj') (Join-Path $dnSib 'Mod.Tests\Mod.Tool.csproj')
+    $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $dnSib -All -Full 2>&1 | Out-String)
+    Check 'a sibling that is no test project leaves the [SKIP] test in place (#170)' `
+        (($out -match '\[SKIP\] test -- no test project') -and ($out -match '(?s)skipped --.*test -- no test project') -and ($out -notmatch 'tests run in')) $out
     $dnBanEmpty = New-Item -ItemType Directory -Force (Join-Path $tmp 'nuget-empty')
     # SonarAnalyzer.CSharp (#62): qgate.json dotnet.sonar, same cache-only injection.
     $dnSonar = Join-Path $tmp 'dotnet-sonar'

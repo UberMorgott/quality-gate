@@ -2009,7 +2009,19 @@ function Invoke-DotnetStack($s) {
     # An omitted phase and a passing one read identically in the report, and this is the
     # level where the reader is entitled to the difference: -Full is what CI and the
     # generated pre-commit hook run. The fast lane says nothing -- it never promised these.
-    else { $script:Lines += '[SKIP] test -- no test project (IsTestProject/Microsoft.NET.Test.Sdk)' }
+    # #170: a production project beside a test project in the same run is not unverified --
+    # the sibling's own test phase reports for both, and a sibling that runs nothing still
+    # owes its own [SKIP], so a repo with no tests at all keeps it.
+    else {
+        $testSib = @($stacks | Where-Object { $_.Stack -eq 'dotnet' -and $_.Implemented } | ForEach-Object { Join-Path $_.Dir $_.Marker } |
+                Where-Object { $_ -ne $projAbs } | Where-Object {
+                    $si = try { (Get-DotnetEval $_).Out | ConvertFrom-Json } catch { $null }
+                    $si.Properties.IsTestProject -eq 'true' -or @($si.Items.PackageReference.Identity) -contains 'Microsoft.NET.Test.Sdk' -or
+                    ($si.Properties.OutputType -eq 'Exe' -and [IO.Path]::GetFileNameWithoutExtension($_) -match '\.Tests?$')
+                } | Select-Object -First 1)
+        $script:Lines += if ($testSib) { "[INFO] test -- not a test project; tests run in $([IO.Path]::GetRelativePath($Root, $testSib[0]) -replace '\\', '/')" }
+        else { '[SKIP] test -- no test project (IsTestProject/Microsoft.NET.Test.Sdk)' }
+    }
     # The analyzer build restored obj/project.assets.json WITH the injected packages. Every
     # later reader evaluates the project without them: `dotnet list package` then reported
     # the assets file out of sync in problems[] and vuln was [UNKNOWN] on every restored
