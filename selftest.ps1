@@ -516,8 +516,15 @@ Check 'the failing input go wrote is removed from the tree' (-not (Test-Path (Jo
 Set-GoFile (Join-Path $fz 'fuzz_test.go') ($fuzzSrc -replace 'len\(s\) > 1', 'false')
 $fr = Invoke-GoFuzz $fz 2 60
 Check 'a fuzz target that holds runs and warns nothing' (($fr.Ran -eq 1) -and -not $fr.Warn) ($fr.Warn -join "`n")
+# #179: a budget too small for every target thins each slice instead of skipping the
+# last one, and a same-named target's crash names its package.
+New-Item -ItemType Directory (Join-Path $fz 'sub') | Out-Null
+Set-GoFile (Join-Path $fz 'sub\fuzz_test.go') ($fuzzSrc -replace 'package main', 'package sub' -replace 'len\(s\) > 1 && s\[0\] == .z.', 'true')
 $fr = Invoke-GoFuzz $fz 2 1
-Check 'a fuzz target past the budget is named, not dropped' (($fr.Ran -eq 0) -and (($fr.Warn -join ' ') -match 'budget 1s spent -- not run: FuzzAdd')) ($fr.Warn -join "`n")
+$fw = $fr.Warn -join "`n"
+Check 'every fuzz target runs even past the budget, a crash named by package' `
+    (($fr.Ran -eq 2) -and ($fw -notmatch 'not run') -and ($fw -match '\[WARN\] go fuzz: gatefixture/sub FuzzAdd failed') -and ($fw -notmatch 'gatefixture FuzzAdd failed')) $fw
+Remove-Item (Join-Path $fz 'sub') -Recurse -Force
 # #118: fuzz workers are capped (half the cores, 1..4) and get a GOMEMLIMIT; qgate.json
 # overrides both, a bad value is named, and the caller's GOMEMLIMIT is restored after.
 $memPrev = $env:GOMEMLIMIT; $env:GOMEMLIMIT = $null

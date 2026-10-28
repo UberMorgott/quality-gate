@@ -561,12 +561,13 @@ function Get-GoleakGaps([string]$Dir) {
 # quality-gate#49: run the module's existing Fuzz* targets for a short budget. One
 # target per `go test -fuzz` (it accepts exactly one match in one package), -run=^$ so
 # the package's tests do not run a second time. Bounded for a commit hook: $PerTargetSec
-# each, and no new target is started once that would pass $BudgetSec -- the ones left
-# out are named. A crash is ADVISORY until calibrated: go writes the failing input into
+# each, cut up front so all targets share $BudgetSec evenly (at least 1s each). Every
+# target always runs -- a wall-clock budget that skipped the last one made a strict gate
+# FAIL depend on machine load (quality-gate#179). A crash is ADVISORY until calibrated: go writes the failing input into
 # the package's testdata/fuzz/<Target>/, where every later plain `go test` would fail on
 # it -- the gate would have turned its own warning into a verdict. So a file this run
 # created is printed into the warning (enough to re-create it) and removed.
-# ponytail: sequential; targets beyond the budget are skipped, not rotated between runs.
+# ponytail: sequential; many targets get a thinner slice each, not rotated between runs.
 # quality-gate#118: `go test -fuzz` starts GOMAXPROCS workers, each its own pkg.test
 # process -- dozens on a many-core box, enough to exhaust RAM and the paging file. So
 # -parallel is capped (half the cores, 1..4) and every worker gets a GOMEMLIMIT soft cap.
@@ -614,16 +615,14 @@ function Invoke-GoFuzz([string]$Dir, [int]$PerTargetSec = 10, [int]$BudgetSec = 
             elseif ($l -match '^ok\s+(\S+)') { $targets += @($names | ForEach-Object { [pscustomobject]@{ Pkg = $Matches[1]; Name = $_ } }); $names = @() }
             else { $names = @() }
         }
-        $sw = [Diagnostics.Stopwatch]::StartNew()
-        $skipped = @()
+        $slice = if ($targets) { [Math]::Max(1, [Math]::Min($PerTargetSec, [Math]::Floor($BudgetSec / $targets.Count))) }
         foreach ($t in $targets) {
-            if ($sw.Elapsed.TotalSeconds + $PerTargetSec -gt $BudgetSec) { $skipped += $t.Name; continue }
             $corpus = Join-Path $pkgDir[$t.Pkg] "testdata/fuzz/$($t.Name)"
             $before = @(Get-ChildItem $corpus -File -ErrorAction SilentlyContinue | ForEach-Object FullName)
             # The outermost directory the run may create: removed whole if it did.
             $created = @('testdata', 'testdata/fuzz', "testdata/fuzz/$($t.Name)") | ForEach-Object { Join-Path $pkgDir[$t.Pkg] $_ } |
                 Where-Object { -not (Test-Path $_) } | Select-Object -First 1
-            $goArgs = Get-GoFuzzArgs $t.Pkg $t.Name $PerTargetSec $Limits.Parallel
+            $goArgs = Get-GoFuzzArgs $t.Pkg $t.Name $slice $Limits.Parallel
             $out = (& go @goArgs 2>&1 | Out-String)
             $res.Ran++
             if ($LASTEXITCODE -eq 0) { continue }
@@ -637,7 +636,6 @@ function Invoke-GoFuzz([string]$Dir, [int]$PerTargetSec = 10, [int]$BudgetSec = 
             }
             if ($created -and (Test-Path $created)) { Remove-Item $created -Recurse -Force -ErrorAction SilentlyContinue }
         }
-        if ($skipped) { $res.Warn += "[WARN] go fuzz: budget ${BudgetSec}s spent -- not run: $($skipped -join ', ')" }
     } finally { Pop-Location; $global:LASTEXITCODE = $prev; $env:GOMEMLIMIT = $prevMem }
     $res
 }

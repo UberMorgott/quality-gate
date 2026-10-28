@@ -187,7 +187,7 @@ The runner also validates requested stacks/revisions and tool pins, rejects an u
 | `purity` | Advisory (full, opt-in) | Go + bundled checker; golangci-lint for API bans | Examines deterministic packages for nondeterministic APIs and constructs that can cause divergent results. |
 | `property tests` | Advisory (full, opt-in) | None | Flags deterministic packages without property/fuzz tests to identify missing invariant coverage. |
 | `flaky tests` | Advisory (full, opt-in); blocking with `fail: true` | Go; gcc for race mode | Scans fragile test deadlines and reruns selected packages under constrained scheduling to expose timing failures. |
-| `go fuzz` | Advisory (full) | Go | Exercises fuzz targets for 10 seconds each within a 60-second module budget to find unexpected inputs; workers and memory are capped (`go.fuzzParallel`, `go.fuzzMemLimit`). |
+| `go fuzz` | Advisory (full) | Go | Exercises every fuzz target for up to 10 seconds to find unexpected inputs; a 60-second module budget is split evenly up front (at least 1 second each), so no target is skipped; workers and memory are capped (`go.fuzzParallel`, `go.fuzzMemLimit`). |
 | `deadcode` | Advisory (full) | deadcode; skip if missing/stale | Reports unreachable functions so unused implementation can be reviewed. cgo `//export` functions (a c-shared/c-archive C ABI) and same-package functions they reach are treated as live. With `go.tags`, runs once per set (`-tags <set>`) and reports only functions unreachable in every set. |
 | `gremlins` | Advisory (`-Mutate`) | gremlins; skip if missing/stale | Mutates Go code and reports surviving mutants to reveal weak assertions. |
 
