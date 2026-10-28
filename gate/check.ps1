@@ -3989,8 +3989,12 @@ foreach ($s in $stacks) {
 
     if ($script:StackSoft) { $script:SoftFailed = $true }
     # A phase skipped because an earlier one failed is left out: the [FAIL] already says it.
-    $stackSkips = @($script:Lines | Where-Object { "$_" -match '^\[SKIP\] ' -and "$_" -notmatch 'an earlier phase failed' } | ForEach-Object { "$_".Substring(7).Trim() })
-    if (-not ($script:Failed -or $script:StackSoft) -and $script:Phases -eq $before) { $stackSkips += "$label ($($s.Marker)) -- no check phase applies here" }
+    # quality-gate#161: in the fast lane a check the level excludes, or one with nothing of
+    # its kind changed or staged, is the lane's scope, not a gap in this run -- counting
+    # them made a WARN-free fast run unreachable. The full level still counts every skip.
+    $laneSkips = @(if (-not $Full) { $script:Lines | Where-Object { "$_" -match '^\[SKIP\] .*(not run in the fast lane| -- no changed | -- nothing staged)' } })
+    $stackSkips = @($script:Lines | Where-Object { "$_" -match '^\[SKIP\] ' -and "$_" -notmatch 'an earlier phase failed' -and $laneSkips -notcontains $_ } | ForEach-Object { "$_".Substring(7).Trim() })
+    if (-not ($script:Failed -or $script:StackSoft) -and $script:Phases -eq $before -and -not $laneSkips) { $stackSkips += "$label ($($s.Marker)) -- no check phase applies here" }
     $script:Skipped += $stackSkips
     $stackAdv = @($script:Lines | Where-Object { "$_" -match '^\[WARN\] ' } | ForEach-Object { ("$_" -split "`r?`n")[0].Trim() })
     $script:Advisories += $stackAdv

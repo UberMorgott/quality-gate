@@ -4279,6 +4279,8 @@ try {
     # nobody has trusted yet must not be one nobody can commit to -- including through
     # the zero-phase invariant, which this is the third documented exemption from.
     Check 'an untrusted repo is skipped, not failed' ($r.Out -notmatch '\[FAIL\]') $r.Out
+    Check 'an untrusted skip still WARNs in the fast lane (#161)' `
+        ($r.Out -match '(?ms)\[WARN\] skipped -- .*^\s+custom -- untrusted') $r.Out
 
     # `qgate trust` is the one place the exact command is shown to the person allowing
     # it, so printing a summary instead of the string would defeat the whole gate.
@@ -4292,6 +4294,10 @@ try {
     Check 'a trusted check runs and passes' (($r.Code -eq 0) -and ($r.Out -match '\[PASS\] quick')) $r.Out
     Check 'a full-level check is not run in the fast lane' `
         (($r.Out -match '\[SKIP\] heavy -- level full') -and ($r.Out -notmatch '\[PASS\] heavy')) $r.Out
+    # #161: the level excluding it is the lane's scope, not a gap -- no skipped WARN for it.
+    # The other side: the untrusted skip above is a gap at the same level and still WARNs.
+    Check 'a full-level check is not counted as skipped in the fast lane (#161)' `
+        (($r.Code -eq 0) -and ($r.Out -notmatch '(?m)^\s+heavy -- level full')) $r.Out
     $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $cust -All -Full 2>&1 | Out-String)
     Check 'a full-level check runs at the full level' `
         (($LASTEXITCODE -eq 0) -and ($out -match '\[PASS\] heavy')) $out
