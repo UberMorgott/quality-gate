@@ -1793,20 +1793,15 @@ if ($dnSdks) {
     # runs at all -- in VSTest mode it errors "Testing with VSTest target is no longer
     # supported". xunit.v3 also sets neither IsTestProject nor Microsoft.NET.Test.Sdk, so
     # the project used to fall through to the `dotnet run` runner branch, advisory on red.
+    # The fixture IS the shipped xUnit v3 template (#171), so this also proves it passes.
     $dnMtp = Join-Path $tmp 'dotnet-mtp'
-    Copy-Item (Join-Path $PSScriptRoot 'testdata\dotnet-fixture') $dnMtp -Recurse
-    [IO.File]::WriteAllText((Join-Path $dnMtp 'Fixture.csproj'), $dnProjClean.Replace(
-            '<Nullable>enable</Nullable>', "<OutputType>Exe</OutputType>`n    <Nullable>enable</Nullable>").Replace('</Project>', @"
-  <ItemGroup>
-    <PackageReference Include="xunit.v3" Version="4.0.2" />
-  </ItemGroup>
-</Project>
-"@))
+    New-Item -ItemType Directory $dnMtp | Out-Null
+    Copy-Item (Join-Path $PSScriptRoot 'templates\dotnet-tests\Tests.csproj.template') (Join-Path $dnMtp 'Fixture.Tests.csproj')
+    Copy-Item (Join-Path $PSScriptRoot 'templates\dotnet-tests\SampleTests.cs') $dnMtp
     [IO.File]::WriteAllText((Join-Path $dnMtp 'global.json'), "{ `"test`": { `"runner`": `"Microsoft.Testing.Platform`" } }`n")
-    $mtpTest = Join-Path $dnMtp 'GreeterTests.cs'
-    [IO.File]::WriteAllText($mtpTest, "namespace Fixture;`n`n/// <summary>Greeter tests.</summary>`npublic class GreeterTests`n{`n    /// <summary>Greets by name.</summary>`n    [Xunit.Fact]`n    public void Greets() => Xunit.Assert.Equal(`"Hello, A!`", Greeter.Greet(`"A`"));`n}`n")
+    $mtpTest = Join-Path $dnMtp 'SampleTests.cs'
     Push-Location $dnMtp
-    & dotnet restore Fixture.csproj -nologo *> $null
+    & dotnet restore Fixture.Tests.csproj -nologo *> $null
     $dnMtpOk = ($LASTEXITCODE -eq 0) -and (@($dnSdks | Where-Object { [int](($_ -split '\.')[0]) -ge 10 }).Count -gt 0)
     Pop-Location
     if ($dnMtpOk) {
@@ -1815,14 +1810,42 @@ if ($dnSdks) {
         $dnMtpCode = $LASTEXITCODE
         Check 'an xunit.v3 project in MTP mode passes the dotnet test phase' `
             (($dnMtpCode -eq 0) -and ($out -match '\[PASS\] test \(') -and ($out -notmatch 'dotnet run')) "code=$dnMtpCode $out"
-        [IO.File]::WriteAllText($mtpTest, ([IO.File]::ReadAllText($mtpTest)).Replace('"Hello, A!"', '"Hi, A!"'))
+        Check 'the xUnit v3 template is no test-framework drift' ($out -notmatch 'test framework:') $out
+        [IO.File]::WriteAllText($mtpTest, ([IO.File]::ReadAllText($mtpTest)).Replace('Assert.Equal(4, 2 + 2)', 'Assert.Equal(5, 2 + 2)'))
         $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $dnMtp -All -Full 2>&1 | Out-String)
         $dnMtpCode = $LASTEXITCODE
         Check 'a failing test in MTP mode fails the test phase' `
-            (($dnMtpCode -ne 0) -and ($out -match '\[FAIL\] test') -and ($out -match 'Greets') -and
+            (($dnMtpCode -ne 0) -and ($out -match '\[FAIL\] test') -and ($out -match 'Adds') -and
             ($out -notmatch '\[FAIL\] (refs|format|build)')) "code=$dnMtpCode $out"
     } else {
         Write-Output '[skip] no .NET 10 SDK or xunit.v3 not restorable -- the MTP-mode test check cannot run'
+    }
+
+    # #171: a test project on another framework than the xUnit v3 standard is named at -Full,
+    # advisory -- its tests still run and still pass the gate (VSTest mode, no global.json).
+    $dnV2 = Join-Path $tmp 'dotnet-xunit2'
+    Copy-Item (Join-Path $PSScriptRoot 'testdata\dotnet-fixture') $dnV2 -Recurse
+    [IO.File]::WriteAllText((Join-Path $dnV2 'Fixture.csproj'), $dnProjClean.Replace('</Project>', @"
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.11.0" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5" />
+  </ItemGroup>
+</Project>
+"@))
+    [IO.File]::WriteAllText((Join-Path $dnV2 'GreeterTests.cs'), "namespace Fixture;`n`n/// <summary>Greeter tests.</summary>`npublic class GreeterTests`n{`n    /// <summary>Greets by name.</summary>`n    [Xunit.Fact]`n    public void Greets() => Xunit.Assert.Equal(`"Hello, A!`", Greeter.Greet(`"A`"));`n}`n")
+    Push-Location $dnV2
+    & dotnet restore Fixture.csproj -nologo *> $null
+    $dnV2Ok = ($LASTEXITCODE -eq 0)
+    Pop-Location
+    if ($dnV2Ok) {
+        $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $dnV2 -All -Full 2>&1 | Out-String)
+        $dnV2Code = $LASTEXITCODE
+        Check 'an xUnit v2 test project is test-framework drift, advisory' `
+            (($dnV2Code -eq 0) -and ($out -match '\[PASS\] test \(') -and
+            ($out -match '\[WARN\] test framework: Fixture\.csproj uses xUnit v2 \(xunit 2\.9\.3\)')) "code=$dnV2Code $out"
+    } else {
+        Write-Output '[skip] xunit 2.x not restorable -- the test-framework drift check cannot run'
     }
     }
 

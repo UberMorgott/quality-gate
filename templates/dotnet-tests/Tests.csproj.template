@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    quality-gate standard .NET test project: xUnit v3 on Microsoft.Testing.Platform (MTP).
+    Copy as <Name>.Tests/<Name>.Tests.csproj with SampleTests.cs, set TargetFramework, and add a
+    ProjectReference to the project under test. MTP mode of `dotnet test` (.NET 10 SDK) is
+    selected by the repository's global.json, and then every test project must be MTP:
+      { "test": { "runner": "Microsoft.Testing.Platform" } }
+    xunit.v3 is the one package (4.x = xunit.v3.mtp-v2); no Microsoft.NET.Test.Sdk or
+    xunit.runner.visualstudio in MTP mode. `qgate -Full` warns on a test project using
+    another framework (xunit 2.x, NUnit, MSTest, TUnit).
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+    <PackageReference Include="xunit.v3" Version="4.0.2" />
+  </ItemGroup>
+
+</Project>

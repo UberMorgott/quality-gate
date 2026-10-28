@@ -1335,6 +1335,14 @@ function Test-DotnetMtpMode([string]$Dir) {
     $false
 }
 
+# #171: the standard .NET test framework is xUnit v3 (templates/dotnet-tests); another one
+# in a test project is drift between repositories. Advisory: those tests still run and judge.
+function Get-DotnetTestFrameworkDrift([string]$Proj, $Pkgs) {
+    $other = @{ 'xunit' = 'xUnit v2'; 'NUnit' = 'NUnit'; 'MSTest' = 'MSTest'; 'MSTest.TestFramework' = 'MSTest'; 'TUnit' = 'TUnit' }
+    $hit = @($Pkgs | Where-Object { $other.Contains("$($_.Identity)") } | ForEach-Object { "$($other[$_.Identity]) ($($_.Identity) $($_.Version))" })
+    if ($hit) { "[WARN] test framework: $Proj uses $($hit -join ', ') -- the standard is xUnit v3, see templates/dotnet-tests" }
+}
+
 # Highest release version of a package already extracted in the global NuGet folder
 # (NUGET_PACKAGES / NuGet.Config globalPackagesFolder respected), or $null. `.nupkg.metadata`
 # is what NuGet itself writes last, so a half-extracted folder does not count.
@@ -1993,6 +2001,7 @@ function Invoke-DotnetStack($s) {
         # option only from .NET 11 Preview 7 (DOTNET_NOLOGO above covers the banner).
         if (Test-DotnetMtpMode $s.Dir) { Phase 'test' { dotnet test --project $proj --no-build -v q } }
         else { Phase 'test' { dotnet test $proj --no-build -nologo -v q } }
+        if ($Full) { $script:Lines += @(Get-DotnetTestFrameworkDrift $proj $pkgs) }
     }
     # A self-check runner (#88): `Foo.Tests.csproj`, OutputType Exe, no test SDK, exit code
     # is the verdict. Seen in three BepInEx mod repos, each reported `no test project` while
