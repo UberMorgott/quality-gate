@@ -5,6 +5,7 @@
 #   qgate -All -Full      any flag of gate/check.ps1, passed straight through
 #   qgate wire            wire the current repo: agent hooks, configs, CI
 #   qgate trust           allow this repo's own qgate.json checks to run here
+#   qgate pre-push        pre-push hook entry: gate the pushed tree (reads git's stdin)
 #   qgate outdated        dependencies and toolchains with a newer release
 #   qgate stop-hook       Claude Code `Stop` hook entry (reads stdin JSON), opt-in via qgate.json stopHook: true
 #   qgate hold/release    background writer active: pause the Stop hook (#98)
@@ -30,6 +31,8 @@ qgate -- one quality gate for every stack in the repository
   qgate wire            wire the current repo (configs, agent hooks; -CI adds a workflow)
   qgate trust           print this repo's qgate.json "checks" and allow them to run here
                         (-Root <path> for another repo, -Remove to forget them)
+  qgate pre-push        what the pre-push hook runs: refuses a push of anything but the
+                        clean checked-out HEAD, then qgate -All -Full on it (git stdin)
   qgate outdated        dependencies and toolchains with a newer release
   qgate stop-hook       Claude Code `Stop` hook entry (reads stdin JSON); opt-in:
                         off unless qgate.json has "stopHook": true -- commits are
@@ -65,7 +68,7 @@ Exit codes: 0 pass, 1 fail, 2 from `stop-hook` blocks the agent's turn.
 # install.ps1 and selftest.ps1 forward other tools' codes, so they are not listed.
 $knownCodes = @{
     'gate\check.ps1' = 0, 1; 'gate\stop-hook.ps1' = 0, 1, 2; 'gate\hold.ps1' = 0, 1, 64
-    'gate\global.ps1' = 0, 1, 64; 'gate\trust.ps1' = 0, 1; 'gate\outdated.ps1' = 0, 1
+    'gate\global.ps1' = 0, 1, 64; 'gate\trust.ps1' = 0, 1; 'gate\outdated.ps1' = 0, 1; 'gate\pre-push.ps1' = 0, 1
 }
 function Invoke-Child([string]$script, [object[]]$argv) {
     # -File keeps $LASTEXITCODE meaningful; child scripts own their own output.
@@ -91,6 +94,8 @@ switch ($cmd) {
     'release'   { Invoke-Child 'gate\hold.ps1'      (@('off') + $rest) }
     'wire'      { Invoke-Child 'install.ps1'        $rest }
     'trust'     { Invoke-Child 'gate\trust.ps1'     $rest }
+    # #180: what the generated pre-push hook runs; reads git's ref lines on stdin.
+    'pre-push'  { Invoke-Child 'gate\pre-push.ps1'  $rest }
     'selftest'  { Invoke-Child 'selftest.ps1'       $rest }
     'global'    { Invoke-Child 'gate\global.ps1'    $rest }
     'update' {
@@ -191,7 +196,7 @@ switch ($cmd) {
         exit 0
     }
     default {
-        [Console]::Error.WriteLine("qgate: unknown command '$cmd'. Try: run, wire, trust, global, outdated, stop-hook, hold, release, update, selftest, where")
+        [Console]::Error.WriteLine("qgate: unknown command '$cmd'. Try: run, wire, trust, pre-push, global, outdated, stop-hook, hold, release, update, selftest, where")
         exit 64
     }
 }

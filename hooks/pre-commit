@@ -3,7 +3,7 @@
 # `git config --global core.hooksPath` here. That setting makes git ignore every
 # repository's own .git/hooks, so this script has to run that hook itself.
 #
-# pre-commit and pre-merge-commit are the same file: the hook name comes from $0.
+# pre-commit, pre-merge-commit and pre-push are the same file: the hook name comes from $0.
 name=$(basename "$0")
 top=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
 
@@ -21,6 +21,10 @@ for own in "$common/hooks/$name" "$top/.husky/$name"; do
 done
 [ -f "$top/lefthook.yml" ] && grep -q qgate "$top/lefthook.yml" && wired=1
 [ -n "$wired" ] && exit 0
+
+# pre-push (#180) is dispatched only to a repository's own hook: an unwired repo gets the
+# advisory gate at commit time, and a push is no place to start running it.
+[ "$name" = pre-push ] && exit 0
 
 # Same platform switch as templates/pre-commit, for the same measured reason.
 if uname -o 2>/dev/null | grep -q Msys; then

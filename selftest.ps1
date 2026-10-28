@@ -3042,11 +3042,11 @@ if (Get-Command lefthook -ErrorAction SilentlyContinue) {
     # The absence half, and it is falsifiable here because this repo really was wired
     # by this version a line ago: a check that fires on a current config would make the
     # warning noise nobody reads.
-    Check 'a current lefthook.yml is not reported as stale' ($curOut -notmatch 'no pre-merge-commit hook') $curOut
+    Check 'a current lefthook.yml is not reported as stale' ($curOut -notmatch 'it has no \S.* hook') $curOut
     Set-Content (Join-Path $lhr 'lefthook.yml') "pre-commit:`n  jobs:`n    - name: quality-gate`n      run: 'qgate.cmd -All -Full -Quiet'`n"
     $staleOut = (& pwsh -NoProfile -File $installer -Target $lhr -NoRun 2>&1 | Out-String)
     Check 'wire names the hook a stale lefthook.yml is missing' `
-        (($staleOut -match 'no pre-merge-commit hook') -and ($staleOut -match 'lefthook install')) $staleOut
+        (($staleOut -match 'no pre-merge-commit, pre-push hook') -and ($staleOut -match 'lefthook install')) $staleOut
 } else {
     Write-Output '[skip] lefthook not on PATH -- the stale-config path cannot run'
 }
@@ -3679,6 +3679,56 @@ $parents = @((git -C $mrg rev-list --parents -n 1 HEAD) -split ' ')
 Check 'a clean merge commit still lands' `
     (($goodCode -eq 0) -and ((git -C $mrg rev-parse HEAD) -ne $beforeGood) -and ($parents.Count -eq 3)) `
     "code=$goodCode fields=$($parents.Count)"
+
+# #180: pre-push. A rebase, cherry-pick or revert commits through neither hook above, so
+# `git rebase origin/main && git push` pushed a tree no gate had seen. A --no-verify
+# commit stands in for those commits here: it is the same thing, a commit the gate never
+# judged, and only a real `git push` to a real remote shows what pre-push does with it.
+# This checkout's bin/ goes first on PATH: the hook calls `qgate.cmd pre-push` by name,
+# and the installed gate on PATH may not know that command yet.
+$pushRepo = Join-Path $tmp 'pushhook'
+$pushBare = Join-Path $tmp 'pushhook-remote.git'
+git init -q --bare $pushBare 2>$null
+New-Item -ItemType Directory -Path $pushRepo | Out-Null
+Copy-Item (Join-Path $PSScriptRoot 'testdata\proto-fixture') (Join-Path $pushRepo 'schema') -Recurse
+git -C $pushRepo init -q 2>$null
+git -C $pushRepo config core.autocrlf false 2>$null
+& pwsh -NoProfile -File $installer -Target $pushRepo -NoRun *> $null
+git -C $pushRepo add -A 2>$null
+git -C $pushRepo -c user.email=selftest@local -c user.name=selftest commit -qm 'clean' *> $null
+git -C $pushRepo remote add origin $pushBare 2>$null
+$pushPath = $env:PATH
+$env:PATH = "$(Join-Path $PSScriptRoot 'bin')$([IO.Path]::PathSeparator)$env:PATH"
+function Test-RemoteRef([string]$Ref) { [bool](git -C $pushBare rev-parse -q --verify "refs/heads/$Ref" 2>$null) }
+try {
+    $o = (git -C $pushRepo push origin HEAD:refs/heads/clean 2>&1 | Out-String); $c = $LASTEXITCODE
+    Check 'a push of a clean tree passes the pre-push hook (#180)' (($c -eq 0) -and (Test-RemoteRef 'clean')) "code=$c $o"
+    $ppfx = Join-Path $pushRepo 'schema\example\v1\greeting.proto'
+    [IO.File]::WriteAllText($ppfx, ([IO.File]::ReadAllText($ppfx).Replace('string text = 1;', 'string Text = 1;')))
+    git -C $pushRepo add -A 2>$null
+    git -C $pushRepo -c user.email=selftest@local -c user.name=selftest commit -qm 'ungated' --no-verify *> $null
+    $o = (git -C $pushRepo push origin HEAD:refs/heads/bad 2>&1 | Out-String); $c = $LASTEXITCODE
+    Check 'a push of a commit that fails the gate is refused (#180)' (($c -ne 0) -and -not (Test-RemoteRef 'bad') -and ($o -match '\[FAIL\]')) "code=$c $o"
+    # Only the checked-out HEAD can be vouched for: the gate reads the working tree.
+    $o = (git -C $pushRepo push origin HEAD~1:refs/heads/older 2>&1 | Out-String); $c = $LASTEXITCODE
+    Check 'a push of a commit other than HEAD is refused with the reason (#180)' `
+        (($c -ne 0) -and -not (Test-RemoteRef 'older') -and ($o -match 'not the checked-out HEAD')) "code=$c $o"
+    git -C $pushRepo reset -q --hard HEAD~1 2>$null
+    Add-Content -LiteralPath (Join-Path $pushRepo 'AGENTS.md') 'uncommitted'
+    $o = (git -C $pushRepo push origin HEAD:refs/heads/dirty 2>&1 | Out-String); $c = $LASTEXITCODE
+    Check 'a push from a work tree with tracked changes is refused (#180)' `
+        (($c -ne 0) -and -not (Test-RemoteRef 'dirty') -and ($o -match 'Commit or stash first')) "code=$c $o"
+    git -C $pushRepo checkout -q -- AGENTS.md 2>$null
+    # git status cannot see an assume-unchanged file's local edit; the gate would build it.
+    git -C $pushRepo update-index --assume-unchanged AGENTS.md 2>$null
+    $o = (git -C $pushRepo push origin HEAD:refs/heads/hidden 2>&1 | Out-String); $c = $LASTEXITCODE
+    Check 'a push with an assume-unchanged file is refused (#180)' `
+        (($c -ne 0) -and -not (Test-RemoteRef 'hidden') -and ($o -match 'assume-unchanged/skip-worktree')) "code=$c $o"
+    git -C $pushRepo update-index --no-assume-unchanged AGENTS.md 2>$null
+    # Deleting a remote ref sends an all-zero local sha: nothing to gate, never refused.
+    $o = (git -C $pushRepo push origin :refs/heads/clean 2>&1 | Out-String); $c = $LASTEXITCODE
+    Check 'deleting a remote branch passes the pre-push hook (#180)' (($c -eq 0) -and -not (Test-RemoteRef 'clean')) "code=$c $o"
+} finally { $env:PATH = $pushPath }
 
 # A hook does not run in the environment a terminal does: git exports GIT_DIR and
 # leaves GIT_WORK_TREE unset, and under those two variables git stops DISCOVERING the
@@ -4461,6 +4511,18 @@ try {
     Check 'an untrusted repo is skipped, not failed' ($r.Out -notmatch '\[FAIL\]') $r.Out
     Check 'an untrusted skip still WARNs in the fast lane (#161)' `
         ($r.Out -match '(?ms)\[WARN\] skipped -- .*^\s+custom -- untrusted') $r.Out
+    # #181: but a hook is the one place nobody reads a [SKIP] -- -Quiet hides it on green --
+    # so there an untrusted check is a FAIL that says how to trust it. Both doors: -Hook
+    # (pre-push passes it) and GIT_INDEX_FILE (any commit hook, wired before -Hook existed).
+    $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $cust -All -Full -Quiet -Hook 2>&1 | Out-String)
+    Check 'a hook run fails on untrusted qgate.json checks and says how to trust them (#181)' `
+        (($LASTEXITCODE -ne 0) -and ($out -match '\[FAIL\] custom -- 2 qgate\.json check\(s\) NOT RUN: untrusted') -and ($out -match 'qgate trust -Root')) $out
+    $priorIdx = $env:GIT_INDEX_FILE
+    $env:GIT_INDEX_FILE = Join-Path $tmp 'no-such-index'
+    try { $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $cust -All -Full -Quiet 2>&1 | Out-String); $idxCode = $LASTEXITCODE }
+    finally { $env:GIT_INDEX_FILE = $priorIdx }
+    Check 'a commit hook (GIT_INDEX_FILE) fails on untrusted checks without -Hook (#181)' `
+        (($idxCode -ne 0) -and ($out -match 'NOT RUN: untrusted')) $out
 
     # `qgate trust` is the one place the exact command is shown to the person allowing
     # it, so printing a summary instead of the string would defeat the whole gate.
@@ -4546,6 +4608,39 @@ try {
     $r = Invoke-Gate $cust
     Check 'qgate trust -Remove revokes every trusted version' `
         (($r.Out -match 'untrusted qgate\.json checks') -and ($r.Out -notmatch '\[PASS\] branch-a')) $r.Out
+
+    # #181: a linked worktree is the same repository. Trust is keyed by path, so every
+    # `git worktree add` started untrusted and its checks went unrun; the main worktree's
+    # trusted hashes now count there too -- still per hash, so an edited qgate.json in the
+    # worktree is untrusted and, in a hook, fails.
+    $wtMain = Join-Path $tmp 'custwt-main'
+    $wtLinked = Join-Path $tmp 'custwt-linked'
+    New-Item -ItemType Directory -Path $wtMain | Out-Null
+    git -C $wtMain init -q 2>$null
+    [IO.File]::WriteAllText((Join-Path $wtMain 'qgate.json'), '{"checks":[{"name":"wt-check","run":"exit 0","level":"fast"}]}')
+    git -C $wtMain add -A 2>$null
+    git -C $wtMain -c user.email=selftest@local -c user.name=selftest commit -qm init --no-verify *> $null
+    $null = Invoke-Trust $wtMain
+    git -C $wtMain worktree add -q -b wt-branch $wtLinked *> $null
+    $r = Invoke-Gate $wtLinked
+    Check 'a linked worktree inherits the main worktree''s trust (#181)' (($r.Code -eq 0) -and ($r.Out -match '\[PASS\] wt-check')) $r.Out
+    $t = Invoke-Trust $wtLinked -Remove
+    Check 'qgate trust -Remove in a linked worktree names the main worktree''s trust (#181)' ($t -match 'through the main worktree') $t
+    # A green hook verdict is reused for the same staged tree (#123); revoking trust must
+    # end that reuse, or a hook that now fails would keep answering green from the record.
+    $priorIdx = $env:GIT_INDEX_FILE
+    $env:GIT_INDEX_FILE = Join-Path $wtMain '.git\index'
+    try {
+        $null = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $wtMain -All -Quiet 2>&1 | Out-String); $c1 = $LASTEXITCODE
+        $null = Invoke-Trust $wtMain -Remove
+        $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $wtMain -All -Quiet 2>&1 | Out-String); $c2 = $LASTEXITCODE
+    } finally { $env:GIT_INDEX_FILE = $priorIdx }
+    Check 'a reused hook verdict does not outlive qgate trust -Remove (#181)' (($c1 -eq 0) -and ($c2 -ne 0) -and ($out -match 'NOT RUN: untrusted')) "c1=$c1 c2=$c2 $out"
+    $null = Invoke-Trust $wtMain
+    [IO.File]::WriteAllText((Join-Path $wtLinked 'qgate.json'), '{"checks":[{"name":"wt-check","run":"exit 1","level":"fast"}]}')
+    $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $wtLinked -All -Quiet -Hook 2>&1 | Out-String)
+    Check 'an edited qgate.json in a linked worktree is still untrusted, and a hook fails on it (#181)' `
+        (($LASTEXITCODE -ne 0) -and ($out -match 'NOT RUN: untrusted') -and ($out -notmatch '\[(PASS|FAIL)\] wt-check')) $out
 
     # A non-zero exit is the finding, and the output plus the command line is what a
     # reader acts on -- no other phase's output has to name the tool that produced it.

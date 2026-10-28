@@ -337,6 +337,7 @@ function Install-Lefthook {
             # file drifted apart once already, and the pasted copy was the broken
             # one -- it said bare `qgate`, which exits 127 under a Git shell.
             Write-Output "            $($script:LefthookRun)"
+            Write-Output "          and copy the pre-push block (use_stdin, qgate pre-push) out of $($script:LefthookTemplate)"
         } else {
             # A file this installer wrote at an older version is not a foreign file,
             # and "kept existing" read as "wired" for it: when pre-merge-commit was
@@ -367,6 +368,8 @@ function Install-Lefthook {
 # self-test can execute the real thing through sh. It was a string in this file for
 # as long as it was wrong, and a string in this file is exactly what no test runs.
 $hookBody = ([IO.File]::ReadAllText((Join-Path $PSScriptRoot 'templates\pre-commit'))) -replace "`r`n", "`n"
+# #180: pre-push runs `qgate pre-push` (stdin ref lines), not the commit-time line.
+$pushBody = ([IO.File]::ReadAllText((Join-Path $PSScriptRoot 'templates\pre-push'))) -replace "`r`n", "`n"
 
 # Ask git where the hooks live: in a worktree or a submodule `.git` is a FILE and
 # `<root>\.git\hooks` does not exist at all.
@@ -377,7 +380,8 @@ $isRepo = $LASTEXITCODE -eq 0 -and $hooksDir
 # completely unguarded: measured on git 2.53, the merge commit lands and no hook
 # runs. See templates/lefthook.yml for which other commit paths are covered and
 # which git gives nothing to cover them with.
-$hookNames = @('pre-commit', 'pre-merge-commit')
+# pre-push (#180): rebase, cherry-pick and revert commits run neither commit hook.
+$hookNames = @('pre-commit', 'pre-merge-commit', 'pre-push')
 if ($NoHook) {
     Write-Output 'hooks     -- skipped (-NoHook)'
 } elseif (-not $isRepo) {
@@ -389,16 +393,17 @@ if ($NoHook) {
 } else {
     foreach ($name in $hookNames) {
         $hook = Join-Path ($hooksDir -replace '/', '\') $name
+        $body = if ($name -eq 'pre-push') { $pushBody } else { $hookBody }
         if ((Test-Path $hook) -and -not ((Get-Content $hook -Raw) -match 'quality-gate')) {
             # Never clobber someone else's hook; core.hooksPath is deliberately not
             # touched either -- redirecting it would disable other hooks in .git/hooks.
             Write-Output "$($name.PadRight(10))-- EXISTS and is not ours, left alone. Add this to it yourself:"
             # Quoted from templates/pre-commit for the same reason as the lefthook advice.
-            ($hookBody -split "`n" | Where-Object { $_ -and $_ -notmatch '^\s*#' }) |
+            ($body -split "`n" | Where-Object { $_ -and $_ -notmatch '^\s*#' }) |
                 ForEach-Object { Write-Output "  $_" }
         } else {
             New-Item -ItemType Directory -Path (Split-Path $hook) -Force | Out-Null
-            Set-Content -Path $hook -Value $hookBody -Encoding utf8 -NoNewline
+            Set-Content -Path $hook -Value $body -Encoding utf8 -NoNewline
             Write-Output "$($name.PadRight(10))-> $hook"
         }
     }

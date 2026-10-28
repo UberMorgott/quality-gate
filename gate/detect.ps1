@@ -1667,13 +1667,36 @@ function ConvertTo-TrustList($Value) {
     @(@($Value) | Where-Object { $_ -is [string] -and $_ })
 }
 
+# quality-gate#181: the same directory in the repository's MAIN worktree, when $Root is
+# inside a linked worktree (`git worktree add`); $null otherwise. Trust is keyed by path,
+# so every fresh worktree used to start untrusted and its checks went unrun. A linked
+# worktree shares the main one's object store, refs and hooks -- it is the same
+# repository -- and the hash still has to match, so this widens nothing a user has not
+# already read. A bare or submodule common dir (leaf not `.git`) has no main tree here.
+function Get-MainWorktreeRoot([string]$Root) {
+    $prev = $global:LASTEXITCODE
+    try {
+        $top = "$(& git -C $Root rev-parse --path-format=absolute --show-toplevel 2>$null)".Trim()
+        $common = "$(& git -C $Root rev-parse --path-format=absolute --git-common-dir 2>$null)".Trim()
+    } finally { $global:LASTEXITCODE = $prev }
+    if (-not $top -or -not $common -or (Split-Path -Leaf $common) -ne '.git') { return $null }
+    $top = [IO.Path]::GetFullPath($top).TrimEnd('\', '/')
+    $main = [IO.Path]::GetFullPath((Split-Path -Parent $common)).TrimEnd('\', '/')
+    if ($main -eq $top) { return $null }
+    $rel = [IO.Path]::GetRelativePath($top, [IO.Path]::GetFullPath($Root))
+    if ($rel -eq '.') { $main } else { [IO.Path]::GetFullPath((Join-Path $main $rel)).TrimEnd('\', '/') }
+}
+
 function Get-TrustedHashes([string]$Root) {
     $f = Get-TrustStore
     if (-not (Test-Path $f)) { return @() }
     $j = try { Get-Content $f -Raw | ConvertFrom-Json } catch { $null }
     if (-not $j) { return @() }
     # Property lookup is case-insensitive, which is what a Windows path needs.
-    ConvertTo-TrustList $j.(Get-TrustKey $Root)
+    $own = ConvertTo-TrustList $j.(Get-TrustKey $Root)
+    $main = Get-MainWorktreeRoot (Get-TrustKey $Root)
+    $inherited = if ($main) { ConvertTo-TrustList $j.$main } else { @() }
+    @(@($own) + @($inherited) | Select-Object -Unique)
 }
 
 function Test-ChecksTrusted([string]$Root, $Checks) {

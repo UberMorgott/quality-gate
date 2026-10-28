@@ -36,11 +36,21 @@ function Save-TrustStore($Map, [string]$Path) {
 }
 
 if ($Remove) {
-    if (-not $map.Contains($key)) { Write-Output "not trusted, nothing to remove: $key"; exit 0 }
+    # #181: a linked worktree also honours its main worktree's trust (Get-TrustedHashes),
+    # so removing only this path's entry would leave the checks running here -- say where
+    # that trust lives and how to remove it, instead of a "removed" that changed nothing.
+    $main = Get-MainWorktreeRoot $key
+    $inherited = $main -and $map.Contains($main)
+    $note = "still trusted here through the main worktree $main -- to revoke it: qgate trust -Remove -Root '$main'"
+    if (-not $map.Contains($key)) {
+        Write-Output $(if ($inherited) { "no own entry for $key; $note" } else { "not trusted, nothing to remove: $key" })
+        exit 0
+    }
     $map.Remove($key)
     Save-TrustStore $map $store
     Write-Output "removed  $key"
     Write-Output "store    $store"
+    if ($inherited) { Write-Output $note }
     exit 0
 }
 

@@ -25,6 +25,7 @@ param(
     [string]$Root,        # repo root; defaults to the git root of the cwd
     [string]$Sarif,       # opt-in: also write the report as SARIF 2.1.0 to this file; stdout unchanged
     [switch]$Parallel,    # opt-in: run independent stacks (go web rust dotnet cpp godot) as concurrent child processes
+    [switch]$Hook,        # #181: a git hook is asking -- untrusted qgate.json checks FAIL instead of [SKIP] (implied inside a commit)
     # Internal to -Parallel: the child runs exactly these stacks ("stack|rel;...") and
     # writes its per-stack results to ParallelOut instead of printing a report.
     [Parameter(DontShow)][string]$ParallelStacks,
@@ -510,6 +511,15 @@ $script:Lines = @()
 # (CI never has the game installed). Read once, by the
 # zero-phase invariant at the bottom of this file.
 $script:CustomDeferred = $false
+# quality-gate#181: a hook never passes on checks it did not run. In a fresh worktree the
+# repo's qgate.json checks were untrusted, the pre-commit printed nothing under -Quiet and
+# passed, and a test the repo wires in was never executed. Outside a hook (a terminal, an
+# agent turn, CI) untrusted stays a [SKIP]: nobody there can be asked to read the commands.
+# Inside a commit git sets GIT_INDEX_FILE, so a hook wired before -Hook existed is covered
+# too; QGATE_HOOK carries the mode into this gate's own children (-Parallel, stagedTree)
+# and is removed for the repo's custom commands like the hook's git variables.
+if ($Hook -or $env:GIT_INDEX_FILE) { $env:QGATE_HOOK = '1' }
+$script:HookMode = [bool]$env:QGATE_HOOK
 # The same thing for the base stack: one of its phases declined because the tool it
 # needs is not installed here, or there was nothing staged for it to read. Read once,
 # by the zero-phase invariant, and only when base is the whole run -- see there.
@@ -558,8 +568,12 @@ if ($script:StagedAtStart -and -not $env:QGATE_NO_REUSE -and -not $ParallelStack
     if ($LASTEXITCODE -eq 0 -and $common) {
         $script:PassFile = Join-Path $common 'qgate-passed-trees'
         $gateStamp = @(Get-ChildItem (Join-Path $PSScriptRoot '*.ps1') | ForEach-Object { "$($_.Name):$($_.Length):$($_.LastWriteTimeUtc.Ticks)" }) -join ','
-        $flags = @(Get-SelfArgv $PSBoundParameters 'Root', 'Quiet', 'Sarif', 'Extra') -join ' '
-        $script:PassKey = Get-PathKey "$($script:StagedAtStart)|$flags|$gateStamp"
+        $flags = @(Get-SelfArgv $PSBoundParameters 'Root', 'Quiet', 'Sarif', 'Extra', 'Hook') -join ' '
+        # #181: and whether the repo's own checks are trusted right now. A verdict reached
+        # while they ran must not be reused after `qgate trust -Remove` (the run now fails).
+        $ctReuse = Get-CustomChecks $Root
+        $trustStamp = if ($ctReuse -and -not $ctReuse.Error) { "$(Get-ChecksHash $ctReuse.Checks):$(Test-ChecksTrusted $Root $ctReuse.Checks)" } else { '' }
+        $script:PassKey = Get-PathKey "$($script:StagedAtStart)|$flags|$gateStamp|$trustStamp"
         if ((Test-Path $script:PassFile) -and @(Get-Content $script:PassFile -ErrorAction SilentlyContinue) -contains $script:PassKey) {
             if (-not $Quiet) { Write-Output "[SKIP] staged tree $($script:StagedAtStart.Substring(0, 12)) already passed this gate with these flags -- reused (QGATE_NO_REUSE=1 re-runs)" }
             exit 0
@@ -3658,7 +3672,8 @@ function Get-LeakReport([int]$RootPid, [datetime]$NotBefore, [string]$Name) {
 # empty -- measured, the child then saw GIT_DIR='' and git answered `not a git repository: ''`.
 function Invoke-WithoutHookGitEnv([scriptblock]$Body) {
     $saved = @{}
-    foreach ($v in @(& git rev-parse --local-env-vars 2>$null)) {
+    # QGATE_HOOK (#181) too: a check that runs a gate of its own (a self-test) is not a hook.
+    foreach ($v in @(@(& git rev-parse --local-env-vars 2>$null) + 'QGATE_HOOK')) {
         $item = Get-Item "env:$v" -ErrorAction SilentlyContinue
         if ($item) { $saved[$v] = $item.Value; Remove-Item "env:$v" }
     }
@@ -3675,6 +3690,10 @@ function Invoke-CustomStack($s) {
         # (a branch switch) or none at all.
         $known = @(Get-TrustedHashes $Root).Count
         $why = if ($known) { "; $known other version(s) of them trusted for this repo" } else { '' }
+        if ($script:HookMode) {
+            Fail "custom -- $(@($custom.Checks).Count) qgate.json check(s) NOT RUN: untrusted on this machine, hash $(Get-ChecksHash $custom.Checks)$why. A hook does not pass on checks it skipped -- read them and run: qgate trust -Root '$Root'"
+            return
+        }
         $script:Lines += "[SKIP] custom -- untrusted qgate.json checks, hash $(Get-ChecksHash $custom.Checks)$why (run: qgate trust)"
         $script:CustomDeferred = $true
         return
