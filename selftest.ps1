@@ -1869,6 +1869,11 @@ internal class Sealable
         # the SDK resolved, none loaded twice (one MA0084 site in Probe.cs, reported once).
         Check 'an SDK project never takes the legacy analyzer path' `
             (($out -match 'MA0084 x1\b') -and ($out -cnotmatch 'QGATE\d') -and ($out -notmatch '0 loaded')) $out
+        # #164: a count alone cannot be acted on -- each finding is located, repo-relative.
+        Check 'each analyzer finding is reported with file(line,col), id and message (#164)' `
+            (($out -match '\[WARN\] analyzer: Probe\.cs\(\d+,\d+\): MA0084 \S') -and ($out -match '\[WARN\] analyzer: Probe\.cs\(\d+,\d+\): CA1001 \S') -and
+                ($out -notmatch '\[WARN\] analyzer: [^\r\n]*\.csproj\]')) $out
+        Check 'the fast lane lists no analyzer findings (#164)' ($anaFastOut -notmatch '\[WARN\] analyzer:') $anaFastOut
     }
 
     # #87: a net8.0 test project `<Compile Include="..\X.cs" Link=...>`-links a file that
@@ -1892,6 +1897,8 @@ internal class Sealable
             ($out -match '\[INFO\] X\.Tests\.csproj: 1 newer-API analyzer diagnostic\(s\) in files linked from outside the project dir, not counted -- CA1512 x1') $out
         Check 'the same newer-API rule in the project''s own file still warns (#87)' `
             ($out -match '\[WARN\] X\.Tests\.csproj: \d+ analyzer diagnostic\(s\)[^\r\n]*CA1512 x1') $out
+        Check 'only the counted finding is listed, at its own file (#164)' `
+            (($out -match '\[WARN\] analyzer: Tests/Own\.cs\(\d+,\d+\): CA1512 ') -and ($out -notmatch '\[WARN\] analyzer: [^\r\n]*Linked\.cs')) $out
     }
 
     # And the failure this feature must survive. Injecting PackageReferences forces a

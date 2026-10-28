@@ -1846,12 +1846,16 @@ function Invoke-DotnetStack($s) {
         # even with -clp:NoSummary (measured, SDK 10.0.403; `dotnet msbuild` honours it), so
         # every warning came out twice. An identical line is the same finding repeated.
         $oUnique = (@($o -split '\r?\n' | Select-Object -Unique) -join "`n")
-        $diags = @([regex]::Matches($oUnique, '(?m)^\s*(?:(.+?)\(\d+[\d,]*\))?[^\r\n]*?:\s+warning\s+([A-Z]+\d+)') | ForEach-Object {
+        # #164: file, position and message are kept, so an analyzer finding can be located
+        # from the report, not only counted.
+        $diags = @([regex]::Matches($oUnique, '(?m)^\s*(?:(.+?)\((\d+[\d,]*)\))?[^\r\n]*?:\s+warning\s+([A-Z]+\d+)[:\s]*([^\r\n]*)') | ForEach-Object {
                 $file = $_.Groups[1].Value
                 [pscustomobject]@{
-                    Code   = $_.Groups[2].Value
-                    Linked = [bool]$file -and ($newApiRules -contains $_.Groups[2].Value) -and
+                    Code    = $_.Groups[3].Value
+                    Linked  = [bool]$file -and ($newApiRules -contains $_.Groups[3].Value) -and
                     -not ([IO.Path]::GetFullPath($file, $projDir).StartsWith($projDir, [StringComparison]::OrdinalIgnoreCase))
+                    Where   = if ($file) { "$([IO.Path]::GetRelativePath($Root, [IO.Path]::GetFullPath($file, $projDir)) -replace '\\', '/')($($_.Groups[2].Value)): " }
+                    Message = $_.Groups[4].Value -replace '\s*\[[^\]]*\]\s*$'
                 }
             })
         $linked = @($diags | Where-Object Linked | ForEach-Object Code)
@@ -1865,7 +1869,8 @@ function Invoke-DotnetStack($s) {
         }
         # RS0030/RS0031 = BannedApiAnalyzers, S1234 = SonarAnalyzer: injected opt-in above or
         # referenced by the repository itself.
-        $ana = @($codes | Where-Object { $_ -match '^(CA|MA|IDE|UNT|RS|S)\d+$' })
+        $anaRx = '^(CA|MA|IDE|UNT|RS|S)\d+$'
+        $ana = @($codes | Where-Object { $_ -match $anaRx })
         $w = $codes.Count - $ana.Count
         if ($w) { $script:Lines += "[WARN] ${proj}: $w compiler warning(s)" }
         # An analyzer compiled against a newer Roslyn than this SDK does not load at all, and
@@ -1875,6 +1880,9 @@ function Invoke-DotnetStack($s) {
             $top = (@($ana | Group-Object | Sort-Object Count, Name -Descending |
                     Select-Object -First 5 | ForEach-Object { "$($_.Name) x$($_.Count)" }) -join ', ')
             $script:Lines += "[WARN] ${proj}: $($ana.Count) analyzer diagnostic(s) -- $top"
+            # Capped like the InspectCode findings below; the count above is the total.
+            $script:Lines += @($diags | Where-Object { -not $_.Linked -and $_.Code -match $anaRx } | Select-Object -First 10 |
+                    ForEach-Object { "[WARN] analyzer: $($_.Where)$($_.Code) $($_.Message)" })
         }
     }
     # The build could not resolve the references after all: nothing below can say more
