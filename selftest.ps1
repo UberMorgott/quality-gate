@@ -2166,6 +2166,21 @@ internal class Sealable
     $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $dnSib -All -Full 2>&1 | Out-String)
     Check 'a sibling that is no test project leaves the [SKIP] test in place (#170)' `
         (($out -match '\[SKIP\] test -- no test project') -and ($out -match '(?s)skipped --.*test -- no test project') -and ($out -notmatch 'tests run in')) $out
+    # #170 x #172: an xunit.v3 MTP sibling sets neither IsTestProject nor Microsoft.NET.Test.Sdk,
+    # and the sibling lookup must know it for a test project just as the test phase does.
+    Remove-Item (Join-Path $dnSib 'Mod.Tests') -Recurse -Force
+    $dnSibMtp = New-Item -ItemType Directory -Force (Join-Path $dnSib 'Mod.Tests')
+    Copy-Item (Join-Path $PSScriptRoot 'templates\dotnet-tests\Tests.csproj.template') (Join-Path $dnSibMtp 'Mod.Tests.csproj')
+    Copy-Item (Join-Path $PSScriptRoot 'templates\dotnet-tests\SampleTests.cs') $dnSibMtp
+    [IO.File]::WriteAllText((Join-Path $dnSib 'global.json'), "{ `"test`": { `"runner`": `"Microsoft.Testing.Platform`" } }`n")
+    & dotnet restore (Join-Path $dnSibMtp 'Mod.Tests.csproj') -nologo *> $null
+    if (($LASTEXITCODE -eq 0) -and (@($dnSdks | Where-Object { [int](($_ -split '\.')[0]) -ge 10 }).Count -gt 0)) {
+        $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $dnSib -All -Full 2>&1 | Out-String)
+        Check 'a project beside an xunit.v3 MTP test project is not reported as an unrun test (#170, #172)' `
+            (($out -match '\[INFO\] test -- not a test project; tests run in Mod\.Tests/Mod\.Tests\.csproj') -and ($out -notmatch 'no test project')) $out
+    } else {
+        Write-Output '[skip] no .NET 10 SDK or xunit.v3 not restorable -- the MTP sibling check cannot run'
+    }
     $dnBanEmpty = New-Item -ItemType Directory -Force (Join-Path $tmp 'nuget-empty')
     # SonarAnalyzer.CSharp (#62): qgate.json dotnet.sonar, same cache-only injection.
     $dnSonar = Join-Path $tmp 'dotnet-sonar'

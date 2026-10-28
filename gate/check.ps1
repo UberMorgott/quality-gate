@@ -1341,6 +1341,20 @@ function Get-QGateDotnetConfig([string]$Repo) {
     if ($c) { $c } else { [pscustomobject]@{} }
 }
 
+# True when an evaluated project (Get-DotnetEval JSON) has a real test SDK, so `dotnet test`
+# exists for it. One predicate for the test phase and the #170 sibling lookup.
+# IsTestProject is what the SDK itself sets once the project is restored, and the
+# PackageReference list covers the project before its first restore and everything
+# Directory.Build.props imports into it. An MTP test app (xunit.v3 4.x default, TUnit) sets
+# IsTestingPlatformApplication and neither of the other two: measured, xunit.v3 4.0.2 alone
+# evaluates IsTestProject ''. Before the first restore that property is not there yet
+# either, so the package names it.
+function Test-DotnetTestProject($Eval) {
+    $ids = @($Eval.Items.PackageReference.Identity)
+    $Eval.Properties.IsTestProject -eq 'true' -or $Eval.Properties.IsTestingPlatformApplication -eq 'true' -or
+        $ids -contains 'Microsoft.NET.Test.Sdk' -or [bool]($ids -match '^(xunit\.v3(\.mtp-(off|v1|v2))?|TUnit|MSTest)$')
+}
+
 # #172: true when `dotnet test` runs in Microsoft.Testing.Platform mode -- "test.runner" of
 # the global.json the SDK resolves, the first one from the working directory up.
 # https://learn.microsoft.com/dotnet/core/tools/dotnet-test#choose-a-test-runner
@@ -2006,17 +2020,10 @@ function Invoke-DotnetStack($s) {
         }
     }
 
-    # `dotnet test` exists only where a real test SDK does (custom Exe runners below).
-    # Both facts come from the evaluation above, never from
-    # the csproj text: IsTestProject is what the SDK itself sets once the project is
-    # restored, and the PackageReference list covers the project before its first restore
-    # and everything Directory.Build.props imports into it.
-    # An MTP test app (xunit.v3 4.x default, TUnit) sets IsTestingPlatformApplication and
-    # neither of the other two: measured, xunit.v3 4.0.2 alone evaluates IsTestProject ''.
-    # Before the first restore that property is not there yet either, so the package names it.
+    # `dotnet test` exists only where a real test SDK does (custom Exe runners below);
+    # the facts come from the evaluation above, never from the csproj text.
     $pkgIds = @($pkgs.Identity)
-    if ($info.Properties.IsTestProject -eq 'true' -or $info.Properties.IsTestingPlatformApplication -eq 'true' -or
-        $pkgIds -contains 'Microsoft.NET.Test.Sdk' -or $pkgIds -match '^(xunit\.v3(\.mtp-(off|v1|v2))?|TUnit|MSTest)$') {
+    if (Test-DotnetTestProject $info) {
         # #172: in MTP mode the documented form is `--project`, and -nologo is an MTP-mode
         # option only from .NET 11 Preview 7 (DOTNET_NOLOGO above covers the banner).
         if (Test-DotnetMtpMode $s.Dir) { Phase 'test' { dotnet test --project $proj --no-build -v q } }
@@ -2066,7 +2073,7 @@ function Invoke-DotnetStack($s) {
         $testSib = @($stacks | Where-Object { $_.Stack -eq 'dotnet' -and $_.Implemented } | ForEach-Object { Join-Path $_.Dir $_.Marker } |
                 Where-Object { $_ -ne $projAbs } | Where-Object {
                     $si = try { (Get-DotnetEval $_).Out | ConvertFrom-Json } catch { $null }
-                    $si.Properties.IsTestProject -eq 'true' -or @($si.Items.PackageReference.Identity) -contains 'Microsoft.NET.Test.Sdk' -or
+                    ($si -and (Test-DotnetTestProject $si)) -or
                     ($si.Properties.OutputType -eq 'Exe' -and [IO.Path]::GetFileNameWithoutExtension($_) -match '\.Tests?$')
                 } | Select-Object -First 1)
         $script:Lines += if ($testSib) { "[INFO] test -- not a test project; tests run in $([IO.Path]::GetRelativePath($Root, $testSib[0]) -replace '\\', '/')" }
