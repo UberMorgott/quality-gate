@@ -1070,12 +1070,31 @@ if (Get-Command golangci-lint -ErrorAction SilentlyContinue) {
         Check 'aegis findings golangci-lint does not confirm pass with a disagreement warning' `
             (($r.Code -eq 0) -and ($r.Out -match '\[PASS\] golangci-lint') -and ($r.Out -match '\[PASS\] go vet') -and
             ($r.Out -match '\[WARN\] aegis lint 0\.1\.7 flagged findings .* engines disagree') -and ($r.Out -match 'fake aegis finding')) $r.Out
+        # #169: without a shared config, the tools' default rule sets differ.
+        $aeYml = Join-Path $aeg '.golangci.yml'
+        Remove-Item $aeYml
+        $r = & $aeRun '0.1.7' 1
+        Check 'different default lint rules pass without blaming aegis for a disagreement' `
+            (($r.Code -eq 0) -and $r.Called -and ($r.Out -match '\[PASS\] golangci-lint') -and ($r.Out -match 'no \.golangci\.yml') -and
+            ($r.Out -match 'aegis lint 0\.1\.7 flagged the findings below') -and ($r.Out -notmatch 'engines disagree|report it to aegis')) $r.Out
+        Copy-Item (Join-Path $PSScriptRoot 'templates\.golangci.yml') $aeg
+        Move-Item $aeYml (Join-Path $aeg '.golangci.yaml')
+        $r = & $aeRun '0.1.7' 1
+        Check 'a shared .golangci.yaml still reports a real engine disagreement' `
+            (($r.Code -eq 0) -and ($r.Out -match '\[WARN\] aegis lint .* engines disagree')) $r.Out
+        Move-Item (Join-Path $aeg '.golangci.yaml') $aeYml
         $aeMain = Join-Path $aeg 'main.go'
         $aeClean = Get-Content $aeMain -Raw
         Set-GoFile $aeMain "package main`n`nimport `"os`"`n`n// Add returns the sum of a and b.`nfunc Add(a, b int) int { return a + b }`n`nfunc main() {`n`tos.WriteFile(`"x.txt`", nil, 0o600)`n`t_ = Add(1, 2)`n}"
         $r = & $aeRun '0.1.7' 1
         Check 'aegis findings golangci-lint confirms fail, verdict named as golangci' `
             (($r.Code -ne 0) -and ($r.Out -match '\[FAIL\] golangci-lint') -and ($r.Out -match 'failing lint verdict from golangci-lint') -and ($r.Out -notmatch 'engines disagree')) $r.Out
+        Remove-Item $aeYml
+        $r = & $aeRun '0.1.7' 1
+        Check 'a real lint defect without shared config still fails on golangci defaults' `
+            (($r.Code -ne 0) -and ($r.Out -match '\[FAIL\] golangci-lint') -and ($r.Out -match 'Error return value') -and
+            ($r.Out -notmatch 'engines disagree|report it to aegis')) $r.Out
+        Copy-Item (Join-Path $PSScriptRoot 'templates\.golangci.yml') $aeg
         Set-GoFile $aeMain $aeClean
         $r = & $aeRun '0.1.7' 2
         Check 'aegis lint exit 2 falls back to go vet + golangci-lint' `

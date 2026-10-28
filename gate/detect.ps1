@@ -1185,6 +1185,7 @@ function Get-GoTags([string]$Root) {
 # quality-gate#130: `aegis lint` (golangci config, //nolint, go vet's default analyzers)
 # in a shared warm daemon instead of cold go vet + golangci-lint runs. $null when aegis is
 # not on PATH (nothing to say), else .Use, .Version and .Why (the reason it is not used).
+# .SharedConfig gates disagreement reports: the engines' defaults differ without one.
 # Opt-outs: QGATE_NO_AEGIS=1, qgate.json {"go": {"lintEngine": "golangci"}}. A golangci
 # config with `run.tests: false` or an exclusion naming govet stays on go vet: aegis
 # applies both to its vet analyzers, real go vet ignores them (aegis-engine#15).
@@ -1221,7 +1222,7 @@ function Get-AegisLint([string]$Root, [string]$Dir) {
             if ($in -ge 0 -and $l -match '(?<![\w-])govet(?![\w-])') { return (& $no "$name excludes govet findings, which aegis would apply to go vet too (aegis-engine#15)" $ver) }
         }
     }
-    [pscustomobject]@{ Use = $true; Version = $ver; Why = '' }
+    [pscustomobject]@{ Use = $true; Version = $ver; Why = ''; SharedConfig = [bool]$cfgs }
 }
 
 # quality-gate#103: qgate.json {"go": {"flaky": true}} -- re-run the CHANGED test packages

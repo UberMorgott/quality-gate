@@ -1101,7 +1101,8 @@ function Invoke-GoStackOnce($s) {
         if ($Full) { Fail $m } else { $script:Lines += "[WARN] $m" }
     }
     # Report-level, not a stack line: -Quiet drops a green stack's lines, findings included.
-    if ($aeFlagged -and -not $script:Failed -and (Have 'golangci-lint')) {
+    # #169: without a shared YAML config the engines use different default rule sets.
+    if ($aeFlagged -and $ae.SharedConfig -and -not $script:Failed -and (Have 'golangci-lint')) {
         # #158: the two scopes differ when go.mod replaces a module with a local directory
         # nobody declared: ./... never reaches it, aegis lint may. Said, not guessed from
         # the findings: the disagreement may be exactly that unlinted scope.
