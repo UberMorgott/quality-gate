@@ -2802,6 +2802,19 @@ if ($IsWindows) {
     Check 'an ANSI-coloured engine ERROR: still fails the godot import' `
         (($ansi.Code -ne 0) -and ($ansi.Out -match '\[FAIL\] godot import \(') -and ($ansi.Out -match 'Cannot open file')) $ansi.Out
 
+    # #165: a test that fails through push_error + exit 1 printed a bare [FAIL], and the
+    # failure skipped every later test and the smoke boot. The stand-in fails only
+    # boot_headless_test.gd; a second test and the smoke boot must still run and pass.
+    $gdSecond = Join-Path $gdt 'second_headless_test.gd'
+    Copy-Item $gdTest $gdSecond
+    $gdExit = Join-Path $gdShims 'godot-exit1.cmd'
+    [IO.File]::WriteAllText($gdExit, "@echo off`r`necho %* | findstr /C:`"boot_headless_test`" >nul || exit /b 0`r`necho lab layout mode 0: 900.0 ms`r`necho USER ERROR: routing every wire took 900 ms 1>&2`r`nexit /b 1`r`n")
+    try { $exit1 = & $runGd $gdExit } finally { $env:GODOT_BIN = $priorGodot; Remove-Item $gdSecond, "$gdSecond.uid" -ErrorAction SilentlyContinue }
+    Check 'a godot test failing by exit code prints its own output' `
+        (($exit1.Code -ne 0) -and ($exit1.Out -match '\[FAIL\] godot test boot_headless_test\.gd') -and ($exit1.Out -match 'USER ERROR: routing every wire took 900 ms') -and ($exit1.Out -match 'lab layout mode 0')) $exit1.Out
+    Check 'a failed godot test does not skip the later tests and the smoke boot' `
+        (($exit1.Out -match '\[PASS\] godot test second_headless_test\.gd') -and ($exit1.Out -match '\[PASS\] godot smoke')) $exit1.Out
+
     # #124: qgate.json "env" reaches the engine, {tmp} is a real directory for the run and
     # is gone after it, {root} is the repository, and only placeholder values are
     # normalised. A shim writes what it saw to a probe file.

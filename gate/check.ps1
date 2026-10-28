@@ -2770,7 +2770,7 @@ function Invoke-GodotStack($s) {
     foreach ($t in Get-ChildItem $s.Dir -Recurse -File -Filter '*_headless_test.gd' -ErrorAction SilentlyContinue |
         Where-Object { $_.FullName -notmatch $noGodotDir }) {
         $tf = "`"$($t.FullName)`""
-        Invoke-GodotPhase "godot test $($t.Name)" $godot $s.Dir @('--headless', '--path', $dirArg, '--script', $tf) $scriptErrs $budget
+        Invoke-GodotPhase "godot test $($t.Name)" $godot $s.Dir @('--headless', '--path', $dirArg, '--script', $tf) $scriptErrs $budget -Soft
     }
     # Boots the main scene and quits: catches autoload and boot-order breakage that
     # neither the import nor a script test ever loads.
@@ -2780,7 +2780,10 @@ function Invoke-GodotStack($s) {
 # One bounded engine run, reported as a phase. -Warmup runs the same command once
 # more first and discards what it printed (the import's create-.godot pass); a warmup
 # that hangs is the same finding as a verdict that hangs, and is reported as one.
-function Invoke-GodotPhase([string]$Name, [string]$Godot, [string]$Dir, [string[]]$GodotArgs, [string]$ErrPattern, [int]$TimeoutSec, [switch]$Warmup) {
+# -Soft: a failed run fails the gate without skipping what follows (#165: one flaky test
+# hid the verdict of every later test and stack). A timeout stays hard -- a hang is
+# usually the machine, and every later engine run would wait out the same budget.
+function Invoke-GodotPhase([string]$Name, [string]$Godot, [string]$Dir, [string[]]$GodotArgs, [string]$ErrPattern, [int]$TimeoutSec, [switch]$Warmup, [switch]$Soft) {
     if ($script:Failed) { Phase $Name { }; return }
     $elapsed = 0.0
     if ($Warmup) {
@@ -2796,8 +2799,16 @@ function Invoke-GodotPhase([string]$Name, [string]$Godot, [string]$Dir, [string[
     $name = if ($r.Done) { $Name } else { "$Name -- timeout after ${TimeoutSec}s" }
     Phase $name {
         if ($r.Done) {
-            $r.Lines | Where-Object { $_ -match $ErrPattern }
-            if ($r.ExitCode -ne 0) { $global:LASTEXITCODE = $r.ExitCode }
+            $hits = @($r.Lines | Where-Object { $_ -match $ErrPattern })
+            $hits
+            if ($r.ExitCode -ne 0) {
+                $global:LASTEXITCODE = $r.ExitCode
+                # #165: a test that fails through its exit code says why in its own output
+                # (push_error's USER ERROR, a print) -- none of which the pattern keeps, so
+                # the [FAIL] stood alone. The tail is the only evidence there is.
+                $tail = @($r.Lines | Where-Object { "$_".Trim() } | Select-Object -Last 20)
+                if (-not $hits -and $tail) { "exit code $($r.ExitCode); last output:"; $tail }
+            }
         } else {
             # A hang usually has a cause outside the project (user:// on a broken
             # junction, a modal the headless run still waits on), so the remedy names
@@ -2806,7 +2817,7 @@ function Invoke-GodotPhase([string]$Name, [string]$Godot, [string]$Dir, [string[
             $tail = @($r.Lines | Where-Object { "$_".Trim() } | Select-Object -Last 10)
             if ($tail) { 'last output:'; $tail }
         }
-    } -FailIfOutput -Elapsed $elapsed
+    } -FailIfOutput -Elapsed $elapsed -Soft:($Soft -and $r.Done)
 }
 
 # --- bounded tool runs (#104) ---------------------------------------------

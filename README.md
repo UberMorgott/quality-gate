@@ -219,7 +219,7 @@ Detected by the PowerShell files themselves (tracked or untracked, not gitignore
 | `gdlint` | Fast | gdtoolkit | Checks GDScript lint rules to catch suspicious code. |
 | `res:// references` | Fast | None | Validates case-sensitive resource paths and UID references to catch missing assets before runtime. |
 | `godot import` | Full | Godot | Runs headless import with a warm-up pass to detect import and script errors. |
-| `godot test <filename>` | Full | Godot | Runs each `*_headless_test.gd` script to detect script/test failures. |
+| `godot test <filename>` | Full | Godot | Runs each `*_headless_test.gd` script to detect script/test failures. A test that fails by exit code shows the tail of its output; a failed test fails the run but does not skip the later tests, smoke or stacks (a timeout still does). |
 | `godot smoke` | Full | Godot | Starts the project headlessly for one iteration to catch startup errors; `WARNING:` lines also fail it with `godot.warningsFail`. Runs with qgate.json `env`, so a boot that writes user data can be pointed at `{tmp}`. |
 
 Formatting/linting targets changed `.gd` files unless `-All`/`-Full`; `.godot` and `addons` are excluded. If either gdtoolkit command is missing, both phases warn/skip in fast and fail in full. Full requires Godot: set `GODOT_BIN` if it is not discovered. Timeouts fail the relevant Godot phase.
