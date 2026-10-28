@@ -2072,7 +2072,11 @@ function Invoke-DotnetStack($s) {
         }
     }
     # Same reason as `test` above: nothing to ask reads exactly like nothing found.
-    else { $script:Lines += '[SKIP] vuln -- no package references' }
+    # quality-gate#168: but no PackageReference in the evaluated project is an empty
+    # dependency set -- verified, not skipped, as #148 says for a stack with no own source.
+    # packages.config is the one package source that evaluation cannot see.
+    elseif (Test-Path -LiteralPath (Join-Path $s.Dir 'packages.config')) { $script:Lines += '[SKIP] vuln -- packages.config is not scanned (dotnet list package reads PackageReference only)' }
+    else { $script:Lines += '[INFO] vuln -- no package references, nothing to scan' }
 }
 
 # quality-gate#115: the bundle a repository COMMITS (dist/ embedded by Go, served as-is)
@@ -3453,7 +3457,7 @@ function Invoke-BaseStack($s) {
     # error: a repository with no manifest or lockfile anywhere has nothing to ask the
     # advisory database about. Run before the Phase, because that has to be classified
     # before it can be a verdict -- the same shape as the dotnet vuln phase, which says
-    # `[SKIP] vuln -- no package references` for the same reason. 0 is clean, 1 is
+    # `[INFO] vuln -- no package references` for the same reason. 0 is clean, 1 is
     # findings, 127 and everything else is the tool failing.
     $sw = [Diagnostics.Stopwatch]::StartNew()
     # Nested repositories are other projects (Get-NestedRepos). A regex exclude is matched
@@ -3491,7 +3495,9 @@ function Invoke-BaseStack($s) {
     }
     $sw.Stop()
     if ($osvCode -eq 128) {
-        $script:Lines += '[SKIP] vuln -- no package sources found (osv-scanner)'
+        # quality-gate#168: no manifest or lockfile is an empty set, not an unverified one;
+        # a stack whose packages osv-scanner cannot read reports that in its own vuln phase.
+        $script:Lines += '[INFO] vuln -- no package sources found (osv-scanner), nothing to scan'
         $script:BaseDeferred = $true
         return
     }

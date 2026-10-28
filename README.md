@@ -146,7 +146,7 @@ Names below match printed phase/advisory labels; angle-bracket suffixes stand fo
 | --- | --- | --- | --- |
 | `secrets` | Fast | gitleaks; skip if missing | Detects credentials in staged changes, or the working tree including untracked files with `-All`/`-Full`, to prevent secret exposure. |
 | `typos` | Fast | typos; skip if missing | Checks changed files, or the wider tree with `-All`/`-Full`, for spelling mistakes in code and text. |
-| `vuln` | Full | osv-scanner v2+; skip if missing/older | Scans package sources recursively for known dependency vulnerabilities; no package sources means skip. |
+| `vuln` | Full | osv-scanner v2+; skip if missing/older | Scans package sources recursively for known dependency vulnerabilities; no package sources is an `[INFO]` (nothing to scan), not a skip. |
 | `orphan projects` | Advisory (`-All`/full) | None | Finds C# projects absent from solution/project references so an omitted build target is visible. |
 | `shellcheck` | Advisory (fast/full) | shellcheck; skip if missing | Checks `.sh`/`.bash` scripts for shell mistakes that can break automation. |
 | `actionlint` | Advisory (fast/full) | actionlint; skip if missing | Checks GitHub Actions workflow syntax and expressions to catch invalid CI jobs. |

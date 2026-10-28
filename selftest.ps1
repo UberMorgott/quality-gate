@@ -1299,7 +1299,11 @@ if ($dnSdks) {
     # what CI and the generated hook run, so that is where the difference is spelled out.
     Check 'the full level says which phases do not apply here' `
         (($dnFullOut -match '\[SKIP\] test -- no test project') -and
-            ($dnFullOut -match '\[SKIP\] vuln -- no package references')) $dnFullOut
+            ($dnFullOut -match '\[INFO\] vuln -- no package references, nothing to scan')) $dnFullOut
+    # #168: an empty dependency set is verified, not skipped -- no skipped WARN entry for it.
+    # The other side: a project with a PackageReference is still scanned (dotnet3, vuln).
+    Check 'no package references is not counted as a skipped check (#168)' `
+        (($dnFullOut -match '(?m)^\s+test -- no test project') -and ($dnFullOut -notmatch '(?m)^\s+vuln -- ')) $dnFullOut
     # The absence half: naming them must not turn a green run red, and must not be mistaken
     # for the run having verified nothing -- the zero-phase invariant counts phases that RAN.
     Check 'naming an inapplicable phase is not a failure and not an empty run' `
@@ -5541,6 +5545,11 @@ $fast = (& pwsh -NoProfile -File $gate -Root $baseRepo -Only base 2>&1 | Out-Str
 $full = (& pwsh -NoProfile -File $gate -Root $baseRepo -Only base -Full 2>&1 | Out-String)
 Check 'vuln does not run on the fast lane' ($fast -notmatch 'vuln') $fast
 Check 'vuln runs at the full level' ($full -match 'vuln') $full
+# #168: no manifest or lockfile anywhere is nothing to scan, not a skipped check.
+if (Get-Command osv-scanner -ErrorAction SilentlyContinue) {
+    Check 'vuln: no package sources is [INFO], not counted as skipped (#168)' `
+        (($full -match '\[INFO\] vuln -- no package sources found') -and ($full -notmatch '(?m)^\s+vuln -- ')) $full
+}
 
 # typos scopes itself the way every other fast phase does: the whole tree at the full
 # level, only what git says changed on the fast lane. Both halves, because "never
