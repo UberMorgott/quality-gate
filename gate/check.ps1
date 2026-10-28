@@ -860,7 +860,26 @@ function Invoke-GoStackOnce($s) {
     # module, build, vet, test, golangci-lint and govulncheck all stay green), so the
     # filter belongs here and nowhere else in this runner.
     Phase 'gofmt' {
-        gofmt -l . | Where-Object { -not (Test-GitIgnored $s.Dir (Join-Path $s.Dir $_)) }
+        $fmt = @(gofmt -l . | Where-Object { -not (Test-GitIgnored $s.Dir (Join-Path $s.Dir $_)) })
+        $code = $LASTEXITCODE
+        $crlfHint = $false
+        foreach ($f in $fmt) {
+            $text = [Text.Encoding]::UTF8.GetString([IO.File]::ReadAllBytes((Join-Path $s.Dir $f)))
+            if (-not $text.Contains("`r`n")) { $f; continue }
+            # #167: waive checkout CRLF only when Git stores LF; committed CRLF fails CI.
+            $eol = git -C $s.Dir --literal-pathspecs ls-files --eol -- $f 2>$null
+            if ($LASTEXITCODE -ne 0 -or "$eol" -notmatch '^i/lf\s') { $f; $crlfHint = $true; continue }
+            # Recheck current bytes in a private LF copy, not the clean index.
+            $lf = Join-Path ([IO.Path]::GetTempPath()) "qgate-gofmt-$PID-$([IO.Path]::GetRandomFileName()).go"
+            try {
+                [IO.File]::WriteAllText($lf, $text.Replace("`r`n", "`n"))
+                $bad = @(gofmt -l $lf)
+                if ($LASTEXITCODE -ne 0) { $code = $LASTEXITCODE }
+                if ($bad -or $LASTEXITCODE -ne 0) { $f }
+            } finally { Remove-Item -LiteralPath $lf -Force -ErrorAction SilentlyContinue }
+        }
+        if ($crlfHint) { '[NOTE] CRLF: use "*.go text eol=lf" in .gitattributes and reformat/renormalize these files.' }
+        $global:LASTEXITCODE = $code
     } -FailIfOutput
     # -o into a temp dir: a bare `go build ./...` drops the linked binary of every
     # main package into the working tree.

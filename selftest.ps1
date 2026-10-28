@@ -141,8 +141,7 @@ function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
 # on purpose. For assertions about where and how often a warning is reported inline.
 function Get-InlineReport([string]$Out) { ($Out -split '(?m)^\[WARN\] advisories -- ', 2)[0] }
 function Set-GoFile([string]$Path, [string]$Text) {
-    # LF only: gofmt reports a CRLF file as unformatted, which would fail the
-    # wrong phase and hide the violation we are testing for.
+    # Keep fixture bytes deterministic across host platforms.
     [IO.File]::WriteAllText($Path, (($Text -replace "`r`n", "`n").TrimEnd() + "`n"))
 }
 # #82: a vulnerability scanner stand-in. Prints $Json when its arguments contain $JsonArg
@@ -363,6 +362,44 @@ $r = Invoke-Gate $go
 Check 'template .golangci.yml passes' ($r.Code -eq 0) $r.Out
 Check 'no warning once config present' ($r.Out -notmatch 'WARN') $r.Out
 $script:tplOut = $r.Out
+# #167: autocrlf changes checkout bytes, not Go formatting. Judge the current content
+# with CRLF normalized, without rewriting it or overlooking an unstaged real defect.
+$crlf = Join-Path $tmp 'go-crlf'
+Copy-Item (Join-Path $PSScriptRoot 'testdata\go-fixture') $crlf -Recurse
+git -C $crlf init -q
+git -C $crlf config core.autocrlf true
+git -C $crlf add -A 2>$null
+foreach ($f in Get-ChildItem $crlf -Filter '*.go') {
+    [IO.File]::WriteAllText($f.FullName, ([IO.File]::ReadAllText($f.FullName).Replace("`r`n", "`n").Replace("`n", "`r`n")))
+}
+$crlfMain = Join-Path $crlf 'main.go'
+$crlfClean = [IO.File]::ReadAllText($crlfMain)
+Check 'CRLF fixture has LF index and CRLF checkout' ((git -C $crlf ls-files --eol -- main.go) -match 'i/lf\s+w/crlf')
+$r = Invoke-Gate $crlf
+Check 'gofmt-clean CRLF checkout passes without rewriting files' `
+    (($r.Code -eq 0) -and ($r.Out -match '\[PASS\] gofmt') -and ([IO.File]::ReadAllText($crlfMain) -ceq $crlfClean)) $r.Out
+[IO.File]::WriteAllText($crlfMain, $crlfClean.Replace('func main()', 'func  main()'))
+$r = Invoke-Gate $crlf
+Check 'real gofmt defect in CRLF checkout still fails despite clean index' `
+    (($r.Code -ne 0) -and ($r.Out -match '\[FAIL\] gofmt') -and ($r.Out -match 'main\.go')) $r.Out
+[IO.File]::WriteAllText($crlfMain, $crlfClean)
+# Only an LF index justifies the checkout waiver; committed CRLF is a CI defect.
+git -C $crlf config core.autocrlf false
+$eolGo = Join-Path $crlf 'eol.go'
+$eolText = "package main`r`n`r`n// Eol returns one.`r`nfunc Eol() int { return 1 }`r`n"
+[IO.File]::WriteAllText($eolGo, $eolText)
+foreach ($kind in 'untracked', 'crlf', 'mixed') {
+    if ($kind -eq 'mixed') { [IO.File]::WriteAllText($eolGo, $eolText.Replace("package main`r`n", "package main`n")) }
+    if ($kind -ne 'untracked') { git -C $crlf add -- eol.go }
+    if ($kind -eq 'crlf') { git -C $crlf -c user.email=selftest@local -c user.name=selftest commit -qm 'CRLF fixture' }
+    $eol = git -C $crlf ls-files --eol -- eol.go
+    Check "CRLF regression fixture is $kind in the index" `
+        $(if ($kind -eq 'untracked') { -not $eol } else { $eol -match "^i/$kind\s" }) "$eol"
+    $r = Invoke-Gate $crlf
+    Check "CRLF file with $kind index is not waived and names the EOL fix" `
+        (($r.Code -ne 0) -and ($r.Out -match '\[FAIL\] gofmt') -and ($r.Out -match 'eol\.go') -and
+        ($r.Out -match 'CRLF') -and ($r.Out -match '\.gitattributes') -and ($r.Out -match '\*\.go text eol=lf')) $r.Out
+}
 # #107: a module with no main package. `go build -o <dir> ./...` exits 1 there ("no
 # main packages to build"), and the failed phase skipped vet, lint and test. A compile
 # error in the same module must still fail the build phase.

@@ -169,7 +169,7 @@ The runner also validates requested stacks/revisions and tool pins, rejects an u
 
 | Printed check | Tier | External tool | What it checks and why |
 | --- | --- | --- | --- |
-| `gofmt` | Fast | Go (`gofmt`) | Rejects unformatted non-ignored Go files to keep source formatting consistent. |
+| `gofmt` | Fast | Go (`gofmt`) | Rejects unformatted non-ignored Go files to keep source formatting consistent. CRLF-only checkout differences are ignored only when Git stores the file as LF (`i/lf`); current file content is checked without rewriting it. CRLF in an untracked file or stored as CRLF/mixed in Git still fails, with a hint to use `*.go text eol=lf` in `.gitattributes`. |
 | `go build` | Fast | Go | Compiles all module packages into temporary output to catch build errors. |
 | `go vet` | Fast | Go | Finds suspicious constructs that compile but are likely incorrect. |
 | `aegis lint` | Fast | aegis >= 0.1.7; used only when on PATH | Replaces `go vet` + `golangci-lint` (reads the golangci config, `//nolint`, go vet's default analyzers) in a warm shared daemon; `[INFO] lint engine:` names the engine used. Pre-commit lints staged packages and their importers (`--changed=staged`), 120 s timeout. Only a pass is a verdict: findings (exit 1) are printed and `go vet` + `golangci-lint` decide, with a `[WARN]` if they pass; exit 2 falls back. Not used with `-Baseline`, `QGATE_NO_AEGIS=1`, `go.lintEngine: "golangci"`, or a golangci config with `run.tests: false` or a govet exclusion. |
