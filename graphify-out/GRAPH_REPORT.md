@@ -1,7 +1,7 @@
 # Graph Report - quality-gate  (2026-10-28)
 
 ## Corpus Check
-- 57 files · ~153,809 words
+- 57 files · ~153,939 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 18 file(s) not represented in the graph (top: (none) 5, .toml 3, .gd 2)
 
@@ -11,7 +11,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `cbb969e3`
+- Built from commit: `703b95ac`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -212,7 +212,7 @@ Cohesion: 0.20
 Nodes (9): Find-Marker(), Get-DeployEntries(), Get-GoBuiltWith(), Get-GodotBin(), Get-OrphanProjects(), Get-PowerShellFiles(), Get-Stacks(), Test-GitTracked() (+1 more)
 
 ## Knowledge Gaps
-- **32 isolated node(s):** `stylelint-config-standard-scss`, `stylelint-config-recommended-vue/scss`, `net8.0`, `Microsoft.NET.Sdk`, `gatefixture` (+27 more)
+- **32 isolated node(s):** `gatefixture`, `python-fixture`, `net8.0`, `Microsoft.NET.Sdk`, `netstandard2.0` (+27 more)
   These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 230 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
 - **31 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
@@ -223,7 +223,7 @@ _Questions this graph is uniquely positioned to answer:_
   _High betweenness centrality (0.061) - this node is a cross-community bridge._
 - **Are the 30 inferred relationships involving `Invoke-GoStackOnce()` (e.g. with `Get-AegisLint()` and `Get-CiGoGaps()`) actually correct?**
   _`Invoke-GoStackOnce()` has 30 INFERRED edges - model-reasoned connections that need verification._
-- **What connects `stylelint-config-standard-scss`, `stylelint-config-recommended-vue/scss`, `net8.0` to the rest of the system?**
+- **What connects `gatefixture`, `python-fixture`, `net8.0` to the rest of the system?**
   _32 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Patches.cs` be split into smaller, more focused modules?**
   _Cohesion score 0.125 - nodes in this community are weakly interconnected._
