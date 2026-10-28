@@ -1,7 +1,7 @@
 # Graph Report - quality-gate  (2026-10-28)
 
 ## Corpus Check
-- 57 files · ~153,939 words
+- 57 files · ~154,023 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 18 file(s) not represented in the graph (top: (none) 5, .toml 3, .gd 2)
 
@@ -11,7 +11,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `703b95ac`
+- Built from commit: `3596793e`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -66,11 +66,11 @@
 2. `Invoke-GoStackOnce()` - 39 edges
 3. `Invoke-DotnetStack()` - 20 edges
 4. `Get-PathKey()` - 16 edges
-5. `Invoke-BaseStack()` - 15 edges
-6. `Lookups` - 15 edges
+5. `Lookups` - 15 edges
+6. `Invoke-BaseStack()` - 15 edges
 7. `Invoke-WebStack()` - 14 edges
-8. `Phase()` - 13 edges
-9. `Invoke-CppStack()` - 13 edges
+8. `Invoke-CppStack()` - 13 edges
+9. `Phase()` - 13 edges
 10. `Invoke-SmokeCheck()` - 12 edges
 
 ## Surprising Connections (you probably didn't know these)
