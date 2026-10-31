@@ -260,6 +260,18 @@ function Get-GitIgnoredSet([string]$Root, [string[]]$Paths) {
     return $set
 }
 
+# #185: a git path listing, one entry per path. The arguments after $Repo go to git and
+# must include -z: without it git C-quotes every non-ASCII path (`"docs/\320\220..."`),
+# which then names no file -- markdownlint hit ENOENT on a Cyrillic file name. Decoded as
+# UTF-8 whatever the console code page is, since -z paths are git's raw UTF-8 bytes.
+function Get-GitPaths([string]$Repo) {
+    $enc = [Console]::OutputEncoding
+    try {
+        [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
+        @((& git -C $Repo @args 2>$null | Out-String).TrimEnd("`r", "`n").Split([char]0) | Where-Object { $_ })
+    } finally { [Console]::OutputEncoding = $enc }
+}
+
 # Directories below $Root holding their own repository (a `.git` dir or file), repo-
 # relative with forward slashes and no trailing slash. They are separate projects with
 # their own gate, and git itself never descends into one -- neither does the gate.

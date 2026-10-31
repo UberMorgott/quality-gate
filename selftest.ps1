@@ -5688,7 +5688,10 @@ try {
 $mdVend = Join-Path $tmp 'base-lint-md-vendored'
 New-Item -ItemType Directory -Path (Join-Path $mdVend 'addons\thirdparty'), (Join-Path $mdVend 'gen'), (Join-Path $mdVend 'drafts') -Force | Out-Null
 git -C $mdVend init -q 2>$null
-foreach ($f in 'own.md', 'kept.md', 'addons/thirdparty/README.md', 'gen/api.md', 'drafts/wip.md') {
+# #185: a Cyrillic name, kept and ignored -- plain `git ls-files` C-quotes it, so it was
+# either dropped or handed to markdownlint as a path that does not exist (ENOENT).
+$cyr = -join [char[]](0x0410, 0x0422, 0x0421)
+foreach ($f in 'own.md', 'kept.md', 'addons/thirdparty/README.md', 'gen/api.md', 'drafts/wip.md', "$cyr-q.md", "drafts/$cyr-wip.md") {
     [IO.File]::WriteAllText((Join-Path $mdVend $f), "#T`n")
 }
 [IO.File]::WriteAllText((Join-Path $mdVend '.gitattributes'),
@@ -5714,7 +5717,8 @@ try {
         ($out -match 'own\.md:1 error MD018') -and ($out -match 'kept\.md:1 error MD018')) "code=$code $out"
     Check 'markdownlint skips linguist-vendored and linguist-generated Markdown' `
         (($out -notmatch 'addons/thirdparty/README\.md') -and ($out -notmatch 'gen/api\.md')) $out
-    Check 'markdownlint skips paths listed in .markdownlintignore' ($out -notmatch 'drafts/wip\.md') $out
+    Check 'markdownlint skips paths listed in .markdownlintignore' (($out -notmatch 'drafts/wip\.md') -and ($out -notmatch "drafts/$cyr")) $out
+    Check 'markdownlint gets a non-ASCII path unquoted (#185)' (($out -match "(?m)^\s*$cyr-q\.md:1 error MD018") -and ($out -notmatch '\\320')) $out
     Check 'a .markdownlintignore alone keeps the gate''s markdownlint defaults' ($out -match '--config:1') $out
 } finally { $env:PATH = $priorPath }
 

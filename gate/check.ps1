@@ -3401,7 +3401,7 @@ function Invoke-BaseStack($s) {
     # is none, the same rule the gitleaks -c above follows.
     # Assigned before the pipe: Get-ChangedPaths returns its list comma-wrapped, and piped
     # straight on that arrived as ONE item, so the fast lane linted nothing.
-    $lintPool = if (-not $Full -and -not $All) { Get-ChangedPaths $Root } else { & git -C $Root ls-files 2>$null }
+    $lintPool = if (-not $Full -and -not $All) { Get-ChangedPaths $Root } else { Get-GitPaths $Root ls-files -z }
     $lintPool = @($lintPool) | Where-Object { $_ -and (Test-Path -LiteralPath (Join-Path $Root $_) -PathType Leaf) }
     # Style advice on code the repository did not write is noise it cannot act on: measured on
     # a game repo, most of 837 markdownlint hits sat in a vendored addon's docs. A path marked
@@ -3414,7 +3414,7 @@ function Invoke-BaseStack($s) {
     # never reads, so git matches it against the tracked files instead.
     $mdIgnoreFile = Join-Path $Root '.markdownlintignore'
     $mdIgnored = [Collections.Generic.HashSet[string]]::new([string[]]@(if (Test-Path -LiteralPath $mdIgnoreFile -PathType Leaf) {
-                & git -C $Root ls-files -c -i "--exclude-from=$mdIgnoreFile" 2>$null }))
+                Get-GitPaths $Root ls-files -z -c -i "--exclude-from=$mdIgnoreFile" }))
     $tpl = Join-Path $PSScriptRoot '..\templates'
     # A config file, not the ignore file: .markdownlintignore alone must not drop the defaults.
     $mdCfg = @(if (-not (Get-ChildItem -LiteralPath $Root -Force -Filter '.markdownlint*' -ErrorAction SilentlyContinue |
@@ -3458,7 +3458,7 @@ function Invoke-BaseStack($s) {
         # Measured: Git Bash runs that CRLF copy fine. A script committed CRLF keeps it.
         # ponytail: all-or-nothing per run; one CRLF-committed script re-enables SC1017 for the batch.
         if ($l.Name -eq 'shellcheck') {
-            $crIdx = @(& git -C $Root ls-files --eol 2>$null | Where-Object { $_ -match '^i/crlf' -and ($_ -split "`t", 2)[1] -in $files })
+            $crIdx = @(Get-GitPaths $Root ls-files -z --eol | Where-Object { $_ -match '^i/crlf' -and ($_ -split "`t", 2)[1] -in $files })
             if (-not $crIdx) { $lArgs = @($l.Args) + @('-e', 'SC1017') }
         }
         $lOut = ''; $lBad = $false; $lCrash = $null
