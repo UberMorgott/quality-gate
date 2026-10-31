@@ -445,22 +445,133 @@ function Test-GoToolStale([string]$Exe, [string]$ModuleGo, [string]$Install) {
     "$Exe was built with go$built, this module targets go$ModuleGo -- rebuild it: $Install"
 }
 
-# quality-gate#41: a package that passes here can still hit `-timeout` in CI under -race.
-# Measured on the reporting repo: its sim package took 27s in the full `go test`, and the
-# same package under CI's `go test -race` died at the 10m timeout. The race detector costs
-# 2-20x (go.dev/doc/articles/race_detector) and a CI runner is slower than a dev box, so
-# anything over a thirtieth of the timeout is within reach of it. -timeout is per test
-# binary, which is per package -- so the `ok <pkg> <secs>s` line is the right measure,
-# and reading it leaves the phase's output exactly as it was.
-# ponytail: names the package, not the slow test; `go test -json` would, at the cost of
-# rebuilding the readable failure output.
-function Get-SlowGoPackages([string]$Out, [int]$TimeoutSec) {
-    foreach ($m in [regex]::Matches($Out, '(?m)^ok\s+(\S+)\s+(\d+(?:\.\d+)?)s\b')) {
-        $sec = [double]::Parse($m.Groups[2].Value, [Globalization.CultureInfo]::InvariantCulture)
-        if ($sec -ge $TimeoutSec / 30) {
-            "[WARN] slow tests: $($m.Groups[1].Value) took $($m.Groups[2].Value)s, over 1/30 of its $($TimeoutSec)s -timeout -- -race runs 2-20x slower, so CI can time out here"
+# quality-gate#186: the full `go test ./...` runs with -json, and this turns its event stream
+# back into the text a plain run prints: `ok` lines for passing packages, the whole output of
+# a failing one (failed tests' logs, FAIL lines), build errors, and any non-JSON line (go's
+# own stderr) as it came. It only reads the stream -- the phase's verdict stays go's exit
+# code, so nothing here can turn a failure into a pass; a line it cannot read is kept raw.
+# .Tests: one entry per test with an elapsed time, subtests included, keyed (Package, Test).
+function ConvertFrom-GoTestJson([object[]]$Lines) {
+    $text = [Collections.Generic.List[string]]::new()
+    $tests = [Collections.Generic.List[object]]::new()
+    $pkgs = [Collections.Generic.List[object]]::new()
+    $pkgOut = @{}   # package -> its lines, held until the package ends
+    $testOut = @{}  # "pkg`0TopLevelTest" -> that test's lines, kept only if it fails
+    $str = { param($e, $n) $v = [Text.Json.JsonElement]::new(); if ($e.TryGetProperty($n, [ref]$v) -and $v.ValueKind -eq 'String') { $v.GetString() } else { '' } }
+    $add = { param($k) if (-not $pkgOut.ContainsKey($k)) { $pkgOut[$k] = [Collections.Generic.List[string]]::new() }; , $pkgOut[$k] }
+    foreach ($o in $Lines) {
+        $line = "$o"
+        $doc = $null
+        if ($line.StartsWith('{')) { try { $doc = [Text.Json.JsonDocument]::Parse($line) } catch { $doc = $null } }
+        if (-not $doc) { $text.Add($line); continue }
+        try {
+            $e = $doc.RootElement
+            $action = & $str $e 'Action'
+            $pkg = & $str $e 'Package'
+            $test = & $str $e 'Test'
+            $output = (& $str $e 'Output').TrimEnd("`r", "`n")
+            $elapsed = [Text.Json.JsonElement]::new()
+            $hasElapsed = $e.TryGetProperty('Elapsed', [ref]$elapsed) -and $elapsed.ValueKind -eq 'Number'
+            if ($action -eq 'build-output') { $text.Add($output); continue }
+            if (-not $action -or (-not $pkg -and $action -ne 'build-fail')) { $text.Add($line); continue }
+            if ($test) {
+                $key = "$pkg`0$(($test -split '/', 2)[0])"
+                if ($action -eq 'output') {
+                    # Framing a plain run never shows: RUN/PAUSE/CONT/NAME and passed or skipped subtests.
+                    if ($output -notmatch '^\s*(=== (RUN|PAUSE|CONT|NAME)|--- (PASS|SKIP):)') {
+                        if (-not $testOut.ContainsKey($key)) { $testOut[$key] = [Collections.Generic.List[string]]::new() }
+                        $testOut[$key].Add($output)
+                    }
+                } elseif ($action -in 'pass', 'fail', 'skip') {
+                    if ($hasElapsed) { $tests.Add([pscustomobject]@{ Package = $pkg; Test = $test; Elapsed = $elapsed.GetDouble() }) }
+                    if ($test -notmatch '/') {
+                        if ($action -eq 'fail' -and $testOut.ContainsKey($key)) { (& $add $pkg).AddRange($testOut[$key]) }
+                        $testOut.Remove($key)
+                    }
+                }
+                continue
+            }
+            if ($action -eq 'output') {
+                # A FAIL line closes the package: a test that never reported (panic, timeout) shows first.
+                if ($output -match '^FAIL') {
+                    foreach ($k in @($testOut.Keys | Where-Object { $_.StartsWith("$pkg`0") })) { (& $add $pkg).AddRange($testOut[$k]); $testOut.Remove($k) }
+                }
+                if ($output -notmatch '^(=== |PASS$)') { (& $add $pkg).Add($output) }
+            } elseif ($action -in 'pass', 'fail', 'skip') {
+                if ($hasElapsed) { $pkgs.Add([pscustomobject]@{ Package = $pkg; Elapsed = $elapsed.GetDouble() }) }
+                $held = if ($pkgOut.ContainsKey($pkg)) { $pkgOut[$pkg] } else { @() }
+                # A passing package prints only its summary line, as without -json.
+                $text.AddRange([string[]]@(if ($action -eq 'fail') { $held } else { $held | Where-Object { $_ -match '^(ok|\?)\s' } }))
+                $pkgOut.Remove($pkg)
+            }
+        } finally { $doc.Dispose() }
+    }
+    # The stream ended before a package did (go killed, -failfast): what it said is still news.
+    foreach ($k in @($testOut.Keys)) { (& $add ($k -split "`0")[0]).AddRange($testOut[$k]) }
+    foreach ($k in @($pkgOut.Keys)) { $text.AddRange($pkgOut[$k]) }
+    [pscustomobject]@{ Text = ($text -join "`n"); Tests = $tests.ToArray(); Packages = $pkgs.ToArray() }
+}
+
+# quality-gate#186 (replaces #41's package warning): what is slow, from go's own per-test
+# times. A package's wall time in `go test ./...` measures the machine's load as much as
+# the package -- packages run concurrently, so speeding one up pushed its neighbours over the
+# old 20s line (measured: 3 warnings became 6 after the tests got faster). So: leaf tests and
+# parent groups (a test with subtests; never summed with them) at or over $Cfg.Info seconds,
+# ten slowest each, and the slowest packages -- all [INFO]. A [WARN] only against a budget
+# the project set itself in qgate.json go.slowTests.
+function Get-SlowGoTests($Run, $Cfg) {
+    if (-not $Run) { return }
+    $inv = [Globalization.CultureInfo]::InvariantCulture
+    $fmt = { param($s) $s.ToString('0.0', $inv) + 's' }
+    $parents = [Collections.Generic.HashSet[string]]::new()
+    foreach ($t in $Run.Tests) {
+        $p = $t.Test
+        while ($p -match '/') { $p = $p.Substring(0, $p.LastIndexOf('/')); [void]$parents.Add("$($t.Package)`0$p") }
+    }
+    $byTime = @($Run.Tests | Sort-Object Elapsed -Descending)
+    $leaves = @($byTime | Where-Object { -not $parents.Contains("$($_.Package)`0$($_.Test)") })
+    $leaf = @($leaves | Where-Object Elapsed -GE $Cfg.Info)
+    $group = @($byTime | Where-Object { $_.Elapsed -ge $Cfg.Info -and $parents.Contains("$($_.Package)`0$($_.Test)") })
+    $list = { param($head, $items) if ($items) { (@($head) + @($items | Select-Object -First 10 | ForEach-Object { "       $(& $fmt $_.Elapsed)  $($_.Package) $($_.Test)" })) -join "`n" } }
+    & $list "[INFO] slow tests: $($leaf.Count) test(s) took $($Cfg.Info)s or more (slowest 10, own time from go test -json):" $leaf
+    & $list "[INFO] slow test groups: $($group.Count) parent test(s) took $($Cfg.Info)s or more, subtests included:" $group
+    $pk = @($Run.Packages | Where-Object Elapsed -GE $Cfg.Info | Sort-Object Elapsed -Descending)
+    if ($pk) {
+        (@("[INFO] slowest packages (wall time under the parallel run, varies with machine load):") +
+            @($pk | Select-Object -First 5 | ForEach-Object { "       $(& $fmt $_.Elapsed)  $($_.Package)" })) -join "`n"
+    }
+    if ($Cfg.TestBudget) {
+        # Leaf tests only: a parent's time is its subtests' sum, which a budget per test is not about.
+        foreach ($t in @($leaves | Where-Object Elapsed -GT $Cfg.TestBudget)) {
+            "[WARN] slow tests: $($t.Package) $($t.Test) took $(& $fmt $t.Elapsed), over qgate.json go.slowTests.testBudget $($Cfg.TestBudget)s"
         }
     }
+    if ($Cfg.PackageBudget) {
+        foreach ($p in @($Run.Packages | Where-Object Elapsed -GT $Cfg.PackageBudget | Sort-Object Elapsed -Descending)) {
+            "[WARN] slow tests: package $($p.Package) took $(& $fmt $p.Elapsed), over qgate.json go.slowTests.packageBudget $($Cfg.PackageBudget)s"
+        }
+    }
+}
+
+# qgate.json {"go": {"slowTests": {"info": 5, "testBudget": 30, "packageBudget": 120}}}, all
+# seconds and all optional. info: the [INFO] threshold. A budget is the only thing that warns.
+function Get-GoSlowTestConfig([string]$Root) {
+    $cfg = [pscustomobject]@{ Info = 5.0; TestBudget = 0.0; PackageBudget = 0.0; Error = '' }
+    $file = Join-Path $Root 'qgate.json'
+    if (-not (Test-Path -LiteralPath $file)) { return $cfg }
+    $json = try { Get-Content -LiteralPath $file -Raw | ConvertFrom-Json } catch { $null }
+    if ($null -eq $json -or $null -eq $json.go -or $json.go.PSObject.Properties.Name -notcontains 'slowTests') { return $cfg }
+    $raw = $json.go.slowTests
+    if ($raw -isnot [psobject] -or $raw.GetType().Name -ne 'PSCustomObject') { $cfg.Error = 'qgate.json "go.slowTests" must be an object'; return $cfg }
+    $map = @{ info = 'Info'; testBudget = 'TestBudget'; packageBudget = 'PackageBudget' }
+    foreach ($p in $raw.PSObject.Properties) {
+        if (-not $map.ContainsKey($p.Name)) { $cfg.Error = "qgate.json go.slowTests has unknown key $($p.Name) -- known: $($map.Keys -join ', ')"; return $cfg }
+        if ($p.Value -isnot [int] -and $p.Value -isnot [long] -and $p.Value -isnot [double] -or $p.Value -le 0) {
+            $cfg.Error = "qgate.json `"go.slowTests.$($p.Name)`" must be a positive number of seconds"; return $cfg
+        }
+        $cfg.($map[$p.Name]) = [double]$p.Value
+    }
+    $cfg
 }
 
 # quality-gate#42: CI ran `go test` for GOARCH=386 and stayed red for ten days while the
@@ -472,7 +583,7 @@ function Get-SlowGoPackages([string]$Out, [int]$TimeoutSec) {
 # are not seen. `$Covered` is the run text of the repo's qgate.json checks: a variant
 # already declared there is not a gap. `-race` without `-short` is deliberately not one:
 # measured, 2 of 5 local repos run exactly that in CI, the only remedy would be a second
-# full race run per commit, and the timeout risk it carries is what `slow tests` names.
+# full race run per commit; a project bounds that timeout risk with go.slowTests budgets.
 function Get-CiGoGaps([string]$Root, [string]$GoOS, [string]$GoArch, [string]$Covered) {
     $dir = Join-Path $Root '.github/workflows'
     if (-not (Test-Path $dir)) { return }

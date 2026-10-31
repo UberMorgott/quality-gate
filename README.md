@@ -122,6 +122,7 @@ Place one optional `qgate.json` at the repository root. Tool-specific rules rema
 | `go.lintEngine` | `"auto"` (default) or `"golangci"`: `"golangci"` keeps `go vet` + `golangci-lint run` even when `aegis lint` is installed. |
 | `go.deterministic` | Array of root-relative package directories for purity/property-test advisories. |
 | `go.flaky` | `true` or options: `count` (20; 1..500), `budget` seconds (180; 10..3600), `cpu` (`"1,2"`), `race` (true), `fail` (false), `packages` (root-relative directories; otherwise changed test packages). |
+| `go.slowTests` | Options, all seconds: `info` (5) is the `[INFO]` line for slow leaf tests, parent groups and packages; `testBudget` (off) and `packageBudget` (off) are the only `[WARN]`s -- a leaf test or a package over them. |
 | `go.fuzzParallel` | Fuzz worker processes per target (`go test -parallel`); default half the cores, 1..4; allowed 1..256. |
 | `go.fuzzMemLimit` | `GOMEMLIMIT` for fuzz runs (`"2GiB"`); default an inherited `GOMEMLIMIT`, else `2GiB`. |
 | `dotnet` | `sonar: true` enables cached Sonar analyzers; `inspectcode: true` enables JetBrains inspection; `testRunner: "fail"` makes executable test-runner failures blocking. |
@@ -180,7 +181,7 @@ The runner also validates requested stacks/revisions and tool pins, rejects an u
 | `golangci-lint GOOS=<os>` | Full, opt-in | golangci-lint | Lints configured alternate operating-system targets so conditional source is checked. |
 | `go test -race` | Full | Go + gcc/cgo | Detects data races; skips with a warning when gcc is missing or `CGO_ENABLED=0`. Before it the go build cache (`go env GOCACHE`) is bounded: over `QGATE_GOCACHE_MAX_GB` (default 20) it is trimmed oldest-entry-first to 75% of the cap (`[INFO]` with sizes); under `QGATE_GO_MIN_FREE_GB` (default 15) free on its drive it is trimmed until the floor is back, and if still short `-race` is skipped with a warning. Never `go clean -cache`: the cache is shared, so entries used in the last 2 hours are kept and nothing is deleted while another `go` / `golangci-lint` process runs (trim deferred, `[INFO]`). `0` disables either guard; an over-cap cache is never a failure. |
 | `govulncheck` | Full | govulncheck; skip if missing | Finds known vulnerabilities reachable through Go dependencies rather than merely available updates. |
-| `slow tests` | Advisory (full) | Go test output | Flags packages approaching the test timeout so slower CI/race runs are less surprising. |
+| `slow tests` | Advisory (full) | Go test output (`go test -json`, same run) | `[INFO]`: the ten slowest leaf tests and parent groups over `go.slowTests.info` (never summed), and the slowest packages (wall time under the parallel run, so load-dependent). `[WARN]` only over a `go.slowTests` budget the project set. |
 | `CI parity` | Advisory (full) | None | Compares workflow Go variants with local coverage to expose untested GOOS/GOARCH/build tags. |
 | `golangci floor` | Advisory (full) | None | Compares project lint configuration with the supplied template to reveal omitted checks. |
 | `goleak` | Advisory (full) | Go package listing | Flags packages starting goroutines without leak-checking tests to reveal missing coverage. |

@@ -964,17 +964,68 @@ $r = Invoke-Gate $oom
 Check 'an ordinary failure carries no memory note' `
     (($r.Code -ne 0) -and ($r.Out -match '\[FAIL\] go test') -and ($r.Out -notmatch '\[NOTE\]')) $r.Out
 
-# quality-gate#41: a package slow enough to time out under CI's -race is named. Parsed
-# from `go test`'s own `ok` lines -- a fixture really sleeping 20s is not worth it here.
-# Both sides: 27.252s (the reporting repo's package) warns, 19.9s and a cached line do not.
-$slow = @(Get-SlowGoPackages @"
-ok  	example.com/m/sim	27.252s
-ok  	example.com/m/fast	19.900s
-ok  	example.com/m/cached	(cached)
-FAIL	example.com/m/broken	31.000s
-"@ 600)
-Check 'a go test package over 1/30 of the timeout is warned about, only that one' `
-    (($slow.Count -eq 1) -and ($slow[0] -match '^\[WARN\] slow tests: example\.com/m/sim took 27\.252s')) ($slow -join "`n")
+# #186: the -Full go test runs with -json. The event stream (shapes measured on go1.27:
+# build-output/build-fail, frame output, per-test pass/fail with Elapsed) turns back into
+# plain text; a line that is not JSON, or is broken JSON, is kept as it came.
+if ($fullGreen) {
+    $r = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $oom -All -Full 2>&1 | Out-String)
+    Check 'a -Full go test failure keeps its readable log under -json (#186)' `
+        (($LASTEXITCODE -ne 0) -and ($r -match '\[FAIL\] go test \(') -and ($r -match '--- FAIL: TestOrdinaryFailure') -and
+        ($r -match 'values differ') -and ($r -notmatch '"Action"')) $r
+    Check 'a green -Full go test prints no raw -json events (#186)' `
+        (($probeOut -match '\[PASS\] go test \(') -and ($probeOut -notmatch '"Action"')) $probeOut
+}
+$ev = @(
+    '{"ImportPath":"m/b [m/b.test]","Action":"build-output","Output":"b\\b_test.go:3:27: undefined: x\n"}'
+    '{"ImportPath":"m/b [m/b.test]","Action":"build-fail"}'
+    '{"Action":"output","Package":"m/b","Output":"FAIL\tm/b [build failed]\n"}'
+    '{"Action":"fail","Package":"m/b","Elapsed":0,"FailedBuild":"m/b [m/b.test]"}'
+    '{"Action":"output","Package":"m/a","Test":"TestSlow","Output":"=== RUN   TestSlow\n"}'
+    '{"Action":"output","Package":"m/a","Test":"TestSlow/s1","Output":"--- PASS: TestSlow/s1 (7.00s)\n"}'
+    '{"Action":"pass","Package":"m/a","Test":"TestSlow/s1","Elapsed":7}'
+    '{"Action":"output","Package":"m/a","Test":"TestSlow/s2","Output":"    a_test.go:3: boom\n"}'
+    '{"Action":"fail","Package":"m/a","Test":"TestSlow/s2","Elapsed":2}'
+    '{"Action":"output","Package":"m/a","Test":"TestSlow","Output":"--- FAIL: TestSlow (9.00s)\n"}'
+    '{"Action":"fail","Package":"m/a","Test":"TestSlow","Elapsed":9}'
+    '{"Action":"output","Package":"m/a","Test":"TestQuiet","Output":"    q_test.go:1: passing log\n"}'
+    '{"Action":"pass","Package":"m/a","Test":"TestQuiet","Elapsed":0.1}'
+    '{"Action":"output","Package":"m/a","Output":"FAIL\tm/a\t9.100s\n"}'
+    '{"Action":"fail","Package":"m/a","Elapsed":9.1}'
+    '{"Action":"output","Package":"m/c","Test":"TestC","Output":"--- PASS: TestC (0.00s)\n"}'
+    '{"Action":"pass","Package":"m/c","Test":"TestC","Elapsed":0}'
+    '{"Action":"output","Package":"m/c","Output":"PASS\n"}'
+    '{"Action":"output","Package":"m/c","Output":"ok  \tm/c\t31.000s\n"}'
+    '{"Action":"pass","Package":"m/c","Elapsed":31}'
+    'go: downloading example.com/dep v1.0.0'
+    '{"Action":"output", broken'
+)
+$gj = ConvertFrom-GoTestJson $ev
+Check 'go test -json text keeps build errors, failed logs, ok lines and non-JSON lines (#186)' `
+    (($gj.Text -match 'undefined: x') -and ($gj.Text -match 'FAIL\tm/b \[build failed\]') -and ($gj.Text -match 'a_test\.go:3: boom') -and
+    ($gj.Text -match '--- FAIL: TestSlow \(') -and ($gj.Text -match 'ok  \tm/c\t31') -and ($gj.Text -match 'go: downloading') -and
+    ($gj.Text -match '\{"Action":"output", broken')) $gj.Text
+Check 'go test -json text drops what a plain run hides (#186)' `
+    (($gj.Text -notmatch 'passing log') -and ($gj.Text -notmatch '=== RUN') -and ($gj.Text -notmatch '--- PASS') -and ($gj.Text -notmatch '(?m)^PASS$')) $gj.Text
+$def = [pscustomobject]@{ Info = 5.0; TestBudget = 0.0; PackageBudget = 0.0 }
+$st = @(Get-SlowGoTests $gj $def) -join "`n"
+# Leaf s1 (7s) and parent TestSlow (9s) are listed apart, never summed; a slow package is
+# [INFO] only -- its wall time measures the machine's load, which is what #186 was about.
+Check 'slow leaf tests and parent groups are [INFO], listed apart (#186)' `
+    (($st -match '(?s)\[INFO\] slow tests: 1 test.*7\.0s  m/a TestSlow/s1') -and ($st -match '(?s)\[INFO\] slow test groups: 1 .*9\.0s  m/a TestSlow\b') -and
+    ($st -match '(?s)\[INFO\] slowest packages.*31\.0s  m/c') -and ($st -notmatch '\[WARN\]') -and ($st -notmatch 'TestSlow/s2')) $st
+$st = @(Get-SlowGoTests $gj ([pscustomobject]@{ Info = 5.0; TestBudget = 6.0; PackageBudget = 30.0 })) -join "`n"
+Check 'a qgate.json budget turns a slow leaf test or package into a [WARN], never a parent (#186)' `
+    (($st -match '\[WARN\] slow tests: m/a TestSlow/s1 took 7\.0s') -and ($st -match '\[WARN\] slow tests: package m/c took 31\.0s') -and
+    ($st -notmatch '\[WARN\] slow tests: m/a TestSlow took')) $st
+$sCfg = Join-Path $tmp 'slowtests-cfg'
+New-Item -ItemType Directory -Path $sCfg -Force | Out-Null
+[IO.File]::WriteAllText((Join-Path $sCfg 'qgate.json'), '{"go":{"slowTests":{"info":2,"testBudget":30}}}')
+$c1 = Get-GoSlowTestConfig $sCfg
+[IO.File]::WriteAllText((Join-Path $sCfg 'qgate.json'), '{"go":{"slowTests":{"info":"5","bogus":1}}}')
+$c2 = Get-GoSlowTestConfig $sCfg
+Check 'go.slowTests is read, and a bad value is named (#186)' `
+    (($c1.Info -eq 2) -and ($c1.TestBudget -eq 30) -and ($c1.PackageBudget -eq 0) -and -not $c1.Error -and $c2.Error -and
+    ((Get-GoSlowTestConfig (Join-Path $tmp 'no-such-dir')).Info -eq 5)) "$($c1 | Out-String) $($c2.Error)"
 # quality-gate#42: CI steps that run Go for a target the gate never builds are named.
 # The workflow is the reporting repo's shape: GOARCH set in a step `env:` block, a
 # cross-GOOS lint, and -race runs, which the gate covers itself.

@@ -1164,10 +1164,25 @@ function Invoke-GoStackOnce($s) {
     # way custom checks are (Invoke-WithoutHookGitEnv); the guard still needs it after.
     if ($Full) {
         # A trustworthy verdict: no cache, and shuffled so order dependence surfaces.
-        Invoke-WithoutHookGitEnv { Phase 'go test' { go test -count=1 -failfast -shuffle=on -timeout=10m ./... } }
-        # Report-level, not a stack line: -Quiet drops a green stack's lines, and the
-        # commit hook runs -Quiet -- the one place this warning has to be seen.
-        if ($script:Lines[-1] -like '`[PASS`]*') { $script:Warnings += @(Get-SlowGoPackages $script:PhaseOut 600) }
+        # #186: -json for per-test times, in the same single run. The phase still prints
+        # plain text (ConvertFrom-GoTestJson) and its verdict is go's own exit code.
+        $script:GoTestRun = $null
+        Invoke-WithoutHookGitEnv {
+            Phase 'go test' {
+                $raw = @(go test -json -count=1 -failfast -shuffle=on -timeout=10m ./... 2>&1)
+                $code = $LASTEXITCODE
+                try { $script:GoTestRun = ConvertFrom-GoTestJson $raw; $script:GoTestRun.Text }
+                catch { $raw | ForEach-Object { "$_" }; "[NOTE] go test -json output not readable ($_) -- shown raw" }
+                $global:LASTEXITCODE = $code
+            }
+        }
+        # Report-level, not a stack line: -Quiet keeps only the budget [WARN]s, and the
+        # commit hook runs -Quiet.
+        if ($script:Lines[-1] -like '`[PASS`]*') {
+            $sc = Get-GoSlowTestConfig $Root
+            if ($sc.Error) { $script:Warnings += "[WARN] $($sc.Error)" }
+            else { $script:Warnings += @(Get-SlowGoTests $script:GoTestRun $sc) }
+        }
         # Workflows are the repository's, not the module's: asked once per run.
         if (-not $script:CiGoAsked) {
             $script:CiGoAsked = $true
