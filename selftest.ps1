@@ -3754,16 +3754,56 @@ function Test-RemoteRef([string]$Ref) { [bool](git -C $pushBare rev-parse -q --v
 try {
     $o = (git -C $pushRepo push origin HEAD:refs/heads/clean 2>&1 | Out-String); $c = $LASTEXITCODE
     Check 'a push of a clean tree passes the pre-push hook (#180)' (($c -eq 0) -and (Test-RemoteRef 'clean')) "code=$c $o"
+    # Git sends an annotated tag's object ID, not its commit ID, on pre-push stdin.
+    $pushHead = (git -C $pushRepo rev-parse HEAD)
+    $zeroSha = '0' * $pushHead.Length
+    $prePush = Join-Path $PSScriptRoot 'gate\pre-push.ps1'
+    git -C $pushRepo -c user.email=selftest@local -c user.name=selftest tag -a at-head -m 'annotated HEAD' HEAD 2>$null
+    $tagSha = (git -C $pushRepo rev-parse refs/tags/at-head)
+    $o = ("refs/tags/at-head $tagSha refs/tags/at-head $zeroSha" |
+        & pwsh -NoProfile -File $prePush -Root $pushRepo 2>&1 | Out-String); $c = $LASTEXITCODE
+    Check 'an annotated tag at HEAD passes pre-push stdin validation (#189)' `
+        (($c -eq 0) -and ($tagSha -ne $pushHead) -and ($o -notmatch 'not the checked-out HEAD')) "code=$c $o"
+    $o = (git -C $pushRepo push origin HEAD:refs/heads/tagged refs/tags/at-head 2>&1 | Out-String); $c = $LASTEXITCODE
+    Check 'a branch and annotated tag at HEAD pass in one push (#191 #192 #197)' `
+        (($c -eq 0) -and (Test-RemoteRef 'tagged') -and
+        ((git -C $pushBare rev-parse -q --verify refs/tags/at-head 2>$null) -eq $tagSha)) "code=$c $o"
+    git -C $pushRepo -c user.email=selftest@local -c user.name=selftest tag -a followed -m 'follow HEAD' HEAD 2>$null
+    $followedSha = (git -C $pushRepo rev-parse refs/tags/followed)
+    $o = (git -C $pushRepo push --follow-tags origin HEAD:refs/heads/followed 2>&1 | Out-String); $c = $LASTEXITCODE
+    Check 'a branch push with --follow-tags accepts an annotated tag at HEAD (#195)' `
+        (($c -eq 0) -and (Test-RemoteRef 'followed') -and
+        ((git -C $pushBare rev-parse -q --verify refs/tags/followed 2>$null) -eq $followedSha)) "code=$c $o"
+    git -C $pushRepo tag lightweight HEAD 2>$null
+    $o = (git -C $pushRepo push origin refs/tags/lightweight 2>&1 | Out-String); $c = $LASTEXITCODE
+    Check 'a lightweight tag at HEAD still passes pre-push' `
+        (($c -eq 0) -and ((git -C $pushBare rev-parse -q --verify refs/tags/lightweight 2>$null) -eq $pushHead)) "code=$c $o"
+    git -C $pushRepo -c user.email=selftest@local -c user.name=selftest tag -a tree-tag -m 'not a commit' 'HEAD^{tree}' 2>$null
+    $o = (git -C $pushRepo push origin refs/tags/tree-tag 2>&1 | Out-String); $c = $LASTEXITCODE
+    Check 'an annotated tag of a tree is refused before running the gate' `
+        (($c -ne 0) -and -not (git -C $pushBare rev-parse -q --verify refs/tags/tree-tag 2>$null) -and
+        ($o -match 'not the checked-out HEAD') -and ($o -notmatch '\[PASS\] buf')) "code=$c $o"
     $ppfx = Join-Path $pushRepo 'schema\example\v1\greeting.proto'
     [IO.File]::WriteAllText($ppfx, ([IO.File]::ReadAllText($ppfx).Replace('string text = 1;', 'string Text = 1;')))
     git -C $pushRepo add -A 2>$null
     git -C $pushRepo -c user.email=selftest@local -c user.name=selftest commit -qm 'ungated' --no-verify *> $null
     $o = (git -C $pushRepo push origin HEAD:refs/heads/bad 2>&1 | Out-String); $c = $LASTEXITCODE
     Check 'a push of a commit that fails the gate is refused (#180)' (($c -ne 0) -and -not (Test-RemoteRef 'bad') -and ($o -match '\[FAIL\]')) "code=$c $o"
+    git -C $pushRepo -c user.email=selftest@local -c user.name=selftest tag -a bad-head -m 'HEAD fails the gate' HEAD 2>$null
+    $o = (git -C $pushRepo push origin refs/tags/bad-head 2>&1 | Out-String); $c = $LASTEXITCODE
+    Check 'an annotated tag at HEAD still runs the gate and is refused when the commit fails' `
+        (($c -ne 0) -and -not (git -C $pushBare rev-parse -q --verify refs/tags/bad-head 2>$null) -and
+        ($o -match '\[FAIL\] buf') -and ($o -notmatch 'not the checked-out HEAD')) "code=$c $o"
     # Only the checked-out HEAD can be vouched for: the gate reads the working tree.
     $o = (git -C $pushRepo push origin HEAD~1:refs/heads/older 2>&1 | Out-String); $c = $LASTEXITCODE
     Check 'a push of a commit other than HEAD is refused with the reason (#180)' `
         (($c -ne 0) -and -not (Test-RemoteRef 'older') -and ($o -match 'not the checked-out HEAD')) "code=$c $o"
+    git -C $pushRepo -c user.email=selftest@local -c user.name=selftest tag -a older-tag -m 'not HEAD' HEAD~1 2>$null
+    $o = (git -C $pushRepo push origin HEAD:refs/heads/mixed refs/tags/older-tag 2>&1 | Out-String); $c = $LASTEXITCODE
+    Check 'a branch plus annotated tag of another commit is refused before gating either ref (#192)' `
+        (($c -ne 0) -and -not (Test-RemoteRef 'mixed') -and
+        -not (git -C $pushBare rev-parse -q --verify refs/tags/older-tag 2>$null) -and
+        ($o -match 'refs/tags/older-tag .*not the checked-out HEAD') -and ($o -notmatch '\[FAIL\] buf')) "code=$c $o"
     git -C $pushRepo reset -q --hard HEAD~1 2>$null
     Add-Content -LiteralPath (Join-Path $pushRepo 'AGENTS.md') 'uncommitted'
     $o = (git -C $pushRepo push origin HEAD:refs/heads/dirty 2>&1 | Out-String); $c = $LASTEXITCODE

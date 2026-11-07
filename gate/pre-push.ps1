@@ -6,7 +6,7 @@
 # change, never built together. pre-push is the last hook git runs before the remote.
 #
 # The gate checks the WORKING TREE, so a push is only judged when what is pushed is what
-# is checked out: every pushed local sha must be HEAD, and nothing tracked may be modified
+# is checked out: every pushed object must resolve to HEAD, and nothing tracked may be modified
 # or staged. Anything else is refused with what to do instead -- running the gate on the
 # working tree and calling the result a verdict on another commit would be a guess.
 #
@@ -39,13 +39,18 @@ $pushes = @($stdin -split "`r?`n" | Where-Object { $_.Trim() } | ForEach-Object 
 if (-not $pushes) { exit 0 }
 
 $head = "$(& git -C $Root rev-parse -q --verify HEAD 2>$null)".Trim()
-$bad = @($pushes | Where-Object { $_.LocalSha -ne $head })
+$bad = @($pushes | Where-Object {
+        # Annotated tags arrive as tag objects; only their commit is gated. Objects
+        # that cannot peel to a commit (including tags of trees/blobs) stay refused.
+        $commit = "$(& git -C $Root rev-parse -q --verify "$($_.LocalSha)^{commit}" 2>$null)".Trim()
+        $LASTEXITCODE -ne 0 -or -not $head -or $commit -ne $head
+    })
 if ($bad) {
     foreach ($b in $bad) {
         Write-Output "[FAIL] pre-push -- $($b.LocalRef) ($($b.LocalSha.Substring(0, [Math]::Min(12, $b.LocalSha.Length)))) -> $($b.RemoteRef) is not the checked-out HEAD ($(if ($head) { $head.Substring(0, 12) } else { 'none' }))"
     }
     Write-Output '       The gate checks the working tree, so it can only vouch for the commit that is checked out.'
-    Write-Output '       Check out the branch you push (or push HEAD: git push origin HEAD:<branch>), one ref per push.'
+    Write-Output '       Check out the branch you push (or push HEAD: git push origin HEAD:<branch>); every pushed ref must resolve to that commit.'
     exit 1
 }
 
