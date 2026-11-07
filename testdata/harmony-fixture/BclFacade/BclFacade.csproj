@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- A .NET (Core) runtime System.Collections.dll in miniature (#187): named Bcl, declares no
+       types, only forwards Bcl.Box to BclCore.dll beside it. -->
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <AssemblyName>Bcl</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\BclCore\BclCore.csproj" />
+  </ItemGroup>
+
+</Project>

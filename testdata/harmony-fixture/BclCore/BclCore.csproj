@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- System.Private.CoreLib in miniature (#187): where a .NET runtime facade forwards Bcl.Box. -->
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\Bcl\Box.cs" />
+  </ItemGroup>
+
+</Project>

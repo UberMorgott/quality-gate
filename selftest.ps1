@@ -2468,6 +2468,16 @@ public static class BclLookups
         (($out -match '\[WARN\] harmony: Bcl\.Box\._version field not found \(AccessTools\.FieldRefAccess\).*only a reference assembly') -and
             ($hmIn -notmatch '(?m)^(?!\[WARN\]).*Box\._version') -and
             ($hmIn -match '(?m)^(?!\[WARN\]).*Hud\.m_nope field not found')) $out
+    # #187: on .NET (Core) the runtime copy beside the game is a facade -- System.Collections.dll
+    # only forwards List`1 to System.Private.CoreLib.dll. BclFacade (named Bcl) forwards Box to
+    # BclCore.dll: the forward is followed, so _version is found and _gone still fails.
+    & dotnet build (Join-Path $hm 'BclFacade') -o (Join-Path $hm 'lib') -nologo -v q *> $null
+    $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $hmMod -All -Full 2>&1 | Out-String)
+    $hmIn = Get-InlineReport $out
+    Check 'a private field behind a runtime facade''s type forward resolves in the assembly it forwards to' `
+        (($out -match '\[PASS\] build') -and (Test-Path (Join-Path $hm 'lib\BclCore.dll')) -and ($out -notmatch 'Box\._version')) $out
+    Check 'a field the forwarded-to runtime assembly lacks still fails' `
+        ($hmIn -match '(?m)^(?!\[WARN\]).*Bcl\.Box\._gone field not found \(AccessTools\.FieldRefAccess\)') $out
 
     # #125: a legacy (non-SDK) csproj names neither TargetFramework nor TargetFrameworks, only
     # TargetFrameworkVersion. The empty TFM list unrolled to $null and `$tfms[0]` crashed the

@@ -173,7 +173,7 @@ public sealed class QGateHarmony : ISignatureTypeProvider<string, object>, ICust
             foreach (var d in dirs)
             {
                 var rt = Load(System.IO.Path.Combine(d, System.IO.Path.GetFileName(a.Path)));
-                if (rt != null && !rt.Ref) { q.Index(rt); break; }
+                if (rt != null && !rt.Ref) { q.IndexRuntime(rt, d); break; }
             }
         q.MapSource(srcDir, root);
         var outp = new List<string>();
@@ -229,6 +229,24 @@ public sealed class QGateHarmony : ISignatureTypeProvider<string, object>, ICust
             var e = r.GetExportedType(h);
             var ns = r.GetString(e.Namespace);
             if (e.IsForwarder) forwarded.Add(ns.Length == 0 ? r.GetString(e.Name) : ns + "." + r.GetString(e.Name));
+        }
+    }
+
+    // A .NET (Core) runtime copy is a facade: System.Collections.dll only type-forwards List`1
+    // to System.Private.CoreLib.dll beside it. Index what the forwards point to as well (#187).
+    readonly HashSet<string> followed = new(StringComparer.OrdinalIgnoreCase);
+    void IndexRuntime(Asm a, string dir)
+    {
+        Index(a);
+        var r = a.R;
+        foreach (var h in r.ExportedTypes)
+        {
+            var e = r.GetExportedType(h);
+            if (!e.IsForwarder || e.Implementation.Kind != HandleKind.AssemblyReference) continue;
+            var n = r.GetString(r.GetAssemblyReference((AssemblyReferenceHandle)e.Implementation).Name);
+            if (!followed.Add(n)) continue;
+            var t = Load(System.IO.Path.Combine(dir, n + ".dll"));
+            if (t != null && !t.Ref) IndexRuntime(t, dir);
         }
     }
 
