@@ -1186,9 +1186,11 @@ function Invoke-GoStackOnce($s) {
         # #186: -json for per-test times, in the same single run. The phase still prints
         # plain text (ConvertFrom-GoTestJson) and its verdict is go's own exit code.
         $script:GoTestRun = $null
+        $gt = Get-GoTestTimeout $Root
+        if ($gt.Error) { $script:Warnings += "[WARN] $($gt.Error)" }
         Invoke-WithoutHookGitEnv {
             Phase 'go test' {
-                $raw = @(go test -json -count=1 -failfast -shuffle=on -timeout=10m ./... 2>&1)
+                $raw = @(go test -json -count=1 -failfast -shuffle=on "-timeout=$($gt.Sec)s" ./... 2>&1)
                 $code = $LASTEXITCODE
                 try { $script:GoTestRun = ConvertFrom-GoTestJson $raw; $script:GoTestRun.Text }
                 catch { $raw | ForEach-Object { "$_" }; "[NOTE] go test -json output not readable ($_) -- shown raw" }
@@ -1226,7 +1228,7 @@ function Invoke-GoStackOnce($s) {
         # every file the tests touched AFTER they finished (two EvalSymlinks per test-log
         # line); measured on Windows: 324s for a module cacheable, 156s with -count=1.
         if ($env:CGO_ENABLED -ne '0' -and (Have 'gcc')) {
-            if (-not $gc.LowSpace) { Invoke-WithoutHookGitEnv { Phase 'go test -race' { go test -race -count=1 -short -failfast -timeout=15m ./... } } }
+            if (-not $gc.LowSpace) { Invoke-WithoutHookGitEnv { Phase 'go test -race' { go test -race -count=1 -short -failfast "-timeout=$([long]($gt.Sec * 1.5))s" ./... } } }
         } else {
             $script:Lines += '[WARN] no cgo toolchain (gcc) -- go test -race skipped'
         }
@@ -1296,7 +1298,9 @@ function Invoke-GoStackOnce($s) {
         # Both -count=1 and -shuffle=on defeat the Go test cache, so the fast lane
         # re-ran every package on every agent turn. -short lets a repo park its slow
         # suites behind testing.Short() instead of paying for them each turn.
-        Invoke-WithoutHookGitEnv { Phase 'go test' { go test -short -failfast -timeout=10m ./... } }
+        $gt = Get-GoTestTimeout $Root
+        if ($gt.Error) { $script:Warnings += "[WARN] $($gt.Error)" }
+        Invoke-WithoutHookGitEnv { Phase 'go test' { go test -short -failfast "-timeout=$($gt.Sec)s" ./... } }
     }
     # Mutation testing is minutes, not seconds: only when asked for, never from a hook.
     if ($Mutate -and -not $script:Failed) {

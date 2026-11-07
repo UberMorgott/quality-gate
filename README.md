@@ -122,6 +122,7 @@ Place one optional `qgate.json` at the repository root. Tool-specific rules rema
 | `go.lintEngine` | `"auto"` (default) or `"golangci"`: `"golangci"` keeps `go vet` + `golangci-lint run` even when `aegis lint` is installed. |
 | `go.deterministic` | Array of root-relative package directories for purity/property-test advisories. |
 | `go.flaky` | `true` or options: `count` (20; 1..500), `budget` seconds (180; 10..3600), `cpu` (`"1,2"`), `race` (true), `fail` (false), `packages` (root-relative directories; otherwise changed test packages). |
+| `go.testTimeout` | Positive whole seconds for `go test -timeout` (default 600); `go test -race` gets 1.5x (default 900). A bad value is a `[WARN]` and the default. |
 | `go.slowTests` | Options, all seconds: `info` (5) is the `[INFO]` line for slow leaf tests, parent groups and packages; `testBudget` (off) and `packageBudget` (off) are the only `[WARN]`s -- a leaf test or a package over them. |
 | `go.fuzzParallel` | Fuzz worker processes per target (`go test -parallel`); default half the cores, 1..4; allowed 1..256. |
 | `go.fuzzMemLimit` | `GOMEMLIMIT` for fuzz runs (`"2GiB"`); default an inherited `GOMEMLIMIT`, else `2GiB`. |

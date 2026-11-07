@@ -574,6 +574,20 @@ function Get-GoSlowTestConfig([string]$Root) {
     $cfg
 }
 
+# quality-gate#183: qgate.json {"go": {"testTimeout": 1800}} -- seconds for go test -timeout
+# (default 600). -race gets 1.5x, the default 10m/15m ratio. A bad value is named and ignored.
+function Get-GoTestTimeout([string]$Root) {
+    $cfg = [pscustomobject]@{ Sec = 600; Error = '' }
+    $file = Join-Path $Root 'qgate.json'
+    if (-not (Test-Path -LiteralPath $file)) { return $cfg }
+    $json = try { Get-Content -LiteralPath $file -Raw | ConvertFrom-Json } catch { $null }
+    if ($null -eq $json -or $null -eq $json.go -or $json.go.PSObject.Properties.Name -notcontains 'testTimeout') { return $cfg }
+    $v = $json.go.testTimeout
+    if (($v -is [int] -or $v -is [long]) -and $v -gt 0) { $cfg.Sec = [long]$v }
+    else { $cfg.Error = "qgate.json `"go.testTimeout`" must be a positive whole number of seconds, got '$v' -- default 600s used" }
+    $cfg
+}
+
 # quality-gate#42: CI ran `go test` for GOARCH=386 and stayed red for ten days while the
 # gate, which only ever builds for this machine, stayed green. Names the workflow steps
 # that run Go (test, vet, golangci-lint) for a target the gate's own phases never touch.

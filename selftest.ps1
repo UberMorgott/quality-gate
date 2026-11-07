@@ -1026,6 +1026,23 @@ $c2 = Get-GoSlowTestConfig $sCfg
 Check 'go.slowTests is read, and a bad value is named (#186)' `
     (($c1.Info -eq 2) -and ($c1.TestBudget -eq 30) -and ($c1.PackageBudget -eq 0) -and -not $c1.Error -and $c2.Error -and
     ((Get-GoSlowTestConfig (Join-Path $tmp 'no-such-dir')).Info -eq 5)) "$($c1 | Out-String) $($c2.Error)"
+# #183: go.testTimeout raises go test -timeout; a bad value is named and the default kept.
+$tCfg = Join-Path $tmp 'testtimeout-cfg'
+New-Item -ItemType Directory -Path $tCfg -Force | Out-Null
+$tt = foreach ($j in '{"go":{"testTimeout":1800}}', '{"go":{"testTimeout":"30m"}}', '{"go":{"testTimeout":0}}', '{}') {
+    [IO.File]::WriteAllText((Join-Path $tCfg 'qgate.json'), $j); Get-GoTestTimeout $tCfg
+}
+Check 'go.testTimeout is read, and a bad value is named with the default kept (#183)' `
+    (($tt[0].Sec -eq 1800) -and -not $tt[0].Error -and ($tt[1].Sec -eq 600) -and ($tt[1].Error -match 'testTimeout') -and
+    ($tt[2].Sec -eq 600) -and $tt[2].Error -and ($tt[3].Sec -eq 600) -and -not $tt[3].Error) ($tt | Out-String)
+# End to end: the value reaches go test. A 1s bound trips a 3s test with go's own panic.
+$tGo = Join-Path $tmp 'go-testtimeout'
+Copy-Item (Join-Path $PSScriptRoot 'testdata\go-fixture') $tGo -Recurse
+[IO.File]::WriteAllText((Join-Path $tGo 'slow_test.go'), "package main`n`nimport (`n`t`"testing`"`n`t`"time`"`n)`n`nfunc TestSlow(t *testing.T) { time.Sleep(3 * time.Second) }`n")
+[IO.File]::WriteAllText((Join-Path $tGo 'qgate.json'), '{"go":{"testTimeout":1}}')
+$r = Invoke-Gate $tGo
+Check 'go.testTimeout bounds go test: 1s fails a 3s test (#183)' `
+    (($r.Code -ne 0) -and ($r.Out -match 'test timed out after 1s') -and ($r.Out -notmatch 'timed out after 10m')) $r.Out
 # quality-gate#42: CI steps that run Go for a target the gate never builds are named.
 # The workflow is the reporting repo's shape: GOARCH set in a step `env:` block, a
 # cross-GOOS lint, and -race runs, which the gate covers itself.
