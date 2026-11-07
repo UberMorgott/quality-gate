@@ -2479,6 +2479,42 @@ public static class BclLookups
     Check 'a field the forwarded-to runtime assembly lacks still fails' `
         ($hmIn -match '(?m)^(?!\[WARN\]).*Bcl\.Box\._gone field not found \(AccessTools\.FieldRefAccess\)') $out
 
+    # #184: a test project references the mod project, whose game reference does not flow into
+    # the test's own (Private=false), and looks a game type up by name: the referenced project's
+    # references are resolved too. A type no assembly declares still fails.
+    $hmSuite = New-Item -ItemType Directory -Force (Join-Path $hm 'Suite')
+    [IO.File]::WriteAllText((Join-Path $hmSuite 'Suite.csproj'), @'
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Mod\Mod.csproj" />
+    <Reference Include="0Harmony">
+      <HintPath>..\lib\0Harmony.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+</Project>
+'@)
+    [IO.File]::WriteAllText((Join-Path $hmSuite 'SuiteLookups.cs'), @'
+using HarmonyLib;
+
+public static class SuiteLookups
+{
+    public static void Run()
+    {
+        _ = AccessTools.TypeByName("Hud");
+        _ = AccessTools.TypeByName("HudGone");
+    }
+}
+'@)
+    $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $hmSuite -All -Full 2>&1 | Out-String)
+    $hmIn = Get-InlineReport $out
+    Check 'a type only a referenced project''s references declare resolves (TypeByName)' `
+        (($out -match '\[PASS\] build') -and ($out -match '\[NOTE\] harmony: Suite\.dll -- 2 target') -and ($out -notmatch 'type Hud not found')) $out
+    Check 'a type no reachable assembly declares still fails (TypeByName)' `
+        ($hmIn -match '(?m)^(?!\[WARN\]).*type HudGone not found \(AccessTools\.TypeByName\)') $out
+
     # #125: a legacy (non-SDK) csproj names neither TargetFramework nor TargetFrameworks, only
     # TargetFrameworkVersion. The empty TFM list unrolled to $null and `$tfms[0]` crashed the
     # stack before the harmony phase. Same "game", same dangling target, legacy project file.

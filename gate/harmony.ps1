@@ -22,7 +22,7 @@ if (-not ('QGateHarmony' -as [type])) { Add-Type -Path (Join-Path $PSScriptRoot 
 # framework's own), and the assembly the build just wrote. BuildProjectReferences=false:
 # `build` already built them, this only asks where they are.
 $msArgs = @($Project, '-t:ResolveReferences', '-getProperty:TargetPath', '-getItem:ReferencePath',
-    '-p:BuildProjectReferences=false', '-nologo')
+    '-getItem:ProjectReference', '-p:BuildProjectReferences=false', '-nologo')
 if ($Tfm) { $msArgs += "-p:TargetFramework=$Tfm" }
 $raw = (& dotnet msbuild @msArgs 2>&1 | Out-String)
 $info = if ($LASTEXITCODE -eq 0) { try { $raw | ConvertFrom-Json } catch { $null } }
@@ -33,6 +33,27 @@ if (-not $info -or -not (Test-Path -LiteralPath $info.Properties.TargetPath)) {
 }
 $mod = $info.Properties.TargetPath
 $refs = @($info.Items.ReferencePath.FullPath)
+# A referenced project's own references do not flow into ours (a <Private>false</Private> game
+# reference), yet a test project loads that game at run time and looks its types up by name
+# (#184): resolve them too, transitively. A project that will not resolve adds nothing.
+# shortcut: a multi-targeting referenced project is skipped (no TFM passed); pick its nearest TFM when a repo needs it.
+$seen = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+$queue = [Collections.Generic.Queue[string]]::new()
+foreach ($p in @($info.Items.ProjectReference.FullPath)) { if ($p) { $queue.Enqueue($p) } }
+while ($queue.Count) {
+    $p = $queue.Dequeue()
+    if (-not $seen.Add($p)) { continue }
+    $sub = try {
+        & dotnet msbuild $p -t:ResolveReferences -getItem:ReferencePath -getItem:ProjectReference '-p:BuildProjectReferences=false' -nologo 2>$null |
+            Out-String | ConvertFrom-Json
+    } catch { $null }
+    if (-not $sub) { continue }
+    $refs += @($sub.Items.ReferencePath.FullPath)
+    foreach ($q in @($sub.Items.ProjectReference.FullPath)) { if ($q) { $queue.Enqueue($q) } }
+}
+# Our own references first: the checker indexes the first copy of a type it meets.
+$uniq = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+$refs = @($refs | Where-Object { $_ -and $uniq.Add($_) })
 
 # qgate.json {"harmony": {"assemblies": ["%ValheimDir%\\BepInEx\\plugins\\**\\*.dll"]}}: other
 # assemblies checked against the same game -- the plugins installed beside this mod, whose
