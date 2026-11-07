@@ -1,0 +1,21 @@
+{
+  "1": "detect.ps1",
+  "2": "Get-Stacks",
+  "3": "settings",
+  "5": "selftest.ps1",
+  "10": "steps",
+  "13": "Invoke-CustomStack",
+  "21": "quality_gate job anchor shared by both hooks",
+  "30": "install.ps1",
+  "36": "rules",
+  "37": "SampleTests",
+  "38": "Coverage measures happy paths; a green suite proves nothing",
+  "39": "buf.yaml",
+  "42": "Invoke-CppStack",
+  "44": "GitHub Actions quality-gate workflow",
+  "48": "jobs",
+  "49": "BclCore.csproj",
+  "52": "hooks/pre-push",
+  "57": "templates/pre-push",
+  "58": "system_runtime_compilerservices"
+}

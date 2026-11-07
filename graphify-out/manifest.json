@@ -12,15 +12,15 @@
     "semantic_hash": ""
   },
   "gate/check.ps1": {
-    "mtime": 1793222274.7792053,
-    "seen": 1793223317.0155537,
-    "ast_hash": "548ece657e3f25226d9e78a31d242753",
+    "mtime": 1794087683.8243315,
+    "seen": 1794088193.2941434,
+    "ast_hash": "8cd885392ee05f798e819c5b6b9b6e89",
     "semantic_hash": ""
   },
   "gate/detect.ps1": {
-    "mtime": 1793221428.7733512,
-    "seen": 1793223317.0155551,
-    "ast_hash": "6716270acc9034a53bfe7c2a362ac9c9",
+    "mtime": 1794087683.8248472,
+    "seen": 1794088193.294145,
+    "ast_hash": "c7438bd687aa31086ebc30c3a827d868",
     "semantic_hash": ""
   },
   "gate/outdated.ps1": {
@@ -42,9 +42,9 @@
     "semantic_hash": ""
   },
   "selftest.ps1": {
-    "mtime": 1793222297.1236305,
-    "seen": 1793223317.01557,
-    "ast_hash": "e80b269865f8c5943d761e2774f24134",
+    "mtime": 1794087683.8269017,
+    "seen": 1794088193.2941601,
+    "ast_hash": "f1cbb5833f6f2a146d48e1ba24937502",
     "semantic_hash": ""
   },
   "templates/.stylelintrc.json": {
@@ -126,9 +126,9 @@
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1793199793.59106,
-    "seen": 1793200653.275952,
-    "ast_hash": "264716752935095b5c794670947f82b3",
+    "mtime": 1794087683.8233159,
+    "seen": 1794088193.2941976,
+    "ast_hash": "010c2517abc3b9c1d4efd2260cc32947",
     "semantic_hash": ""
   },
   "templates/.golangci.yml": {
@@ -210,15 +210,15 @@
     "semantic_hash": ""
   },
   "gate/harmony.cs": {
-    "mtime": 1790318454.942572,
-    "seen": 1793178666.4504726,
-    "ast_hash": "567c8b3701599791860bc5df9ad7ee4c",
+    "mtime": 1794087175.9136372,
+    "seen": 1794088193.2941482,
+    "ast_hash": "71fcb91d5d0eb1db727a9e7e07aee70b",
     "semantic_hash": ""
   },
   "gate/harmony.ps1": {
-    "mtime": 1789168087.8161707,
-    "seen": 1793178666.4504745,
-    "ast_hash": "04e4709994fe460c0de33545e5e521c6",
+    "mtime": 1794087176.0021193,
+    "seen": 1794088193.2941492,
+    "ast_hash": "680a93b6478e6399bb45b387ac0dd428",
     "semantic_hash": ""
   },
   "testdata/harmony-fixture/Game/Game.csproj": {
@@ -348,9 +348,9 @@
     "semantic_hash": ""
   },
   "gate/pre-push.ps1": {
-    "mtime": 1793222272.2213926,
-    "seen": 1793223317.0155628,
-    "ast_hash": "c5c39a3188683b53d3fe4d20b00fe906",
+    "mtime": 1794086783.1507118,
+    "seen": 1794088193.2941525,
+    "ast_hash": "9f08f4845788477e8f37fce494b0a19b",
     "semantic_hash": ""
   },
   "hooks/pre-push": {
@@ -363,6 +363,24 @@
     "mtime": 1793221501.9235623,
     "seen": 1793223317.0155828,
     "ast_hash": "e2ac041e56386c438ebe3390cb971bdb",
+    "semantic_hash": ""
+  },
+  "testdata/harmony-fixture/BclCore/BclCore.csproj": {
+    "mtime": 1794087175.9161966,
+    "seen": 1794088193.2941782,
+    "ast_hash": "2ad0bcf050a401d11f0d808ca4b93c0e",
+    "semantic_hash": ""
+  },
+  "testdata/harmony-fixture/BclFacade/BclFacade.csproj": {
+    "mtime": 1794087175.9167123,
+    "seen": 1794088193.294179,
+    "ast_hash": "48f659887d6e69fef5a43f4e2e6d26dd",
+    "semantic_hash": ""
+  },
+  "testdata/harmony-fixture/BclFacade/Forward.cs": {
+    "mtime": 1794087175.9172194,
+    "seen": 1794088193.29418,
+    "ast_hash": "107d364e8248c924c446c0ee5bcb1eee",
     "semantic_hash": ""
   }
 }
