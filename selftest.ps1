@@ -3187,6 +3187,16 @@ foreach ($h in 'pre-commit', 'pre-merge-commit', 'pre-push') { Set-Content (Join
 git -C $lhn config core.hooksPath .githooks
 $lhOut = (Invoke-Gate $lhn).Out
 Check 'gate does not warn when core.hooksPath hooks run the gate' ($lhOut -notmatch '\[WARN\] hooks:') $lhOut
+# #201: a pre-#200 copy whose commit jobs still pass -Full is named, and without a pre-push
+# gate job the warning says the commit keeps -Full (and so the slot queue).
+$lhStale = (Get-Content (Join-Path $PSScriptRoot 'templates\lefthook.yml') -Raw) -replace 'qgate(\.cmd)? -All -Quiet', 'qgate$1 -All -Full -Quiet'
+Set-Content (Join-Path $lhn 'lefthook.yml') $lhStale -NoNewline
+$lhOut = (Invoke-Gate $lhn).Out
+Check 'gate warns on a commit hook job left at -Full' `
+    (($lhOut -match '\[WARN\] hooks: lefthook\.yml pre-commit runs the gate with -Full') -and ($lhOut -notmatch 'commit keeps -Full')) $lhOut
+Set-Content (Join-Path $lhn 'lefthook.yml') ($lhStale -replace '(?ms)^pre-push:.*?(?=^# The agent)', '') -NoNewline
+$lhOut = (Invoke-Gate $lhn).Out
+Check 'the -Full commit-job warning says the commit keeps -Full without a pre-push gate job' ($lhOut -match 'no pre-push gate job here the commit keeps -Full') $lhOut
 git -C $lhn config --unset core.hooksPath
 Set-Content (Join-Path $lhn 'lefthook.yml') "pre-commit:`n  jobs:`n    - run: make lint`n"
 $lhOut = (Invoke-Gate $lhn).Out
@@ -3599,6 +3609,37 @@ if ($held) {
     # #200: the commit-hook level (-All, no -Full) never queues -- the only slot is held right now.
     $cOut = (& pwsh -NoProfile -File $gate -Root $qRepo -All -Quiet 2>&1 | Out-String)
     Check 'the commit-hook level runs while the only full-gate slot is held' (($LASTEXITCODE -eq 0) -and ($cOut -notmatch 'waiting for a machine-wide')) "code=$LASTEXITCODE $cOut"
+    # #201: a pre-#200 commit hook still passing -Full (GIT_INDEX_FILE = inside a commit).
+    # With a pre-push that runs the gate it drops to the commit level and does not queue;
+    # without one it keeps -Full and queues -- the full lane is never silently lost.
+    Set-Content (Join-Path $qRepo 'lefthook.yml') "pre-push:`n  jobs:`n    - run: qgate.cmd pre-push`n"
+    $qPush = Join-Path $qRepo '.git\hooks\pre-push'
+    Set-Content $qPush "#!/bin/sh`nlefthook run pre-push`n"
+    $staleRun = {
+        $o = Join-Path $tmp "queue-hook-$([guid]::NewGuid().ToString('N').Substring(0, 8)).out"
+        $env:GIT_INDEX_FILE = Join-Path $qRepo '.git\index'; $env:QGATE_NO_REUSE = '1'
+        $hp = Start-Process pwsh -ArgumentList '-NoProfile', '-File', "`"$gate`"", '-Root', "`"$qRepo`"", '-Only', 'go', '-Full' `
+            -RedirectStandardOutput $o -RedirectStandardError "$o.err" -PassThru -NoNewWindow
+        $env:GIT_INDEX_FILE = $null; $env:QGATE_NO_REUSE = $null
+        $t = ''
+        foreach ($n in 1..1200) {
+            Start-Sleep -Milliseconds 250
+            $t = "$(Get-Content $o -Raw -ErrorAction SilentlyContinue)`n$(Get-Content "$o.err" -Raw -ErrorAction SilentlyContinue)"
+            if ($t -match 'waiting for a machine-wide' -or $hp.HasExited) { break }
+        }
+        $done = $hp.HasExited
+        try { $hp.Kill($true) } catch { Write-Verbose "stale hook run: $_" }
+        [void]$hp.WaitForExit(10000)
+        [pscustomobject]@{ Done = $done; Code = $(if ($done) { $hp.ExitCode }); Out = $t }
+    }
+    $sr = & $staleRun
+    Check 'a stale commit-hook -Full run does not queue when pre-push runs the full lane' `
+        ($sr.Done -and ($sr.Code -eq 0) -and ($sr.Out -notmatch 'waiting for a machine-wide') -and ($sr.Out -match '\[INFO\] commit hook asked for -Full')) "code=$($sr.Code) $($sr.Out)"
+    Remove-Item $qPush
+    $sr = & $staleRun
+    Check 'a stale commit-hook -Full run keeps the full lane (queues) when no pre-push runs the gate' `
+        ((-not $sr.Done) -and ($sr.Out -match 'waiting for a machine-wide') -and ($sr.Out -notmatch '\[INFO\] commit hook asked')) "done=$($sr.Done) $($sr.Out)"
+    Remove-Item (Join-Path $qRepo 'lefthook.yml')
     # A record whose process is gone (a crashed holder): named stale and removed. The waiting
     # run is killed once it said so -- the wait line is printed before any check runs.
     $dead = Start-Process pwsh -ArgumentList '-NoProfile', '-Command', 'exit 0' -PassThru -WindowStyle Hidden

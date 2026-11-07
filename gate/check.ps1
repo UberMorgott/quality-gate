@@ -173,6 +173,31 @@ if (-not $Root) { $Root = Get-RepoRoot (Get-Location).Path }
 if (-not (Test-Path $Root)) { Write-Output "[FAIL] root not found: $Root"; exit 1 }
 $Root = (Resolve-Path $Root).Path
 
+# One top-level hook section of lefthook.yml: from `<hook>:` to the next unindented line.
+# shortcut: lefthook.yml only, no lefthook-local.yml or `extends`; read those if a repo moves its gate jobs there.
+function Get-LefthookBlock([string]$Text, [string]$HookName) {
+    if ($Text -match "(?ms)^$HookName\s*:((?:(?!^\S).)*)") { $Matches[1] } else { '' }
+}
+# quality-gate#201: lefthook.yml copies older than #200 still run `qgate -All -Full` in the
+# commit hook, so every commit queued 20+ min for the machine-wide slot (#123). Inside a
+# commit git sets GIT_INDEX_FILE (commit.c run_commit_hook; measured on git 2.53 + lefthook
+# 2.2.2: set in pre-commit and pre-merge-commit, absent in pre-push and outside hooks;
+# lefthook sets no variable of its own). There the run drops to the commit level -- but only
+# when the full lane still runs at pre-push for this repo; otherwise -Full is kept, never
+# silently lost, and the #188 hooks check below names the stale job.
+if ($Full -and $env:GIT_INDEX_FILE) {
+    $hkDir = (& git -C $Root rev-parse --path-format=absolute --git-path hooks 2>$null)
+    $ppFile = if ($hkDir) { Join-Path $hkDir 'pre-push' }
+    $ppText = if ($ppFile -and (Test-Path -LiteralPath $ppFile)) { Get-Content -LiteralPath $ppFile -Raw } else { '' }
+    $lhFile = Join-Path $Root 'lefthook.yml'
+    $lhPush = (Test-Path -LiteralPath $lhFile) -and ((Get-LefthookBlock (Get-Content -LiteralPath $lhFile -Raw) 'pre-push') -match 'qgate')
+    if ($ppText -match 'qgate|quality-gate' -or ($ppText -match 'lefthook' -and $lhPush)) {
+        $Full = $false
+        [void]$PSBoundParameters.Remove('Full')
+        if (-not $Quiet) { Write-Output '[INFO] commit hook asked for -Full: ran the commit level instead, the full lane runs at pre-push (#201)' }
+    }
+}
+
 $stacks = @(Get-Stacks $Root)
 $allStacks = $stacks
 # Every advisory [WARN] of this run, first line each, for the summary at the end and for
@@ -673,6 +698,12 @@ if (-not $ParallelStacks -and (Test-Path -LiteralPath $lhCfg)) {
                 $lhText -match "(?m)^$_\s*:" -and -not ((Test-Path -LiteralPath $f) -and (Get-Content -LiteralPath $f -Raw) -match 'lefthook|qgate|quality-gate')
             })
         if ($lhMissing) { $script:Warnings += "[WARN] hooks: lefthook.yml runs the gate but $($lhMissing -join ', ') is not installed in $lhDir -- those git operations run NO gate; run: lefthook install" }
+        # #201: a commit job left at -Full by a pre-#200 template copy.
+        $lhStale = @('pre-commit', 'pre-merge-commit' | Where-Object { (Get-LefthookBlock $lhText $_) -match '(?m)^[^#\r\n]*qgate(\.cmd)?\b[^\r\n]*-Full' })
+        if ($lhStale) {
+            $lhNoPush = if ((Get-LefthookBlock $lhText 'pre-push') -notmatch 'qgate') { '; with no pre-push gate job here the commit keeps -Full and waits for the machine-wide full-gate slot' } else { '' }
+            $script:Warnings += "[WARN] hooks: lefthook.yml $($lhStale -join ', ') runs the gate with -Full (a pre-#200 template copy)$lhNoPush -- re-copy templates/lefthook.yml from the gate (commit level -All -Quiet, full lane at pre-push), then run: lefthook install"
+        }
     }
 }
 
