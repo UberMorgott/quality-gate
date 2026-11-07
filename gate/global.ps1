@@ -59,7 +59,7 @@ switch ($sub) {
             try { $cfg = Get-Content $cfgFile -Raw | ConvertFrom-Json } catch { $cfg = $null }
             if ($cfg -and $cfg.PSObject.Properties['enabled'] -and $cfg.enabled -eq $false) { exit 0 }
         }
-        $gateArgs = @('-NoProfile', '-File', (Join-Path $home_ 'gate\check.ps1'), '-All', '-Full', '-Quiet', '-Root', $root)
+        $gateArgs = @('-NoProfile', '-File', (Join-Path $home_ 'gate\check.ps1'), '-All', '-Quiet', '-Root', $root)  # commit level, no -Full: #200
         if ($hasCfg) {
             # The repository has said how it wants to be gated: enforce normally.
             & pwsh @gateArgs

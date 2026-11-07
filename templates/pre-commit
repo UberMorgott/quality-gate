@@ -24,8 +24,12 @@
 # -Quiet: a commit in an agent workflow is a tool call, so this output is read
 # back into the model's context and billed. Silent on a green run, and the full
 # report on a red one.
+#
+# No -Full (quality-gate#200): -Full takes the machine-wide slot queue (#123), and
+# every commit in ~15 parallel worktrees waited 18-30 min behind other repos' full
+# runs. The full lane runs where work leaves the machine: pre-push (`qgate pre-push`).
 if uname -o 2>/dev/null | grep -q Msys; then
-  exec qgate.cmd -All -Full -Quiet
+  exec qgate.cmd -All -Quiet
 else
-  exec qgate -All -Full -Quiet
+  exec qgate -All -Quiet
 fi

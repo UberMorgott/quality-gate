@@ -8,7 +8,7 @@
 # the test cache and without -race. -Fast also drops the expensive bundling phase and
 # is what the agent Stop hook runs on every turn. -Full is opt-in, never the default:
 # every test uncached and shuffled, -race, fuzz, the update advisory -- what the
-# generated pre-commit hook passes. A non-Quiet run without -Full says which level ran.
+# generated pre-push hook and CI pass (pre-commit runs the default level, #200). A non-Quiet run without -Full says which level ran.
 #
 # With no stack switch the changed side is auto-detected from git status.
 [CmdletBinding(PositionalBinding = $false)]

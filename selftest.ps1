@@ -3031,12 +3031,18 @@ Check 'lefthook template calls qgate.cmd' (($lh -match 'run:.*qgate\.cmd ') -and
 # three-stack monorepo. Silent on green, loud on red. CI keeps its output, which is
 # why this is a property of the generated hooks and not a global default.
 $hookTpl = Get-Content (Join-Path $PSScriptRoot 'templates\pre-commit') -Raw
-$invocations = @([regex]::Matches("$lh`n$hookTpl", '(?m)^(?!\s*#).*qgate(\.cmd)? -All -Full.*$') |
+$invocations = @([regex]::Matches("$lh`n$hookTpl", '(?m)^(?!\s*#).*qgate(\.cmd)? -All\b.*$') |
     ForEach-Object { $_.Value })
 $noisy = @($invocations | Where-Object { $_ -notmatch '-Quiet' })
 Check 'every generated pre-commit invocation is quiet on green' `
     (($invocations.Count -ge 3) -and ($noisy.Count -eq 0)) `
     "found $($invocations.Count), noisy: $($noisy -join ' | ')"
+# #200: -Full takes the machine-wide slot queue, so a commit hook passing it waited
+# 18-30 min behind other repos' full runs. The full lane lives at pre-push.
+$fullAtCommit = @($invocations | Where-Object { $_ -match '-Full' })
+Check 'generated commit hooks run the default level, not -Full' ($fullAtCommit.Count -eq 0) ($fullAtCommit -join ' | ')
+Check 'the generated pre-push still runs the full lane' `
+    (($lh -match '(?m)^\s*run:.*qgate(\.cmd)? pre-push') -and ((Get-Content (Join-Path $PSScriptRoot 'gate\pre-push.ps1') -Raw) -match "-All -Full")) 'pre-push wiring'
 
 # 13b (#80). Wire ends by running the gate once: on a red repository it says so and
 # names the adoption path instead of "break something on purpose", and wiring still
@@ -3590,6 +3596,9 @@ if ($held) {
     New-Item -ItemType Directory -Force -Path $slotDir | Out-Null
     $slotRec = Join-Path $slotDir 'slot-0.json'
     $savedHeld = $env:QGATE_SLOT_HELD; $env:QGATE_SLOT_HELD = $null; $env:QGATE_MAX_PARALLEL = '1'
+    # #200: the commit-hook level (-All, no -Full) never queues -- the only slot is held right now.
+    $cOut = (& pwsh -NoProfile -File $gate -Root $qRepo -All -Quiet 2>&1 | Out-String)
+    Check 'the commit-hook level runs while the only full-gate slot is held' (($LASTEXITCODE -eq 0) -and ($cOut -notmatch 'waiting for a machine-wide')) "code=$LASTEXITCODE $cOut"
     # A record whose process is gone (a crashed holder): named stale and removed. The waiting
     # run is killed once it said so -- the wait line is printed before any check runs.
     $dead = Start-Process pwsh -ArgumentList '-NoProfile', '-Command', 'exit 0' -PassThru -WindowStyle Hidden
