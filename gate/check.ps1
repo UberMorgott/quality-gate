@@ -657,6 +657,24 @@ if ($script:StagedAtStart -and -not $env:QGATE_STAGED_CHILD) {
     }
 }
 
+# quality-gate#188: a lefthook.yml with gate jobs is not a wired repo until `lefthook install`
+# has written the git hooks. Measured: 16 repos with only *.sample hooks committed ungated for
+# weeks and no run said so. Advisory: the hooks dir is per clone, not a verdict on the code.
+# --git-path honours core.hooksPath, so a hook written by another manager that calls the gate counts.
+# shortcut: only lefthook.yml (what `qgate wire` writes), not .lefthook.yml/lefthook.yaml; add them if a repo uses them.
+$lhCfg = Join-Path $Root 'lefthook.yml'
+if (-not $ParallelStacks -and (Test-Path -LiteralPath $lhCfg)) {
+    $lhText = Get-Content -LiteralPath $lhCfg -Raw
+    $lhDir = (& git -C $Root rev-parse --path-format=absolute --git-path hooks 2>$null)
+    if ($LASTEXITCODE -eq 0 -and $lhDir -and $lhText -match 'qgate') {
+        $lhMissing = @('pre-commit', 'pre-merge-commit', 'pre-push' | Where-Object {
+                $f = Join-Path $lhDir $_
+                $lhText -match "(?m)^$_\s*:" -and -not ((Test-Path -LiteralPath $f) -and (Get-Content -LiteralPath $f -Raw) -match 'lefthook|qgate|quality-gate')
+            })
+        if ($lhMissing) { $script:Warnings += "[WARN] hooks: lefthook.yml runs the gate but $($lhMissing -join ', ') is not installed in $lhDir -- those git operations run NO gate; run: lefthook install" }
+    }
+}
+
 function Phase {
     # -Elapsed: seconds the TOOL took, for a phase whose command ran before the block.
     # `dotnet msbuild` and `dotnet format` run ahead of their Phase (their output has to

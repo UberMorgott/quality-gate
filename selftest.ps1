@@ -3102,6 +3102,27 @@ if (Get-Command lefthook -ErrorAction SilentlyContinue) {
     Write-Output '[skip] lefthook not on PATH -- the stale-config path cannot run'
 }
 
+# #188: lefthook.yml with gate jobs but no `lefthook install` -- every commit ran ungated, silently.
+$lhn = Join-Path $tmp 'lefthook-uninstalled'
+New-Item -ItemType Directory -Path $lhn | Out-Null
+git -C $lhn init -q 2>$null
+Set-Content (Join-Path $lhn 'README.md') "fixture`n"
+Copy-Item (Join-Path $PSScriptRoot 'templates\lefthook.yml') (Join-Path $lhn 'lefthook.yml')
+$lhOut = (Invoke-Gate $lhn).Out
+Check 'gate warns when lefthook.yml hooks are not installed' `
+    ($lhOut -match '\[WARN\] hooks: lefthook\.yml runs the gate but pre-commit, pre-merge-commit, pre-push is not installed') $lhOut
+# Another hook manager (core.hooksPath) whose hooks call the gate is wired too.
+$lhp = Join-Path $lhn '.githooks'
+New-Item -ItemType Directory -Path $lhp | Out-Null
+foreach ($h in 'pre-commit', 'pre-merge-commit', 'pre-push') { Set-Content (Join-Path $lhp $h) "#!/bin/sh`nqgate.cmd -All -Quiet`n" }
+git -C $lhn config core.hooksPath .githooks
+$lhOut = (Invoke-Gate $lhn).Out
+Check 'gate does not warn when core.hooksPath hooks run the gate' ($lhOut -notmatch '\[WARN\] hooks:') $lhOut
+git -C $lhn config --unset core.hooksPath
+Set-Content (Join-Path $lhn 'lefthook.yml') "pre-commit:`n  jobs:`n    - run: make lint`n"
+$lhOut = (Invoke-Gate $lhn).Out
+Check 'gate ignores a lefthook.yml without gate jobs' ($lhOut -notmatch '\[WARN\] hooks:') $lhOut
+
 }
 
 if (Want 'go2') {
