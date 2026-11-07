@@ -4360,6 +4360,9 @@ $twinCode = $LASTEXITCODE
 Check 'a failing stack still fails the run' (($twinCode -ne 0) -and ($out -match '\[FAIL\] go go/')) "code=$twinCode $out"
 Check 'a stack skipped by an earlier failure says so' `
     ($out -match '\[SKIP\] web web/.*earlier stack failed') $out
+# #190: the tail of a red run is often only these SKIPs; each names the stack that failed.
+Check 'a stack skipped by an earlier failure names that stack' `
+    ($out -match '\[SKIP\] web web/.*earlier stack failed \(go go/\), not run') $out
 
 # 31. Order of the two early returns. `[SKIP] no known stack found` sat above the
 # -Only validation, so in a repo with no marker file at all `-Only go` never reached
@@ -5914,7 +5917,7 @@ foreach ($pc in $parCases) {
     Check "-Parallel reports what the sequential run does: $($pc.Name)" `
         (($seq.Code -eq $pc.Code) -and ($pr.Code -eq $seq.Code) -and ($pr.Norm -eq $seq.Norm) -and ($seq.Norm -match '\[(PASS|FAIL)\] go svc/') -and ($seq.Norm -match 'web ui/')) "seq=$($seq.Code) par=$($pr.Code)`n$($seq.Raw)`n---`n$($pr.Raw)"
 }
-Check '-Parallel red go stack still reports web as not run' ($pr.Norm -match '\[SKIP\] web ui/ .* an earlier stack failed') $pr.Raw
+Check '-Parallel red go stack still reports web as not run' ($pr.Norm -match '\[SKIP\] web ui/ .* an earlier stack failed \(go svc/\)') $pr.Raw
 
 # The vulnerability database lives on the network, so vuln is full-level only -- the
 # same rule govulncheck and `npm audit` follow. Asserted on the LINE, not on a verdict:

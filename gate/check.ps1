@@ -528,6 +528,7 @@ $script:BaseDeferred = $false
 # bottom of this file is not allowed to ignore.
 $script:Phases = 0
 $script:Warnings = @()
+$script:FailedStack = $null
 
 # Concurrent commits in one worktree. Git serialises the final write -- the second
 # `git commit` loses -- but it does NOT protect the INDEX while a hook runs, and this
@@ -4074,7 +4075,9 @@ foreach ($s in $stacks) {
     # report simply stopped, so a red go stack made the web stack indistinguishable
     # from a web stack that does not exist -- the reader cannot tell "not run" from
     # "nothing to check". The work is still skipped; the skipping is now on the record.
-    if ($script:Failed) { $report += "[SKIP] $label ($($s.Marker)) -- an earlier stack failed, not run"; continue }
+    # quality-gate#190: named, because a reader of the report's tail sees only these lines --
+    # the [FAIL] block of a long build scrolled out of view and the run read as red with no cause.
+    if ($script:Failed) { $report += "[SKIP] $label ($($s.Marker)) -- an earlier stack failed$(if ($script:FailedStack) { " ($script:FailedStack)" }), not run"; continue }
     if ($s.Warn) { $report += "[WARN] $label -- $($s.Warn)"; $script:Advisories += "[WARN] $label -- $($s.Warn)" }
     if ($parallelKeys -contains $key) {
         # Fail closed: a child that died without a result is a failure, not a pass.
@@ -4085,7 +4088,7 @@ foreach ($s in $stacks) {
         $script:Phases += $r.Phases
         $script:Skipped += @($r.Skipped | Where-Object { $null -ne $_ })
         $script:Advisories += @($r.Advisories | Where-Object { $null -ne $_ })
-        if ($r.Failed) { $script:Failed = $true }
+        if ($r.Failed) { $script:Failed = $true; $script:FailedStack = $label }
         if ($r.Soft) { $script:SoftFailed = $true }
         continue
     }
@@ -4128,6 +4131,7 @@ foreach ($s in $stacks) {
     $script:Advisories += $stackAdv
     if ($script:Failed -or $script:StackSoft) {
         $out = Format-StackOutput $script:Lines $MaxChars
+        if ($script:Failed -and -not $script:FailedStack) { $script:FailedStack = $label }
         $report += "[FAIL] $label"
         $report += $out
     } elseif (-not $Quiet) {
