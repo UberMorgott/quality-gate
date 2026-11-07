@@ -4023,6 +4023,9 @@ if (Get-Command buf -ErrorAction SilentlyContinue) {
     $altIndex = Join-Path $tmp 'alt-index'
     $priorIndex = $env:GIT_INDEX_FILE
     $env:GIT_INDEX_FILE = $altIndex
+    # #201: this repo's pre-push runs the gate, so without the opt-out a commit-context
+    # -Full drops to the commit level and buf breaking (full-only) never runs.
+    $env:QGATE_COMMIT_FULL = '1'
     try {
         git -C $mrg read-tree HEAD 2>$null
         Set-Content (Join-Path $mrg 'staged-only.txt') 'staged'
@@ -4032,7 +4035,7 @@ if (Get-Command buf -ErrorAction SilentlyContinue) {
         try { $idxOut = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Only proto -Full 2>&1 | Out-String); $idxCode = $LASTEXITCODE }
         finally { Pop-Location }
         $treeAfter = (git -C $mrg write-tree)
-    } finally { $env:GIT_INDEX_FILE = $priorIndex }
+    } finally { $env:GIT_INDEX_FILE = $priorIndex; $env:QGATE_COMMIT_FULL = $null }
     Remove-Item (Join-Path $mrg 'staged-only.txt') -Force -ErrorAction SilentlyContinue
     Check "buf breaking leaves the committing hook's index alone" `
         (($idxCode -eq 0) -and ($idxOut -match '\[PASS\] buf breaking') -and ($treeBefore -eq $treeAfter)) `

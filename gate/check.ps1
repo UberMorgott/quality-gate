@@ -185,7 +185,8 @@ function Get-LefthookBlock([string]$Text, [string]$HookName) {
 # lefthook sets no variable of its own). There the run drops to the commit level -- but only
 # when the full lane still runs at pre-push for this repo; otherwise -Full is kept, never
 # silently lost, and the #188 hooks check below names the stale job.
-if ($Full -and $env:GIT_INDEX_FILE) {
+# QGATE_COMMIT_FULL=1: a deliberate full gate inside a commit -- keeps -Full and the queue.
+if ($Full -and $env:GIT_INDEX_FILE -and $env:QGATE_COMMIT_FULL -ne '1') {
     $hkDir = (& git -C $Root rev-parse --path-format=absolute --git-path hooks 2>$null)
     $ppFile = if ($hkDir) { Join-Path $hkDir 'pre-push' }
     $ppText = if ($ppFile -and (Test-Path -LiteralPath $ppFile)) { Get-Content -LiteralPath $ppFile -Raw } else { '' }
