@@ -1556,7 +1556,7 @@ function Get-DotnetSharedFormat([int]$MaxSdk, $Changed) {
     $sw.Stop()
     Pop-Location
 
-    $ws = @($out -split "`r?`n" | Where-Object { $_ -match 'error WHITESPACE' })
+    $ws = @($out -split "`r?`n" | Where-Object { $_ -match $DotnetWsFinding })
     if ($code -ne 0 -and -not $ws) {
         # The solution did not load. Nothing in that is a verdict on anyone's
         # whitespace, so the run goes back to the call it used to make and says so --
@@ -1582,6 +1582,10 @@ function Get-DotnetSharedFormat([int]$MaxSdk, $Changed) {
     $script:FmtShared = @{ Lines = $byProj; Elapsed = $sw.Elapsed.TotalSeconds; Count = $cand.Count; First = $true }
     $script:FmtShared
 }
+
+# #210: `dotnet format whitespace` reports more than WHITESPACE -- measured on SDK 10: a missing
+# final newline is FINALNEWLINE, a wrong line ending ENDOFLINE. All are findings, not a load failure.
+$DotnetWsFinding = 'error (WHITESPACE|FINALNEWLINE|ENDOFLINE):'
 
 # The line of a failed `dotnet format` run that says why, or ''. #127: a project that would
 # not load ends in a .NET stack trace, and the exception line sits ABOVE the frames. Matched on
@@ -1614,7 +1618,7 @@ function Get-DotnetFolderFormat([string]$ProjAbs, [string[]]$Include) {
     Push-Location $dir
     try { $out = (& dotnet format whitespace @a 2>&1 | Out-String).TrimEnd(); $code = $LASTEXITCODE }
     finally { Pop-Location }
-    $ws = @($out -split "`r?`n" | Where-Object { $_ -match 'error WHITESPACE' })
+    $ws = @($out -split "`r?`n" | Where-Object { $_ -match $DotnetWsFinding })
     if ($code -ne 0 -and -not $ws) { return $null }
     $compile = $null
     if ($ws) {
@@ -1778,7 +1782,7 @@ function Invoke-DotnetStack($s) {
             $fmtSw = [Diagnostics.Stopwatch]::StartNew()
             $fmtOut = (& dotnet format whitespace @fmtArgs 2>&1 | Out-String).TrimEnd()
             $fmtCode = $LASTEXITCODE
-            if ($fmtCode -ne 0 -and $fmtOut -notmatch 'error WHITESPACE') {
+            if ($fmtCode -ne 0 -and $fmtOut -notmatch $DotnetWsFinding) {
                 # #127: the project would not load; whitespace does not need it to.
                 $fmtFolder = Get-DotnetFolderFormat $projAbs $fmtInc
                 if ($fmtFolder) {
@@ -1792,7 +1796,7 @@ function Invoke-DotnetStack($s) {
             $fmtPhaseArgs.Elapsed = $fmtSw.Elapsed.TotalSeconds
             if ($fmtFolder) { $fmtPhaseArgs.Time = "$($fmtSw.Elapsed.TotalSeconds.ToString('0.0', [Globalization.CultureInfo]::InvariantCulture))s, --folder fallback" }
         }
-        if ($fmtCode -ne 0 -and $fmtOut -notmatch 'error WHITESPACE') {
+        if ($fmtCode -ne 0 -and $fmtOut -notmatch $DotnetWsFinding) {
             # dotnet format loads the project through MSBuild before it reads a single
             # character of whitespace, and a workspace it cannot load exits non-zero with
             # no WHITESPACE line at all. Calling that a formatting failure would print
@@ -1811,7 +1815,7 @@ function Invoke-DotnetStack($s) {
                 # the report's global 6000-char truncation then cut to 27 lines and a byte
                 # count. Twenty lines and the real totals say strictly more than a flood
                 # sliced at an arbitrary character, and the fix is one command either way.
-                $ws = @($fmtOut -split "`r?`n" | Where-Object { $_ -match 'error WHITESPACE' })
+                $ws = @($fmtOut -split "`r?`n" | Where-Object { $_ -match $DotnetWsFinding })
                 if ($ws.Count -gt 20) {
                     # The summary goes FIRST, not after the twenty: every WHITESPACE line
                     # carries the .cs path AND the csproj path, so twenty of them can still

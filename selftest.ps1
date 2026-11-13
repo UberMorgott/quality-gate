@@ -1471,6 +1471,16 @@ if ($dnSdks) {
         (($r.Code -ne 0) -and ($r.Out -match 'WHITESPACE') -and ($r.Out -match 'fix: dotnet format whitespace')) $r.Out
     Check 'a whitespace violation is not reported as a compile error' ($r.Out -notmatch 'error CS') $r.Out
 
+    # #210: a missing final newline is FINALNEWLINE, not WHITESPACE -- a format finding, not
+    # a project that failed to load. The load-failure side stays [UNKNOWN] (Legacy.csproj below).
+    [IO.File]::WriteAllText((Join-Path $dn '.editorconfig'), "root = true`n[*.cs]`ninsert_final_newline = true`n")
+    [IO.File]::WriteAllText($dnCs, $dnCsClean.TrimEnd())
+    $r = Invoke-Gate $dn
+    Remove-Item (Join-Path $dn '.editorconfig')
+    Check 'a missing final newline fails as a format finding, not a load failure (#210)' `
+        (($r.Code -ne 0) -and ($r.Out -match 'error FINALNEWLINE') -and ($r.Out -match 'fix: dotnet format whitespace') -and
+            ($r.Out -notmatch 'could not check formatting|could not load')) $r.Out
+
     [IO.File]::WriteAllText($dnCs, $dnCsClean.Replace('return $"Hello, {name}!";', 'int x = "s"; return $"Hello, {name}!{x}";'))
     $r = Invoke-Gate $dn
     Check 'a compile error fails the dotnet gate' (($r.Code -ne 0) -and ($r.Out -match 'error CS0029')) $r.Out
