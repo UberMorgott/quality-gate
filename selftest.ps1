@@ -2436,8 +2436,18 @@ public sealed class Bad
         (($out -match '\[WARN\] harmony: Hud\.UpdateShield .*null-checked') -and
             ($out -match '\[WARN\] harmony: Hud\.UpdateMana .*null-checked') -and
             ((Get-InlineReport $out) -notmatch '(?m)^(?!\[WARN\]).*Hud\.Update(Shield|Mana)')) $out
+    # A soft dependency's TypeByName null, followed through AccessTools.Field / a helper that
+    # null-checks its parameter to the check (#204, #212); never checked, it still fails.
+    Check 'a TypeByName null checked through AccessTools or a null-checking helper is a probe' `
+        (($out -match '\[WARN\] harmony: type SoftDep\.Sets not found .*null-checked') -and
+            ($out -match '\[WARN\] harmony: type SoftDep\.Assistant not found .*null-checked') -and
+            ($out -match '\[WARN\] harmony: type SoftDep\.Stopwatch not found .*null-checked') -and
+            ((Get-InlineReport $out) -notmatch '(?m)^(?!\[WARN\]).*SoftDep\.(Sets|Assistant|Stopwatch)')) $out
+    Check 'a TypeByName null never checked still fails (unchecked AccessTools, plain helper, dereference)' `
+        (@((Get-InlineReport $out) -split "`r?`n" -match '^\s*type SoftDep\.(Unchecked|Used|Deref) not found \(AccessTools\.TypeByName\)' |
+            ForEach-Object Trim | Select-Object -Unique).Count -eq 3) $out
     Check 'lookups that cannot be checked statically are counted' `
-        ($out -match '\[NOTE\] harmony: Mod\.dll -- \d+ target\(s\) checked, 2 not checkable statically') $out
+        ($out -match '\[NOTE\] harmony: Mod\.dll -- \d+ target\(s\) checked, 4 not checkable statically') $out
     Check 'valid Harmony targets stay silent (assignable, interface, generic argumentTypes too)' `
         (($out -notmatch 'HealthPatch|HealthGetterPatch|AssignablePatch|m_health|Lookups\.Valid')) $out
     # -Why names every target that resolved: a new patch is confirmed by name, not by a count.

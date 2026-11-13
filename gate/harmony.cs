@@ -127,7 +127,9 @@ public sealed class QGateHarmony : ISignatureTypeProvider<string, object>, ICust
     // One value on the symbolic IL stack. K: 'T' a type (S = name, Asm = its assembly),
     // 's' a string, 'i' an int, '0' null, 'a' a Type[] (Arr; a null element is not known).
     // Anything else is a null V.
-    sealed class V { public char K; public string S, Asm; public int N; public string[] Arr; }
+    // Pend: the finding of a failed lookup whose null is still on its way to a check (Done once
+    // judged); Sink: the local/field this value was read from.
+    sealed class V { public char K; public string S, Asm; public int N; public string[] Arr; public string Pend, Sink; public bool Done; }
     static V T(string name, string asm = null) => new V { K = 'T', S = name, Asm = asm };
 
     readonly Dictionary<string, (Asm A, TypeDefinitionHandle H)> types = new();
@@ -689,6 +691,24 @@ public sealed class QGateHarmony : ISignatureTypeProvider<string, object>, ICust
         return next == OpCodes.Call && Callee(mod.R, Tok(ins[k + 1].Arg)).Name is "op_Equality" or "op_Inequality";
     }
 
+    // A method of this assembly that null-checks its parameter k: `Method(Type type, ...)
+    // { type == null ? null : ... }` handles the null a failed lookup hands it (#212).
+    bool ParamNullChecked(EntityHandle h, bool instance, int k)
+    {
+        if (h.Kind != HandleKind.MethodDefinition) return false;
+        var md = mod.R.GetMethodDefinition((MethodDefinitionHandle)h);
+        if (md.RelativeVirtualAddress == 0) return false;
+        var ins = Decode(mod.Pe.GetMethodBody(md.RelativeVirtualAddress).GetILReader(), new HashSet<int>());
+        int idx = k + (instance ? 1 : 0);
+        for (int j = 0; ins != null && j < ins.Count; j++)
+        {
+            int v = ins[j].Op.Value;
+            int a = v >= 0x02 && v <= 0x05 ? v - 0x02 : ins[j].Op == OpCodes.Ldarg_S || ins[j].Op == OpCodes.Ldarg ? ins[j].Arg : -1;
+            if (a == idx && NullCheckAt(ins, j + 1)) return true;
+        }
+        return false;
+    }
+
     static string Sink(Ins x, string locKey)
     {
         int l = Loc(x, true);
@@ -759,6 +779,14 @@ public sealed class QGateHarmony : ISignatureTypeProvider<string, object>, ICust
         }
         var locKey = "L" + MetadataTokens.GetRowNumber(mh) + ":";
         var st = new List<V>();
+        // Failed lookups whose null is followed to where it is checked; one never judged fails.
+        var pending = new List<V>();
+        void Judge(V v, bool probe)
+        {
+            if (v?.Pend == null || v.Done) return;
+            v.Done = true;
+            (probe ? probes : fails).Add(v.Pend);
+        }
         V Pop()
         {
             if (st.Count == 0) return null;
@@ -772,6 +800,8 @@ public sealed class QGateHarmony : ISignatureTypeProvider<string, object>, ICust
             var op = x.Op;
             // The stack at a join is not tracked: whatever it held is simply not known.
             if (targets.Contains(x.Off)) st.Clear();
+            // A followed null tested later: Release keeps `var t = TypeByName(..)` on the stack under other lookups.
+            if (st.Count > 0 && st[^1]?.Pend != null && NullCheckAt(ins, i)) Judge(st[^1], true);
             // Where a stored lookup result is read back and null-checked.
             int li = Loc(x, false);
             if (li >= 0 && NullCheckAt(ins, i + 1)) checkedSinks.Add(locKey + li);
@@ -795,6 +825,13 @@ public sealed class QGateHarmony : ISignatureTypeProvider<string, object>, ICust
                 continue;
             }
             if (op == OpCodes.Ldsfld && FieldName(r, Tok(x.Arg)) == "System.Type::EmptyTypes") { st.Add(new V { K = 'a', Arr = Array.Empty<string>() }); continue; }
+            if (li >= 0) { st.Add(new V { Sink = locKey + li }); continue; }
+            if (op == OpCodes.Ldfld || op == OpCodes.Ldsfld)
+            {
+                if (op == OpCodes.Ldfld) Pop();
+                st.Add(new V { Sink = "F" + x.Arg });
+                continue;
+            }
             if (op == OpCodes.Call || op == OpCodes.Callvirt || op == OpCodes.Newobj)
             {
                 var (parent, name, sig, gen) = Callee(r, Tok(x.Arg));
@@ -803,7 +840,27 @@ public sealed class QGateHarmony : ISignatureTypeProvider<string, object>, ICust
                 var a = new V[p.Length];
                 for (int k = p.Length - 1; k >= 0; k--) a[k] = Pop();
                 var self = sig.Value.Header.IsInstance && op != OpCodes.Newobj ? Pop() : null;
+                Judge(self, false); // a member of null: the NullReferenceException itself
+                // AccessTools.Field/Method/Property(null, ...) return null (0Harmony: "type is null"),
+                // so a failed TypeByName handed straight to them is judged by THAT result (#204).
+                // FieldRefAccess throws on a null type.
+                V carry = a.Length > 0 && a[0]?.Pend != null && !a[0].Done && parent == "HarmonyLib.AccessTools"
+                    && p[0] == "System.Type" && Kinds.ContainsKey(name) && !name.EndsWith("FieldRefAccess") ? a[0] : null;
+                for (int k = 0; k < a.Length; k++)
+                {
+                    if (a[k] == null || a[k] == carry || (a[k].Pend == null && a[k].Sink == null)) continue;
+                    bool held = ParamNullChecked(Tok(x.Arg), sig.Value.Header.IsInstance && op != OpCodes.Newobj, k);
+                    if (held && a[k].Sink != null) checkedSinks.Add(a[k].Sink);
+                    Judge(a[k], held);
+                }
                 V ret = null;
+                if (carry != null)
+                {
+                    carry.Done = true;
+                    ret = Fail(carry.Pend, i);
+                    st.Add(ret);
+                    continue;
+                }
                 if (parent == "System.Type" && name == "GetTypeFromHandle") ret = a[0];
                 else if (parent == "System.Type" && name == "MakeByRefType") ret = self; // byref is dropped from every name
                 else if (parent == "System.Type" && name == "MakeArrayType" && p.Length == 0) ret = self?.K == 'T' ? T(self.S + "[]", self.Asm) : null;
@@ -817,9 +874,7 @@ public sealed class QGateHarmony : ISignatureTypeProvider<string, object>, ICust
                     {
                         msg += " " + Where(Name(r, m.GetDeclaringType()), r.GetString(m.Name));
                         if (stripped) refOnly.Add(msg);
-                        else if (NullCheckAt(ins, i + 1)) probes.Add(msg);
-                        else if (i + 1 < ins.Count && Sink(ins[i + 1], locKey) is string sink) stored.Add((msg, sink));
-                        else fails.Add(msg);
+                        else ret = Fail(msg, i);
                     }
                 }
                 if (op == OpCodes.Newobj || sig.Value.ReturnType != "System.Void") st.Add(ret);
@@ -828,6 +883,18 @@ public sealed class QGateHarmony : ISignatureTypeProvider<string, object>, ICust
             if (op.FlowControl is FlowControl.Branch or FlowControl.Return or FlowControl.Throw || op == OpCodes.Calli) { st.Clear(); continue; }
             for (int k = Count(op.StackBehaviourPop); k > 0; k--) Pop();
             for (int k = Count(op.StackBehaviourPush); k > 0; k--) st.Add(null);
+        }
+        foreach (var v in pending) Judge(v, false); // returned, passed on, dropped: not shown to be checked
+
+        // A failed lookup's result at i: null-checked right here, stored (judged where it is
+        // read back), or followed on the stack.
+        V Fail(string msg, int i)
+        {
+            if (NullCheckAt(ins, i + 1)) { probes.Add(msg); return null; }
+            if (i + 1 < ins.Count && Sink(ins[i + 1], locKey) is string sink) { stored.Add((msg, sink)); return null; }
+            var v = new V { Pend = msg };
+            pending.Add(v);
+            return v;
         }
     }
 

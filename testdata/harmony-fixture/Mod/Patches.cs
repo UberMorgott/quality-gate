@@ -1,3 +1,4 @@
+using System;
 using System.Reflection;
 using HarmonyLib;
 
@@ -91,4 +92,26 @@ public static class Lookups
     public static bool HasOldApi() => OldApi != null;
 
     public static object Probe() => AccessTools.Method(typeof(Hud), "UpdateShield") ?? AccessTools.Method(typeof(Hud), "UpdateHealth");
+
+    // A soft dependency's type, its null followed to the check (#204, #212): warnings.
+    public static object ProbeThroughField() => AccessTools.Field(AccessTools.TypeByName("SoftDep.Sets"), "All")?.GetValue(null);
+
+    public static object ProbeThroughHelper() => Find(AccessTools.TypeByName("SoftDep.Assistant"), "Nearby");
+
+    public static object ProbeStoredHelper()
+    {
+        var t = AccessTools.TypeByName("SoftDep.Stopwatch");
+        return Find(t, "Get") ?? Find(t, "Get2");
+    }
+
+    static MethodInfo Find(Type type, string name) => type == null ? null : AccessTools.Method(type, name);
+
+    // The same nulls never checked: failures.
+    public static object DanglingThroughField() => AccessTools.Field(AccessTools.TypeByName("SoftDep.Unchecked"), "All").GetValue(null);
+
+    public static object DanglingThroughHelper() => Use(AccessTools.TypeByName("SoftDep.Used"));
+
+    public static object DanglingDeref() => AccessTools.TypeByName("SoftDep.Deref").GetMethod("Run");
+
+    static object Use(Type type) => type.Name;
 }
