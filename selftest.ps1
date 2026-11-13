@@ -1296,6 +1296,11 @@ if (Get-Command golangci-lint -ErrorAction SilentlyContinue) {
         Check 'a type error in an unlisted sibling of a go.lintReplacements file entry fails the run' `
             (($r.Code -ne 0) -and ($r.Out -match '\[FAIL\] go vet \(go\.lintReplacements files\)') -and ($r.Out -match 'up\.go:\d+:\d+: undefined: undefinedThing')) $r.Out
         Set-GoFile $useDep $useDepText
+        # #206: go's module-download progress on stderr is not a vet finding; a real one still is.
+        $sel = Select-GoVetListed "go: downloading golang.org/x/exp v0.0.0-20231110203233-9a3e6036ecaa`n" $aeg @() @()
+        Check "go vet listed-file filter drops 'go: downloading' progress (#206)" (-not $sel.Kept) ($sel.Kept -join "`n")
+        $sel = Select-GoVetListed "go: downloading golang.org/x/exp v0.0.0-1`ndep.go:3:2: fmt.Printf format %d has arg `"x`" of wrong type string`n" $aeg @() @()
+        Check "go vet listed-file filter keeps a vet finding beside 'go: downloading' (#206)" (@($sel.Kept).Count -eq 1 -and $sel.Kept[0] -match '^dep\.go:3:2: ') ($sel.Kept -join "`n")
         Set-GoFile $upGo "package dep`n`n// Up returns two.`nfunc Up() int { return 2 }`n"
         # A listed file that is generated is owned code all the same (Aegis loc_generated.go):
         # judged, with golangci-lint's generated-file exclusion disabled for that run only --

@@ -1181,12 +1181,14 @@ function Get-GoListedVerdict([string]$Path, [string]$Base, $Files, $PkgDirs) {
 # type error is printed by the vet driver as `vet: `/`vet.exe: ` and is kept whatever file it
 # names: a package that does not type-check leaves the listed file unanalyzed. Every other
 # line but a `# pkg` header is kept too (unknown output is not upstream noise).
+# quality-gate#206: `go: downloading <module> <version>` is the go command's module-fetch
+# progress on stderr, not a diagnostic; a failed download still exits non-zero.
 function Select-GoVetListed([string]$Out, [string]$Base, $Files, $PkgDirs) {
     $kept = [Collections.Generic.List[string]]::new()
     $dropped = 0
     $cur = $null
     foreach ($line in @($Out -split "`r?`n")) {
-        if (-not $line.Trim() -or $line -match '^# ') { $cur = $null; continue }
+        if (-not $line.Trim() -or $line -match '^# ' -or $line -match '^go: downloading \S+ \S+$') { $cur = $null; continue }
         if ($line -match '^vet(?:\.exe)?: ') { $kept.Add($line); $cur = 'keep'; continue }
         if ($line -match '^(?<p>(?:[A-Za-z]:)?[^:\s][^:]*?\.go):\d+(?::\d+)?: ') {
             $cur = Get-GoListedVerdict $Matches.p $Base $Files $PkgDirs
