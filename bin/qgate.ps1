@@ -44,6 +44,8 @@ qgate -- one quality gate for every stack in the repository
   qgate global on       every git repo gets the gate (global core.hooksPath; off, status)
                         unwired repos without qgate.json: advisory; opt out: .qgate-off
   qgate update          git pull in the install directory
+  qgate tools [name]    download the opt-in linters (betterleaks) pinned + SHA-256
+                        checked into <install>\tools\bin; nothing goes on PATH
   qgate selftest        the gate's own red-then-green self-test
   qgate where           install path, commit and the tool versions in use
 
@@ -68,7 +70,7 @@ Exit codes: 0 pass, 1 fail, 2 from `stop-hook` blocks the agent's turn.
 # install.ps1 and selftest.ps1 forward other tools' codes, so they are not listed.
 $knownCodes = @{
     'gate\check.ps1' = 0, 1; 'gate\stop-hook.ps1' = 0, 1, 2; 'gate\hold.ps1' = 0, 1, 64
-    'gate\global.ps1' = 0, 1, 64; 'gate\trust.ps1' = 0, 1; 'gate\outdated.ps1' = 0, 1; 'gate\pre-push.ps1' = 0, 1
+    'gate\global.ps1' = 0, 1, 64; 'gate\trust.ps1' = 0, 1; 'gate\outdated.ps1' = 0, 1; 'gate\pre-push.ps1' = 0, 1; 'gate\tools.ps1' = 0, 1
 }
 function Invoke-Child([string]$script, [object[]]$argv) {
     # -File keeps $LASTEXITCODE meaningful; child scripts own their own output.
@@ -98,6 +100,7 @@ switch ($cmd) {
     'pre-push'  { Invoke-Child 'gate\pre-push.ps1'  $rest }
     'selftest'  { Invoke-Child 'selftest.ps1'       $rest }
     'global'    { Invoke-Child 'gate\global.ps1'    $rest }
+    'tools'     { Invoke-Child 'gate\tools.ps1'     $rest }
     'update' {
         # Same inherited-git-environment trap detect.ps1 clears for every other entry
         # point, and this branch is the one that does not dot-source it. Under a hook's

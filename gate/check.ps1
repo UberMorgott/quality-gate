@@ -830,6 +830,11 @@ function Format-StackOutput([string[]]$Lines, [int]$Max) {
 }
 
 function Have([string]$Exe) { [bool](Get-Command $Exe -ErrorAction SilentlyContinue) }
+# An opt-in linter `qgate tools` put in <install>\tools\bin wins over PATH; $null if neither.
+function Get-ToolPath([string]$Exe) {
+    $own = Join-Path (Split-Path -Parent $PSScriptRoot) "tools\bin\$Exe.exe"
+    if (Test-Path -LiteralPath $own) { $own } else { (Get-Command $Exe -ErrorAction SilentlyContinue | Select-Object -First 1).Source }
+}
 
 # The paths a repository marked as not its own code in .gitattributes: linguist-vendored
 # (a third-party addon committed in-tree) or linguist-generated. One `git check-attr` for the
@@ -3264,11 +3269,28 @@ function Invoke-BaseStack($s) {
     # rules has thought about them harder than the gate has. Both lanes get the same
     # argument: a fast lane and a full lane disagreeing about one file is the divergence
     # the typos phase already had to be taught not to grow.
-    $glCfg = @(if (-not (@('.gitleaks.toml', 'gitleaks.toml') |
-                Where-Object { Test-Path -LiteralPath (Join-Path $Root $_) })) {
-            '-c'; (Join-Path $PSScriptRoot 'qgate.gitleaks.toml') })
-    if (-not (Have 'gitleaks')) {
-        $script:Lines += '[SKIP] secrets -- gitleaks not on PATH (https://github.com/gitleaks/gitleaks)'
+    # Opt-in engine: qgate.json {"secrets": {"engine": "betterleaks"}}. betterleaks v1 is the
+    # gitleaks authors' successor and takes the same flags, config, .gitleaksignore,
+    # fingerprints and exit codes (measured side by side on one fixture); live validation
+    # is off unless --validation is passed, which the gate never does.
+    $secEngine = 'gitleaks'
+    $qj = Join-Path $Root 'qgate.json'
+    if (Test-Path -LiteralPath $qj) {
+        $e = try { (Get-Content -LiteralPath $qj -Raw | ConvertFrom-Json).secrets.engine } catch { $null }
+        if ($e -eq 'betterleaks') { $secEngine = $e }
+        elseif ($e -and $e -ne 'gitleaks') { $script:Warnings += "[WARN] qgate.json secrets.engine '$e' is unknown -- known: gitleaks, betterleaks; gitleaks used" }
+    }
+    $repoGlCfg = @(@(if ($secEngine -eq 'betterleaks') { '.betterleaks.toml' }) + '.gitleaks.toml', 'gitleaks.toml' |
+            ForEach-Object { Join-Path $Root $_ } | Where-Object { Test-Path -LiteralPath $_ })[0]
+    # betterleaks never auto-loads a repo config without --unsafe-auto-load-config, so
+    # it is named explicitly -- the same file gitleaks would have picked up on its own.
+    $glCfg = @(if (-not $repoGlCfg) { '-c'; (Join-Path $PSScriptRoot 'qgate.gitleaks.toml') }
+        elseif ($secEngine -eq 'betterleaks') { '-c'; $repoGlCfg })
+    $glExe = Get-ToolPath $secEngine
+    if ($glExe -and $secEngine -ne 'gitleaks') { $script:Lines += "[NOTE] secrets engine: $secEngine ($glExe)" }
+    if (-not $glExe) {
+        $script:Lines += $(if ($secEngine -eq 'betterleaks') { '[SKIP] secrets -- betterleaks (qgate.json secrets.engine) not installed: run `qgate tools betterleaks`' }
+            else { '[SKIP] secrets -- gitleaks not on PATH (https://github.com/gitleaks/gitleaks)' })
         $script:BaseDeferred = $true
     } elseif ($Full -or $All) {
         # The working tree, untracked files included. NOT `gitleaks git`, which reads
@@ -3316,7 +3338,7 @@ function Invoke-BaseStack($s) {
         # tree was skipped (.tga 2.1 GB, .png 321 MB). Text assets (.asset/.prefab/.json)
         # stay scanned. `--ignored` in its default (traditional) mode names a wholly
         # ignored directory once, with its trailing slash; -z keeps paths unquoted.
-        $base = if ($glCfg) { $glCfg[1] } else { @('.gitleaks.toml', 'gitleaks.toml') | ForEach-Object { Join-Path $Root $_ } | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1 }
+        $base = if ($glCfg) { $glCfg[1] } else { $repoGlCfg }
         $esc = { param($p) $p -replace '([.\\+*?()\[\]{}|^$])', '\$1' }
         $skip = @(@(Get-NestedRepos $Root) | ForEach-Object { "$(& $esc $_)/" })
         $skip += @(((& git -C $Root status --ignored --porcelain -z 2>$null) -join '') -split "`0" |
@@ -3327,7 +3349,7 @@ function Invoke-BaseStack($s) {
         $glTmp = Join-Path ([IO.Path]::GetTempPath()) "qgate-gitleaks-$(Get-PathKey $Root).toml"
         Set-Content -LiteralPath $glTmp -Value "[extend]`npath = '''$base'''`n[[allowlists]]`npaths = [$($paths -join ', ')]"
         $glDirCfg = @('-c', $glTmp)
-        $raw = (& gitleaks dir @glDirCfg --redact --no-banner --no-color -f json -r - . 2>$null | Out-String)
+        $raw = (& $glExe dir @glDirCfg --redact --no-banner --no-color -f json -r - . 2>$null | Out-String)
         $glCode = $LASTEXITCODE
         $sw.Stop()
         $hits = @(if ($glCode -eq 1) { try { $raw | ConvertFrom-Json } catch { $null } })
@@ -3336,7 +3358,7 @@ function Invoke-BaseStack($s) {
         $ignored = Get-GitIgnoredSet $Root @($hits | ForEach-Object { $_.File } | Where-Object { $_ } | Sort-Object -Unique)
         $hits = @($hits | Where-Object { $_.File -and -not $ignored[$_.File] })
         Phase 'secrets' {
-            if ($glCode -gt 1) { "gitleaks exited $glCode -- the scan did not complete"; $global:LASTEXITCODE = 1; return }
+            if ($glCode -gt 1) { "$secEngine exited $glCode -- the scan did not complete"; $global:LASTEXITCODE = 1; return }
             foreach ($h in $hits) { "$($h.File):$($h.StartLine): $($h.RuleID) -- $($h.Fingerprint)" }
             # The finding itself is redacted, so the only thing a reader can act on is
             # the location and, for a false positive, the fingerprint above.
@@ -3348,7 +3370,7 @@ function Invoke-BaseStack($s) {
         # scanned, and gitleaks answers that with exit 0 -- a green line standing for
         # an empty scan is the one thing this report must not print.
         $staged = @(& git -C $Root diff --cached --name-only 2>$null | Where-Object { $_ })
-        if ($staged) { Phase 'secrets' { gitleaks git --staged @glCfg --redact --no-banner --no-color -v $Root } }
+        if ($staged) { Phase 'secrets' { & $glExe git --staged @glCfg --redact --no-banner --no-color -v $Root } }
         else {
             $script:Lines += '[SKIP] secrets -- nothing staged (the full level scans the working tree)'
             $script:BaseDeferred = $true

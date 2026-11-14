@@ -1,4 +1,6 @@
 *.exe
+# `qgate tools` downloads (gate\tools.ps1)
+/tools/
 .cache/
 target/
 node_modules/

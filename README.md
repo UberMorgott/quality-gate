@@ -48,6 +48,7 @@ Run from the repository or pass `-Root <path>`. Stack discovery uses marker file
 | `qgate release` | Alias for `hold off`; accepts the same flags. |
 | `qgate global [on\|off\|status]` | Manage global `core.hooksPath`; default `status`, refuses to replace another global hook directory. |
 | `qgate update` | Fast-forward the installed clone; concurrent updates are serialized. |
+| `qgate tools [name]` | Download the opt-in linters (`betterleaks`) pinned and SHA-256 checked into `<install>\tools\bin` (gitignored); the gate resolves that directory before PATH. No name = all. Windows x64 only. |
 | `qgate where` | Print install path, commit, resolved command, and tool versions or missing-tool status. |
 | `qgate selftest` | Run the gate's failure/pass fixtures; `-Only <sections>`, `-Sequential`, `-Exact`, `-SectionTimeoutSec <seconds>` (1500), `-Throttle <jobs>` (4). |
 | `qgate help` | Show CLI help; aliases `-h`, `-?`, `--help`, `/?`. |
@@ -128,6 +129,7 @@ Place one optional `qgate.json` at the repository root. Tool-specific rules rema
 | `go.fuzzMemLimit` | `GOMEMLIMIT` for fuzz runs (`"2GiB"`); default an inherited `GOMEMLIMIT`, else `2GiB`. |
 | `dotnet` | `sonar: true` enables cached Sonar analyzers; `inspectcode: true` enables JetBrains inspection; `testRunner: "fail"` makes executable test-runner failures blocking. |
 | `powershell.findings` | `"fail"` makes the PowerShell `parse` and `PSScriptAnalyzer` findings blocking; default advisory `[WARN]`. |
+| `secrets.engine` | `"gitleaks"` (default) or `"betterleaks"`: the `secrets` phase runs betterleaks (gitleaks' successor by its authors; same flags, config, `.gitleaksignore` and fingerprints; live validation stays off). A repo `.betterleaks.toml`/`.gitleaks.toml` is passed with `-c`, since betterleaks never auto-loads it. Install with `qgate tools betterleaks`; missing is a `[SKIP]`, an unknown value a `[WARN]`. |
 | `web.buildDrift` | `"fail"` makes the web `build drift` advisory (committed bundle differs from a fresh build) blocking. |
 | `harmony.assemblies` | Additional assembly path/glob array, with `%VAR%` expansion and recursive `**`; findings in these other assemblies are advisory. |
 | `deploy` | Array of `{ "built": "path", "deployed": "path" }` pairs; root-relative or absolute paths with `%VAR%` expansion, compared in full runs without trust. |
@@ -146,7 +148,7 @@ Names below match printed phase/advisory labels; angle-bracket suffixes stand fo
 
 | Printed check | Tier | External tool | What it checks and why |
 | --- | --- | --- | --- |
-| `secrets` | Fast | gitleaks; skip if missing | Detects credentials in staged changes, or the working tree including untracked files with `-All`/`-Full`, to prevent secret exposure. |
+| `secrets` | Fast | gitleaks (or betterleaks via `secrets.engine`); skip if missing | Detects credentials in staged changes, or the working tree including untracked files with `-All`/`-Full`, to prevent secret exposure. |
 | `typos` | Fast | typos; skip if missing | Checks changed files, or the wider tree with `-All`/`-Full`, for spelling mistakes in code and text. |
 | `vuln` | Full | osv-scanner v2+; skip if missing/older | Scans package sources recursively for known dependency vulnerabilities; no package sources is an `[INFO]` (nothing to scan), not a skip. |
 | `orphan projects` | Advisory (`-All`/full) | None | Finds C# projects absent from solution/project references so an omitted build target is visible. |
