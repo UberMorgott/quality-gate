@@ -1,8 +1,8 @@
 {
   "bin/qgate.ps1": {
-    "mtime": 1793221490.3591485,
-    "seen": 1793223317.0155487,
-    "ast_hash": "72cf85a6fe065dae067990066b9caf94",
+    "mtime": 1794616021.349198,
+    "seen": 1794616441.0252004,
+    "ast_hash": "0b98b90996f44e0d6e93e53be98d773a",
     "semantic_hash": ""
   },
   "bootstrap.ps1": {
@@ -12,15 +12,15 @@
     "semantic_hash": ""
   },
   "gate/check.ps1": {
-    "mtime": 1794087683.8243315,
-    "seen": 1794088193.2941434,
-    "ast_hash": "8cd885392ee05f798e819c5b6b9b6e89",
+    "mtime": 1794616021.350202,
+    "seen": 1794616441.025206,
+    "ast_hash": "e8d4b957593ec4d1af7d2eb3ff0b4b25",
     "semantic_hash": ""
   },
   "gate/detect.ps1": {
-    "mtime": 1794087683.8248472,
-    "seen": 1794088193.294145,
-    "ast_hash": "c7438bd687aa31086ebc30c3a827d868",
+    "mtime": 1794616021.3512032,
+    "seen": 1794616441.0252073,
+    "ast_hash": "1d62df2a9dad3a4b557d6a21351da415",
     "semantic_hash": ""
   },
   "gate/outdated.ps1": {
@@ -42,9 +42,9 @@
     "semantic_hash": ""
   },
   "selftest.ps1": {
-    "mtime": 1794087683.8269017,
-    "seen": 1794088193.2941601,
-    "ast_hash": "f1cbb5833f6f2a146d48e1ba24937502",
+    "mtime": 1794614950.8108284,
+    "seen": 1794616441.0252242,
+    "ast_hash": "22fbdf10aa5f1948a9f8f83f8d33d19b",
     "semantic_hash": ""
   },
   "templates/.stylelintrc.json": {
@@ -60,10 +60,10 @@
     "semantic_hash": ""
   },
   "templates/pre-commit": {
-    "mtime": 1788336036.9312005,
-    "seen": 1793178666.4505036,
-    "ast_hash": "d0bf5497084b9138451fe2ce5a51be54",
-    "semantic_hash": "d0bf5497084b9138451fe2ce5a51be54"
+    "mtime": 1794091604.4678955,
+    "seen": 1794616441.0252318,
+    "ast_hash": "bf9464535f89a09afda2b8372f9230bd",
+    "semantic_hash": ""
   },
   "testdata/go-fixture/go.mod": {
     "mtime": 1789822014.6606586,
@@ -126,9 +126,9 @@
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1794087683.8233159,
-    "seen": 1794088193.2941976,
-    "ast_hash": "010c2517abc3b9c1d4efd2260cc32947",
+    "mtime": 1794616021.349198,
+    "seen": 1794616441.0252564,
+    "ast_hash": "1655b991e5edd43cf237ac2c90ff0e3e",
     "semantic_hash": ""
   },
   "templates/.golangci.yml": {
@@ -144,9 +144,9 @@
     "semantic_hash": ""
   },
   "templates/lefthook.yml": {
-    "mtime": 1793221499.6873589,
-    "seen": 1793223317.0155811,
-    "ast_hash": "85622ce1fc2004cc55f57741d8bc491d",
+    "mtime": 1794091604.4678955,
+    "seen": 1794616441.0252314,
+    "ast_hash": "3758406ad665fe18e4eb0e74c57b6c1b",
     "semantic_hash": ""
   },
   "testdata/proto-fixture/buf.yaml": {
@@ -210,9 +210,9 @@
     "semantic_hash": ""
   },
   "gate/harmony.cs": {
-    "mtime": 1794087175.9136372,
-    "seen": 1794088193.2941482,
-    "ast_hash": "71fcb91d5d0eb1db727a9e7e07aee70b",
+    "mtime": 1794613958.6766124,
+    "seen": 1794616441.0252109,
+    "ast_hash": "f2d445815ce29cb88e25010b9a518a59",
     "semantic_hash": ""
   },
   "gate/harmony.ps1": {
@@ -252,9 +252,9 @@
     "semantic_hash": ""
   },
   "testdata/harmony-fixture/Mod/Patches.cs": {
-    "mtime": 1789141084.5230415,
-    "seen": 1793178666.4505262,
-    "ast_hash": "638c9aa157d48b90e2b4547bebc63da9",
+    "mtime": 1794613958.6791303,
+    "seen": 1794616441.0252469,
+    "ast_hash": "0be7cc7da3c7df14b4e5e13820a4c8d8",
     "semantic_hash": ""
   },
   "gate/smoke.ps1": {
@@ -300,9 +300,9 @@
     "semantic_hash": ""
   },
   "gate/global.ps1": {
-    "mtime": 1789655715.4372306,
-    "seen": 1793178666.4504685,
-    "ast_hash": "a79ba6578011bb6a8b07307ad1e94ea6",
+    "mtime": 1794091604.465852,
+    "seen": 1794616441.0252085,
+    "ast_hash": "13db02f13c289bd467eddc3c836d5bf7",
     "semantic_hash": ""
   },
   "hooks/pre-commit": {
@@ -381,6 +381,12 @@
     "mtime": 1794087175.9172194,
     "seen": 1794088193.29418,
     "ast_hash": "107d364e8248c924c446c0ee5bcb1eee",
+    "semantic_hash": ""
+  },
+  "gate/tools.ps1": {
+    "mtime": 1794616021.3512032,
+    "seen": 1794616441.025219,
+    "ast_hash": "ae130ccf71ecf868bdc4b90c12d59fa9",
     "semantic_hash": ""
   }
 }

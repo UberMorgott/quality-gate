@@ -4,7 +4,6 @@
   "6": "QGateHarmony",
   "7": "extends",
   "8": "package.json",
-  "9": "check.ps1",
   "11": "go-determinism_test.go",
   "12": "main.rs",
   "14": "Proto stack phases (buf)",
