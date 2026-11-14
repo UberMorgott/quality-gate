@@ -2446,7 +2446,10 @@ function Invoke-WebStack($s) {
             if ($oxHits) {
                 $script:Warnings += @("[WARN] oxlint: $($oxHits.Count) finding(s) on its defaults (no eslint or .oxlintrc.json) -- advisory; an .oxlintrc.json makes it a failure") +
                     @($oxHits | Select-Object -First 10 | ForEach-Object { "       $_" })
-            } else { Phase 'oxlint' { } }
+            } else {
+                # Advisory: can only WARN, never FAIL, so its PASS line is not a verdict and must not count toward the zero-phase invariant.
+                $n = $script:Phases; Phase 'oxlint' { }; $script:Phases = $n
+            }
         }
     }
     # eslint runs WITHOUT --fix on purpose: the gate must report problems, not
