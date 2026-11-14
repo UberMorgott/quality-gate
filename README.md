@@ -48,7 +48,7 @@ Run from the repository or pass `-Root <path>`. Stack discovery uses marker file
 | `qgate release` | Alias for `hold off`; accepts the same flags. |
 | `qgate global [on\|off\|status]` | Manage global `core.hooksPath`; default `status`, refuses to replace another global hook directory. |
 | `qgate update` | Fast-forward the installed clone; concurrent updates are serialized. |
-| `qgate tools [name]` | Download the opt-in linters (`betterleaks`) pinned and SHA-256 checked into `<install>\tools\bin` (gitignored); the gate resolves that directory before PATH. No name = all. Windows x64 only. |
+| `qgate tools [name]` | Download the opt-in linters (`betterleaks`, `oxlint`) pinned and SHA-256 checked into `<install>\tools\bin` (gitignored); the gate resolves that directory before PATH. No name = all. Windows x64 only. |
 | `qgate where` | Print install path, commit, resolved command, and tool versions or missing-tool status. |
 | `qgate selftest` | Run the gate's failure/pass fixtures; `-Only <sections>`, `-Sequential`, `-Exact`, `-SectionTimeoutSec <seconds>` (1500), `-Throttle <jobs>` (4). |
 | `qgate help` | Show CLI help; aliases `-h`, `-?`, `--help`, `/?`. |
@@ -130,6 +130,7 @@ Place one optional `qgate.json` at the repository root. Tool-specific rules rema
 | `dotnet` | `sonar: true` enables cached Sonar analyzers; `inspectcode: true` enables JetBrains inspection; `testRunner: "fail"` makes executable test-runner failures blocking. |
 | `powershell.findings` | `"fail"` makes the PowerShell `parse` and `PSScriptAnalyzer` findings blocking; default advisory `[WARN]`. |
 | `secrets.engine` | `"gitleaks"` (default) or `"betterleaks"`: the `secrets` phase runs betterleaks (gitleaks' successor by its authors; same flags, config, `.gitleaksignore` and fingerprints; live validation stays off). A repo `.betterleaks.toml`/`.gitleaks.toml` is passed with `-c`, since betterleaks never auto-loads it. Install with `qgate tools betterleaks`; missing is a `[SKIP]`, an unknown value a `[WARN]`. |
+| `web.linter` | `"eslint"` (default) or `"oxlint"`: the web stack runs oxlint (`--deny-warnings`, `node_modules` ignored) instead of eslint. oxlint reads `.oxlintrc.json` or its own defaults, never `eslint.config.*` (port with `npx @oxlint/migrate`). Install with `qgate tools oxlint`; opted in but missing fails the stack, an unknown value is a `[WARN]`. |
 | `web.buildDrift` | `"fail"` makes the web `build drift` advisory (committed bundle differs from a fresh build) blocking. |
 | `harmony.assemblies` | Additional assembly path/glob array, with `%VAR%` expansion and recursive `**`; findings in these other assemblies are advisory. |
 | `deploy` | Array of `{ "built": "path", "deployed": "path" }` pairs; root-relative or absolute paths with `%VAR%` expansion, compared in full runs without trust. |
@@ -248,6 +249,7 @@ Detected by `package.json` plus `vite.config.*`, `next.config.*`, `webpack.confi
 | --- | --- | --- | --- |
 | `stylelint` | Fast | Local Stylelint | Checks Vue/CSS/SCSS when a Stylelint config exists, rejecting warnings to catch stylesheet problems. |
 | `eslint` | Fast | Local ESLint | Checks source when an ESLint config exists, rejecting warnings to catch JavaScript/TypeScript/Vue defects. |
+| `oxlint` | Fast | `qgate tools oxlint` | Replaces `eslint` when `web.linter` is `"oxlint"`; rejects warnings. |
 | `knip` | Advisory (`-All`/full) | Local Knip; skip if missing/unconfigured | Reports unused files, dependencies, and exports to expose dead project code. |
 | `type-check` | Fast | npm script or local vue-tsc/tsc | Runs `type-check`, otherwise checks `tsconfig.json` without emitting; missing compiler with a tsconfig fails. |
 | `build` | Full and default; skipped by `-Fast` alone | npm + project bundler | Runs `build-only` or `build` when declared to catch bundling failures. Concurrent gate runs on one worktree serialize on the build output directory; a run that waits longer than `QGATE_WEB_BUILD_LOCK_SEC` seconds (default 900) skips `build` with a `[SKIP]` naming the held directory. |

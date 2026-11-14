@@ -2418,9 +2418,25 @@ function Invoke-WebStack($s) {
                 --cache --cache-strategy content --cache-location 'node_modules/.cache/stylelintcache'
         }
     }
+    # Opt-in qgate.json {"web": {"linter": "oxlint"}}: oxlint replaces eslint. It reads
+    # .oxlintrc.json (or its defaults), never eslint.config.* -- port that with @oxlint/migrate.
+    $linter = 'eslint'
+    $qj = Join-Path $Root 'qgate.json'
+    if (Test-Path -LiteralPath $qj) {
+        $l = try { (Get-Content -LiteralPath $qj -Raw | ConvertFrom-Json).web.linter } catch { $null }
+        if ($l -eq 'oxlint') { $linter = $l }
+        elseif ($l -and $l -ne 'eslint') { $script:Warnings += "[WARN] qgate.json web.linter '$l' is unknown -- known: eslint, oxlint; eslint used" }
+    }
+    if ($linter -eq 'oxlint') {
+        $ox = Get-ToolPath 'oxlint'
+        # Opted in and absent is an unverifiable stack, not a skip.
+        if (-not $ox) { Fail 'web: oxlint (qgate.json web.linter) not installed, run `qgate tools oxlint`' }
+        # node_modules is ignored by eslint's defaults but not oxlint's (only .gitignore).
+        else { Phase 'oxlint' { & $ox --deny-warnings --ignore-pattern '**/node_modules/**' . } }
+    }
     # eslint runs WITHOUT --fix on purpose: the gate must report problems, not
     # silently rewrite files another session may be editing.
-    if (Test-AnyFile $s.Dir @('eslint.config.*', '.eslintrc*')) {
+    elseif (Test-AnyFile $s.Dir @('eslint.config.*', '.eslintrc*')) {
         Phase 'eslint' {
             & "$bin\eslint.cmd" . --no-color --max-warnings 0 --format stylish `
                 --cache --cache-strategy content --cache-location 'node_modules/.cache/eslintcache'

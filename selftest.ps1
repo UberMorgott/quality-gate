@@ -6639,6 +6639,34 @@ Check 'the lint caches are pointed under node_modules, not a bare .cache dir' `
         (Test-Path (Join-Path $wc 'node_modules\.cache')) -and
         (([regex]::Matches($wcArgs, 'node_modules/\.cache/(es|style)lintcache')).Count -eq 2)) "code=$wcCode $wcArgs $out"
 
+# Opt-in qgate.json web.linter = oxlint: replaces eslint (a stand-in eslint that would fail
+# proves it is not called), passes a clean tree, ignores node_modules, fails a real defect.
+# Needs `qgate tools oxlint` (no download here).
+$oxExe = @((Join-Path $PSScriptRoot 'tools\bin\oxlint.exe'), (Get-Command oxlint -ErrorAction SilentlyContinue).Source |
+        Where-Object { $_ -and (Test-Path -LiteralPath $_) })[0]
+if ($oxExe) {
+    $wo = Join-Path $tmp 'weboxlint'
+    New-Item -ItemType Directory -Path (Join-Path $wo 'node_modules\.bin'), (Join-Path $wo 'node_modules\dep') -Force | Out-Null
+    [IO.File]::WriteAllText((Join-Path $wo 'package.json'), '{"name":"weboxlint","private":true,"type":"module"}')
+    [IO.File]::WriteAllText((Join-Path $wo 'qgate.json'), '{"web": {"linter": "oxlint"}}')
+    Set-Content (Join-Path $wo 'vite.config.js') 'export default {}'
+    Set-Content (Join-Path $wo 'eslint.config.js') 'export default []'
+    Set-Content (Join-Path $wo 'node_modules\.bin\eslint.cmd') "@echo off`r`necho ESLINT-RAN`r`nexit /b 1"
+    Set-Content (Join-Path $wo 'main.js') 'export const ok = 1;'
+    Set-Content (Join-Path $wo 'node_modules\dep\index.js') 'export const bad = (x) => x == NaN;'
+    $out = (& pwsh -NoProfile -File $gate -Root $wo -Only 'web' -Fast 2>&1 | Out-String)
+    $woCode = $LASTEXITCODE
+    Check 'web.linter oxlint: a clean tree passes, eslint is not run, node_modules is not linted' `
+        (($woCode -eq 0) -and ($out -match '(?m)^\[PASS\] oxlint') -and ($out -notmatch 'ESLINT-RAN') -and ($out -notmatch '(?m)^\[\w+\] eslint')) "code=$woCode $out"
+    Set-Content (Join-Path $wo 'bad.js') 'export const isNan = (x) => x == NaN;'
+    $out = (& pwsh -NoProfile -File $gate -Root $wo -Only 'web' -Fast 2>&1 | Out-String)
+    $woCode = $LASTEXITCODE
+    Check 'web.linter oxlint: a real defect fails the oxlint phase' `
+        (($woCode -ne 0) -and ($out -match '(?m)^\[FAIL\] oxlint') -and ($out -match 'bad\.js.*use-isnan') -and ($out -notmatch 'node_modules')) "code=$woCode $out"
+} else {
+    Write-Output '[skip] oxlint not installed (qgate tools oxlint) -- web.linter cannot be judged here'
+}
+
 # #97: knip, the JS half of dead-code analysis. Advisory, and only for a package that
 # installed AND configured it -- knip on its own guesses is noise, not findings. A stand-in
 # prints the compact reporter's headers; without a config the same binary is never called.

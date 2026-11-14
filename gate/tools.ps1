@@ -10,6 +10,9 @@ $pins = [ordered]@{
     # https://github.com/betterleaks/betterleaks/releases/tag/v1.10.1 (checksums.txt)
     betterleaks = @{ Url = 'https://github.com/betterleaks/betterleaks/releases/download/v1.10.1/betterleaks_1.10.1_windows_x64.zip'
         Sha256 = '53d4b37635a999992fb8e1d79f8215279315cbb3b4139314289b69407e79143d'; Exe = 'betterleaks.exe' }
+    # https://github.com/oxc-project/oxc/releases/tag/oxlint_v1.93.0 (GitHub asset digest)
+    oxlint = @{ Url = 'https://github.com/oxc-project/oxc/releases/download/oxlint_v1.93.0/oxlint-x86_64-pc-windows-msvc.zip'
+        Sha256 = '075ce1f3baae778da2a37a0bae8c31040f31f9ca3e1b89c60775f82f09661724'; Exe = 'oxlint-x86_64-pc-windows-msvc.exe' }
 }
 
 $Name = @($Name -split ',' | ForEach-Object Trim | Where-Object { $_ })
