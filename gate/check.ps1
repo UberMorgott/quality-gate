@@ -1103,7 +1103,7 @@ function Invoke-GoStackOnce($s) {
     $modGo = if ((Get-Content (Join-Path $s.Dir 'go.mod') -Raw) -match '(?m)^go\s+(\d+\.\d+)') { $Matches[1] }
     if (Have 'golangci-lint') {
         $stale = Test-GoToolStale 'golangci-lint' $modGo `
-            'go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest'
+            'qgate update; qgate tools golangci-lint'
         if ($stale) { Fail $stale }
         # No issue caps: a capped report lies about the totals, so fixing the
         # listed issues just makes new ones appear.
@@ -1160,13 +1160,13 @@ function Invoke-GoStackOnce($s) {
     } elseif ($Full -and -not $aePass) {
         # The full level is what guards a commit and CI. A gate that quietly drops
         # its main linter there is not a gate. (An aegis pass already read its config.)
-        Fail 'golangci-lint not on PATH -- required at the full level (go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest)'
+        Fail 'golangci-lint not on PATH -- required at the full level (qgate tools golangci-lint)'
     } elseif (-not $aePass) {
         $script:Lines += '[WARN] golangci-lint not on PATH -- phase skipped'
     } elseif ($repPkgs -or $repFilePkgs) {
         # #159: an aegis pass does not judge the declared replacements with golangci config;
         # without golangci-lint that declared scope would go unlinted.
-        $m = 'golangci-lint not on PATH -- qgate.json go.lintReplacements needs it (go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest)'
+        $m = 'golangci-lint not on PATH -- qgate.json go.lintReplacements needs it (qgate tools golangci-lint)'
         if ($Full) { Fail $m } else { $script:Lines += "[WARN] $m" }
     }
     # Report-level, not a stack line: -Quiet drops a green stack's lines, findings included.
@@ -1354,7 +1354,7 @@ function Invoke-GoStackOnce($s) {
     if ($Full) {
         if (Have 'govulncheck') {
             $stale = Test-GoToolStale 'govulncheck' $modGo `
-                'go install golang.org/x/vuln/cmd/govulncheck@latest'
+                'qgate update; qgate tools govulncheck'
             # Fail, not Phase: a stale binary here reports "package requires newer Go
             # version" once per package of the user's own code. Phase would print all
             # of it under a heading that says nothing.
@@ -1377,7 +1377,7 @@ function Invoke-GoStackOnce($s) {
                 }
             }
         }
-        else { $script:Lines += '[WARN] govulncheck not on PATH -- phase skipped (go install golang.org/x/vuln/cmd/govulncheck@latest)' }
+        else { $script:Lines += '[WARN] govulncheck not on PATH -- phase skipped (qgate tools govulncheck)' }
     }
 }
 
