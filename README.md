@@ -129,7 +129,7 @@ Place one optional `qgate.json` at the repository root. Tool-specific rules rema
 | `go.fuzzMemLimit` | `GOMEMLIMIT` for fuzz runs (`"2GiB"`); default an inherited `GOMEMLIMIT`, else `2GiB`. |
 | `dotnet` | `sonar: true` enables cached Sonar analyzers; `inspectcode: true` enables JetBrains inspection; `testRunner: "fail"` makes executable test-runner failures blocking. |
 | `powershell.findings` | `"fail"` makes the PowerShell `parse` and `PSScriptAnalyzer` findings blocking; default advisory `[WARN]`. |
-| `secrets.engine` | `"gitleaks"` (default) or `"betterleaks"`: the `secrets` phase runs betterleaks (gitleaks' successor by its authors; same flags, config, `.gitleaksignore` and fingerprints; live validation stays off). A repo `.betterleaks.toml`/`.gitleaks.toml` is passed with `-c`, since betterleaks never auto-loads it. Install with `qgate tools betterleaks`; missing is a `[SKIP]`, an unknown value a `[WARN]`. |
+| `secrets.engine` | `"betterleaks"` (default) or `"gitleaks"` (opt-out). betterleaks is gitleaks' successor by its authors: same flags, config, `.gitleaksignore` and fingerprints; live validation stays off. A repo `.betterleaks.toml`/`.gitleaks.toml` is passed with `-c`, since betterleaks never auto-loads it. Its two extra rules `generic-password` and `generic-credential-uri` (98 of 98 findings false across 12 consumer repos) stay off unless the repo ships a `.betterleaks.toml`. betterleaks missing falls back to gitleaks; both missing is a `[SKIP]`, an unknown value a `[WARN]`. Install with `qgate tools`. |
 | `web.linter` | `"eslint"` (default) or `"oxlint"`: the web stack runs oxlint (`--deny-warnings`, `node_modules` ignored) instead of eslint. oxlint reads `.oxlintrc.json` or its own defaults, never `eslint.config.*` (port with `npx @oxlint/migrate`). Install with `qgate tools oxlint`; opted in but missing fails the stack, an unknown value is a `[WARN]`. |
 | `web.buildDrift` | `"fail"` makes the web `build drift` advisory (committed bundle differs from a fresh build) blocking. |
 | `harmony.assemblies` | Additional assembly path/glob array, with `%VAR%` expansion and recursive `**`; findings in these other assemblies are advisory. |
@@ -149,7 +149,7 @@ Names below match printed phase/advisory labels; angle-bracket suffixes stand fo
 
 | Printed check | Tier | External tool | What it checks and why |
 | --- | --- | --- | --- |
-| `secrets` | Fast | gitleaks (or betterleaks via `secrets.engine`); skip if missing | Detects credentials in staged changes, or the working tree including untracked files with `-All`/`-Full`, to prevent secret exposure. |
+| `secrets` | Fast | betterleaks (gitleaks if absent or via `secrets.engine`); skip if both missing | Detects credentials in staged changes, or the working tree including untracked files with `-All`/`-Full`, to prevent secret exposure. |
 | `typos` | Fast | typos; skip if missing | Checks changed files, or the wider tree with `-All`/`-Full`, for spelling mistakes in code and text. |
 | `vuln` | Full | osv-scanner v2+; skip if missing/older | Scans package sources recursively for known dependency vulnerabilities; no package sources is an `[INFO]` (nothing to scan), not a skip. |
 | `orphan projects` | Advisory (`-All`/full) | None | Finds C# projects absent from solution/project references so an omitted build target is visible. |

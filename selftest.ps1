@@ -5732,7 +5732,7 @@ $priorPath = $env:PATH
 $sep = [IO.Path]::PathSeparator
 $env:PATH = @($priorPath -split $sep | Where-Object {
         $d = $_
-        $d -and -not (@('gitleaks', 'typos', 'osv-scanner') | Where-Object {
+        $d -and -not (@('betterleaks', 'gitleaks', 'typos', 'osv-scanner') | Where-Object {
                 (Test-Path -LiteralPath (Join-Path $d "$_.exe") -ErrorAction SilentlyContinue) -or
                 (Test-Path -LiteralPath (Join-Path $d $_) -ErrorAction SilentlyContinue) })
     }) -join $sep
@@ -5740,7 +5740,7 @@ try {
     $out = (& pwsh -NoProfile -File $gate -Root $baseRepo -Only base -Full 2>&1 | Out-String)
     $noToolCode = $LASTEXITCODE
     Check 'a missing gitleaks is named, not silently passed' `
-        ($out -match '\[SKIP\] secrets -- gitleaks not on PATH') $out
+        ($out -match '\[SKIP\] secrets -- neither betterleaks nor gitleaks installed') $out
     Check 'a missing typos is named, not silently passed' `
         ($out -match '\[SKIP\] typos -- typos not on PATH') $out
     Check 'a missing osv-scanner is named, not silently passed' `
@@ -6540,22 +6540,29 @@ if (Get-Command gitleaks -ErrorAction SilentlyContinue) {
     Write-Output '[skip] gitleaks not on PATH -- the secrets filter cannot be judged here'
 }
 
-# Opt-in qgate.json secrets.engine = betterleaks. Both lanes catch a planted token, a clean
-# tree passes, and a repo .gitleaks.toml still applies -- betterleaks never auto-loads it,
-# so the gate must name it. Needs `qgate tools betterleaks` (no download here).
+# Default engine betterleaks. Both lanes catch a planted token, a clean tree passes, its two
+# extra rules (98/98 false on consumer repos) stay off unless the repo ships a
+# .betterleaks.toml, a repo .gitleaks.toml still applies -- betterleaks never auto-loads it,
+# so the gate must name it -- and secrets.engine gitleaks opts out. Needs `qgate tools
+# betterleaks` (no download here).
 $blExe = @((Join-Path $PSScriptRoot 'tools\bin\betterleaks.exe'), (Get-Command betterleaks -ErrorAction SilentlyContinue).Source |
         Where-Object { $_ -and (Test-Path -LiteralPath $_) })[0]
 if ($blExe) {
     $bl = Join-Path $tmp 'secrets-betterleaks'
     New-Item -ItemType Directory -Path $bl -Force | Out-Null
     git -C $bl init -q 2>$null
-    [IO.File]::WriteAllText((Join-Path $bl 'qgate.json'), '{"secrets": {"engine": "betterleaks"}}')
     [IO.File]::WriteAllText((Join-Path $bl 'readme.md'), "nothing secret`n")
+    [IO.File]::WriteAllText((Join-Path $bl 'db.env'), "DB_PASSWORD=Xk9vQ2mLp7Rt`n")
     git -C $bl add -A 2>$null
     $outFast = (& pwsh -NoProfile -File $gate -Root $bl -Only base 2>&1 | Out-String); $fastCode = $LASTEXITCODE
     $outFull = (& pwsh -NoProfile -File $gate -Root $bl -Only base -Full 2>&1 | Out-String); $fullCode = $LASTEXITCODE
-    Check 'betterleaks engine: a clean tree passes secrets on both lanes' `
+    Check 'betterleaks default: a clean tree (generic-password off) passes secrets on both lanes' `
         (($fastCode -eq 0) -and ($fullCode -eq 0) -and ($outFast -match '\[PASS\] secrets') -and ($outFull -match '\[PASS\] secrets')) "fast=$fastCode $outFast full=$fullCode $outFull"
+    [IO.File]::WriteAllText((Join-Path $bl '.betterleaks.toml'), "[extend]`nuseDefault = true`n")
+    $outFull = (& pwsh -NoProfile -File $gate -Root $bl -Only base -Full 2>&1 | Out-String); $fullCode = $LASTEXITCODE
+    Check 'betterleaks default: a repo .betterleaks.toml keeps generic-password on' `
+        (($fullCode -ne 0) -and ($outFull -match 'db\.env:1: generic-password')) "full=$fullCode $outFull"
+    Remove-Item -LiteralPath (Join-Path $bl '.betterleaks.toml')
     $pat = 'ghp_' + 'S8kQ2mVx7bTnR4wLzYe1CdHu6JaGpF0iNoBq'
     [IO.File]::WriteAllText((Join-Path $bl 'app.env'), "GITHUB_TOKEN=$pat`n")
     git -C $bl add app.env 2>$null
@@ -6569,6 +6576,13 @@ if ($blExe) {
     $outFast = (& pwsh -NoProfile -File $gate -Root $bl -Only base 2>&1 | Out-String); $fastCode = $LASTEXITCODE
     Check 'betterleaks engine: the repo .gitleaks.toml is applied, not silently replaced' `
         (($fastCode -eq 0) -and ($outFast -match '\[PASS\] secrets')) "fast=$fastCode $outFast"
+    Remove-Item -LiteralPath (Join-Path $bl '.gitleaks.toml')
+    if ((Test-Path (Join-Path $PSScriptRoot 'tools\bin\gitleaks.exe')) -or (Get-Command gitleaks -ErrorAction SilentlyContinue)) {
+    [IO.File]::WriteAllText((Join-Path $bl 'qgate.json'), '{"secrets": {"engine": "gitleaks"}}')
+    $outFull = (& pwsh -NoProfile -File $gate -Root $bl -Only base -Full 2>&1 | Out-String); $fullCode = $LASTEXITCODE
+    Check 'secrets.engine gitleaks opts out of betterleaks and still fails a planted token' `
+        (($fullCode -ne 0) -and ($outFull -match '\[NOTE\] secrets engine: gitleaks') -and ($outFull -match 'app\.env:1: github-pat')) "full=$fullCode $outFull"
+    }
 } else {
     Write-Output '[skip] betterleaks not installed (qgate tools betterleaks) -- secrets.engine cannot be judged here'
 }
