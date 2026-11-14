@@ -2415,21 +2415,39 @@ function Invoke-WebStack($s) {
                 --cache --cache-strategy content --cache-location 'node_modules/.cache/stylelintcache'
         }
     }
-    # Opt-in qgate.json {"web": {"linter": "oxlint"}}: oxlint replaces eslint. It reads
-    # .oxlintrc.json (or its defaults), never eslint.config.* -- port that with @oxlint/migrate.
-    $linter = 'eslint'
+    # Linter: a package that configured ESLint keeps eslint -- oxlint reads .oxlintrc.json (or
+    # its defaults), never eslint.config.*, so a swap would drop typescript-eslint/react/custom
+    # rules. .oxlintrc.json -> oxlint. Neither -> oxlint on its defaults as an advisory [WARN]:
+    # calibrated on 4 consumer web stacks, its defaults found 13 source hits, all style
+    # (unicorn no-useless-spread & co), none a defect. qgate.json web.linter overrides both ways.
+    $eslintCfg = (Test-AnyFile $s.Dir @('eslint.config.*', '.eslintrc*')) -or $pkg.eslintConfig -or
+        $pkg.dependencies.eslint -or $pkg.devDependencies.eslint
+    $linter = if ($eslintCfg) { 'eslint' } elseif (Test-AnyFile $s.Dir @('.oxlintrc.json')) { 'oxlint' } else { 'oxlint-advisory' }
     $qj = Join-Path $Root 'qgate.json'
     if (Test-Path -LiteralPath $qj) {
         $l = try { (Get-Content -LiteralPath $qj -Raw | ConvertFrom-Json).web.linter } catch { $null }
-        if ($l -eq 'oxlint') { $linter = $l }
-        elseif ($l -and $l -ne 'eslint') { $script:Warnings += "[WARN] qgate.json web.linter '$l' is unknown -- known: eslint, oxlint; eslint used" }
+        if ($l -in 'eslint', 'oxlint') { $linter = $l }
+        elseif ($l) { $script:Warnings += "[WARN] qgate.json web.linter '$l' is unknown -- known: eslint, oxlint; default used" }
     }
+    # node_modules is ignored by eslint's defaults but not oxlint's (only .gitignore); a
+    # committed bundle is build output, not source (measured: 3400 hits in two dist/ trees).
+    $oxIgnore = @('--ignore-pattern', '**/node_modules/**', '--ignore-pattern',
+        "$([IO.Path]::GetRelativePath($s.Dir, (Get-WebOutDir $s)) -replace '\\', '/')/**")
     if ($linter -eq 'oxlint') {
         $ox = Get-ToolPath 'oxlint'
-        # Opted in and absent is an unverifiable stack, not a skip.
-        if (-not $ox) { Fail 'web: oxlint (qgate.json web.linter) not installed, run `qgate tools oxlint`' }
-        # node_modules is ignored by eslint's defaults but not oxlint's (only .gitignore).
-        else { Phase 'oxlint' { & $ox --deny-warnings --ignore-pattern '**/node_modules/**' . } }
+        # Configured and absent is an unverifiable stack, not a skip.
+        if (-not $ox) { Fail 'web: oxlint (.oxlintrc.json or qgate.json web.linter) not installed, run `qgate tools oxlint`' }
+        else { Phase 'oxlint' { & $ox --deny-warnings @oxIgnore . } }
+    } elseif ($linter -eq 'oxlint-advisory') {
+        # Absent: nothing ran here before this default either, so no new skip line.
+        $ox = Get-ToolPath 'oxlint'
+        if ($ox) {
+            $oxHits = @(& $ox --format unix @oxIgnore . 2>&1 | Where-Object { "$_" -match ':\d+:\d+: ' })
+            if ($oxHits) {
+                $script:Warnings += @("[WARN] oxlint: $($oxHits.Count) finding(s) on its defaults (no eslint or .oxlintrc.json) -- advisory; an .oxlintrc.json makes it a failure") +
+                    @($oxHits | Select-Object -First 10 | ForEach-Object { "       $_" })
+            } else { Phase 'oxlint' { } }
+        }
     }
     # eslint runs WITHOUT --fix on purpose: the gate must report problems, not
     # silently rewrite files another session may be editing.

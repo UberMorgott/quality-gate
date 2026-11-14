@@ -6677,6 +6677,39 @@ if ($oxExe) {
     $woCode = $LASTEXITCODE
     Check 'web.linter oxlint: a real defect fails the oxlint phase' `
         (($woCode -ne 0) -and ($out -match '(?m)^\[FAIL\] oxlint') -and ($out -match 'bad\.js.*use-isnan') -and ($out -notmatch 'node_modules')) "code=$woCode $out"
+
+    # Default linter choice: configured eslint stays eslint; neither config -> oxlint advisory;
+    # .oxlintrc.json -> oxlint fails; web.linter eslint opts out.
+    $wd = Join-Path $tmp 'weboxdefault'
+    New-Item -ItemType Directory -Path (Join-Path $wd 'node_modules\.bin'), (Join-Path $wd 'dist') -Force | Out-Null
+    [IO.File]::WriteAllText((Join-Path $wd 'package.json'), '{"name":"weboxdefault","private":true,"type":"module"}')
+    Set-Content (Join-Path $wd 'vite.config.js') 'export default {}'
+    # A stand-in tsc gives the stack one phase besides the linter, so 'nothing verified' never decides.
+    Set-Content (Join-Path $wd 'tsconfig.json') '{}'
+    Set-Content (Join-Path $wd 'node_modules\.bin\tsc.cmd') "@echo off`r`nexit /b 0"
+    Set-Content (Join-Path $wd 'node_modules\.bin\eslint.cmd') "@echo off`r`necho ESLINT-RAN`r`nexit /b 0"
+    Set-Content (Join-Path $wd 'main.js') 'export const ok = 1;'
+    Set-Content (Join-Path $wd 'dist\bundle.js') 'export const b = (x) => x == NaN;'
+    $out = (& pwsh -NoProfile -File $gate -Root $wd -Only 'web' -Fast 2>&1 | Out-String); $wdCode = $LASTEXITCODE
+    Check 'oxlint default: a web stack with no linter config passes clean, the build output is not linted' `
+        (($wdCode -eq 0) -and ($out -match '(?m)^\[PASS\] oxlint') -and ($out -notmatch 'ESLINT-RAN')) "code=$wdCode $out"
+    Set-Content (Join-Path $wd 'bad.js') 'export const isNan = (x) => x == NaN;'
+    $out = (& pwsh -NoProfile -File $gate -Root $wd -Only 'web' -Fast 2>&1 | Out-String); $wdCode = $LASTEXITCODE
+    Check 'oxlint default: a finding with no linter config is an advisory [WARN], not a failure' `
+        (($wdCode -eq 0) -and ($out -match '\[WARN\] oxlint: 1 finding') -and ($out -match 'bad\.js:1:.*use-isnan') -and ($out -notmatch 'bundle\.js')) "code=$wdCode $out"
+    Set-Content (Join-Path $wd '.oxlintrc.json') '{}'
+    $out = (& pwsh -NoProfile -File $gate -Root $wd -Only 'web' -Fast 2>&1 | Out-String); $wdCode = $LASTEXITCODE
+    Check 'oxlint default: a repo .oxlintrc.json makes the finding a failure' `
+        (($wdCode -ne 0) -and ($out -match '(?m)^\[FAIL\] oxlint') -and ($out -match 'bad\.js.*use-isnan')) "code=$wdCode $out"
+    Remove-Item -LiteralPath (Join-Path $wd '.oxlintrc.json')
+    [IO.File]::WriteAllText((Join-Path $wd 'qgate.json'), '{"web": {"linter": "eslint"}}')
+    $out = (& pwsh -NoProfile -File $gate -Root $wd -Only 'web' -Fast 2>&1 | Out-String); $wdCode = $LASTEXITCODE
+    Check 'oxlint default: web.linter eslint opts out' (($wdCode -eq 0) -and ($out -notmatch 'oxlint')) "code=$wdCode $out"
+    Remove-Item -LiteralPath (Join-Path $wd 'qgate.json')
+    Set-Content (Join-Path $wd 'eslint.config.js') 'export default []'
+    $out = (& pwsh -NoProfile -File $gate -Root $wd -Only 'web' -Fast 2>&1 | Out-String); $wdCode = $LASTEXITCODE
+    Check 'oxlint default: a configured eslint still runs eslint, not oxlint' `
+        (($wdCode -eq 0) -and ($out -match '(?m)^\[PASS\] eslint') -and ($out -notmatch 'oxlint')) "code=$wdCode $out"
 } else {
     Write-Output '[skip] oxlint not installed (qgate tools oxlint) -- web.linter cannot be judged here'
 }
