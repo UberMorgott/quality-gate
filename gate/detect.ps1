@@ -23,6 +23,15 @@
 $env:GIT_DIR = $null
 $env:GIT_WORK_TREE = $null
 
+# The linters `qgate tools` pinned into <install>\tools\bin win over PATH, for this process
+# only. Once per process tree: a child gate inherits the PATH its caller shaped, so a
+# selftest shim before it, or a tool stripped from it, stays that way.
+$script:ToolsBin = Join-Path (Split-Path -Parent $PSScriptRoot) 'tools\bin'
+if (-not $env:QGATE_TOOLS_BIN_ON_PATH -and (Test-Path -LiteralPath $script:ToolsBin)) {
+    $env:PATH = "$script:ToolsBin$([IO.Path]::PathSeparator)$env:PATH"
+    $env:QGATE_TOOLS_BIN_ON_PATH = '1'
+}
+
 # Every stack this gate knows about and the file that proves it exists.
 # Used for provenance output: `check.ps1 -Why` names the marker behind every
 # phase that ran and every stack that does not exist here.

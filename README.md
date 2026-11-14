@@ -48,8 +48,8 @@ Run from the repository or pass `-Root <path>`. Stack discovery uses marker file
 | `qgate release` | Alias for `hold off`; accepts the same flags. |
 | `qgate global [on\|off\|status]` | Manage global `core.hooksPath`; default `status`, refuses to replace another global hook directory. |
 | `qgate update` | Fast-forward the installed clone; concurrent updates are serialized. |
-| `qgate tools [name]` | Download the opt-in linters (`betterleaks`, `oxlint`) pinned and SHA-256 checked into `<install>\tools\bin` (gitignored); the gate resolves that directory before PATH. No name = all. Windows x64 only. |
-| `qgate where` | Print install path, commit, resolved command, and tool versions or missing-tool status. |
+| `qgate tools [name]` | Download the gate's external linters pinned and SHA-256 checked (from each release's checksums file) into `<install>\tools\bin` (gitignored): `betterleaks` 1.10.1, `oxlint` 1.93.0, `typos` 1.52.2, `osv-scanner` 2.7.1, `gitleaks` 8.30.1, `golangci-lint` 2.15.0, `lefthook` 2.2.2, `buf` 1.75.0; `govulncheck` 1.9.0 is built with `go install` (needs Go on PATH, else skipped). The gate puts that directory before PATH for its own process only; nothing touches the system PATH. No name = all. Windows x64 only. Toolchains (`go`, `dotnet`, `cargo`, `node`) and `cppcheck`, `clang-format`, `gdtoolkit` stay on PATH. |
+| `qgate where` | Print install path, commit, resolved command, and tool versions or missing-tool status; each found tool is marked `(tools\bin)` or `(PATH)`. |
 | `qgate selftest` | Run the gate's failure/pass fixtures; `-Only <sections>`, `-Sequential`, `-Exact`, `-SectionTimeoutSec <seconds>` (1500), `-Throttle <jobs>` (4). |
 | `qgate help` | Show CLI help; aliases `-h`, `-?`, `--help`, `/?`. |
 

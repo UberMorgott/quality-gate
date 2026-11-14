@@ -44,8 +44,8 @@ qgate -- one quality gate for every stack in the repository
   qgate global on       every git repo gets the gate (global core.hooksPath; off, status)
                         unwired repos without qgate.json: advisory; opt out: .qgate-off
   qgate update          git pull in the install directory
-  qgate tools [name]    download the opt-in linters (betterleaks, oxlint) pinned + SHA-256
-                        checked into <install>\tools\bin; nothing goes on PATH
+  qgate tools [name]    download the external linters pinned + SHA-256 checked into
+                        <install>\tools\bin (no name = all); nothing goes on PATH
   qgate selftest        the gate's own red-then-green self-test
   qgate where           install path, commit and the tool versions in use
 
@@ -188,7 +188,8 @@ switch ($cmd) {
                 'gdlint' { (& gdlint --version) }
                 default { $t }
             }
-            Write-Output "  $(($v | Select-Object -First 1))"
+            # detect.ps1 put tools\bin first, so a pinned copy is the one shown.
+            Write-Output "  $(($v | Select-Object -First 1))  ($(if ((Split-Path -Parent $exe.Source) -eq $script:ToolsBin) { 'tools\bin' } else { 'PATH' }))"
         }
         $godot = Get-GodotBin
         if ($godot) {

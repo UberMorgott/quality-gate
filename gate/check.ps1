@@ -830,11 +830,8 @@ function Format-StackOutput([string[]]$Lines, [int]$Max) {
 }
 
 function Have([string]$Exe) { [bool](Get-Command $Exe -ErrorAction SilentlyContinue) }
-# An opt-in linter `qgate tools` put in <install>\tools\bin wins over PATH; $null if neither.
-function Get-ToolPath([string]$Exe) {
-    $own = Join-Path (Split-Path -Parent $PSScriptRoot) "tools\bin\$Exe.exe"
-    if (Test-Path -LiteralPath $own) { $own } else { (Get-Command $Exe -ErrorAction SilentlyContinue | Select-Object -First 1).Source }
-}
+# A linter `qgate tools` put in <install>\tools\bin wins over PATH (detect.ps1 put it first); $null if neither.
+function Get-ToolPath([string]$Exe) { (Get-Command $Exe -ErrorAction SilentlyContinue | Select-Object -First 1).Source }
 
 # The paths a repository marked as not its own code in .gitattributes: linguist-vendored
 # (a third-party addon committed in-tree) or linguist-generated. One `git check-attr` for the
