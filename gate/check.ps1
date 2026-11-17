@@ -1968,6 +1968,15 @@ function Invoke-DotnetStack($s) {
             else { $script:Lines += "[SKIP] $($oi[0]) ($($oi[2])) -- not in the local NuGet cache; the gate does not download it (restore it once in any project)" }
         }
     }
+    # #231: the build runs in place, so an after-build target can rewrite TRACKED files
+    # (Jotunn copies JotunnBuildTask.dll into its committed libraries/) -- even when the
+    # phase then reports [SKIP] for missing references (#99 builds first). A gate run must
+    # leave the tree as it found it, so a tracked file that was clean before the build and
+    # is modified after it fails the run, naming it. Nothing is restored: Codex/#231 -- the
+    # writer may be a parallel session, and a checkout would destroy its edit.
+    # shortcut: a file already modified before the build is not re-checked (would need content snapshots).
+    $treeBefore = @(& git -C $Root diff --name-only 2>$null)
+    $treeKnown = $LASTEXITCODE -eq 0
     Phase 'build' {
         $o = (& dotnet build @buildArgs @anaArgs 2>&1 | Out-String).Trim()
         # Injecting PackageReferences forces a restore, and a restore has its own ways to
@@ -2055,6 +2064,13 @@ function Invoke-DotnetStack($s) {
             # Capped like the InspectCode findings below; the count above is the total.
             $script:Lines += @($diags | Where-Object { -not $_.Linked -and $_.Code -match $anaRx } | Select-Object -First 10 |
                     ForEach-Object { "[WARN] analyzer: $($_.Where)$($_.Code) $($_.Message)" })
+        }
+    }
+    if ($treeKnown) {
+        $wrote = @(& git -C $Root diff --name-only 2>$null | Where-Object { $_ -and $treeBefore -notcontains $_ })
+        if ($wrote) {
+            Fail "$proj -- the build modified $($wrote.Count) tracked file(s): $($wrote -join ', ') (#231)"
+            $script:Lines += '       An after-build step writes into the repository (or another process edited them meanwhile). Make the step opt-in, e.g. a Condition on a property set through qgate.json "env", then `git checkout --` those files.'
         }
     }
     # The build could not resolve the references after all: nothing below can say more

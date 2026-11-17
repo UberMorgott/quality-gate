@@ -2733,6 +2733,30 @@ exit /b %errorlevel%
     $out = (& pwsh -NoProfile -File $gate -Root $sd -All -Only dotnet 2>&1 | Out-String)
     Check 'a solution-listed project importing $(SolutionDir) evaluates standalone (#230)' `
         (($out -match '\[PASS\] refs') -and ($out -notmatch 'MSB4019')) $out
+
+    # #231: an after-build target rewriting a tracked file (Jotunn's libraries/JotunnBuildTask.dll)
+    # fails the run, naming the file; opted out through qgate.json "env", the tree stays clean.
+    $ab = Join-Path $tmp 'afterbuild'
+    New-Item -ItemType Directory -Path (Join-Path $ab 'app'), (Join-Path $ab 'lib') -Force | Out-Null
+    [IO.File]::WriteAllText((Join-Path $ab 'lib\stamp.txt'), "committed`n")
+    [IO.File]::WriteAllText((Join-Path $ab 'app\App.csproj'), "<Project Sdk=`"Microsoft.NET.Sdk`">`n  <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>`n  <Target Name=`"Stamp`" AfterTargets=`"Build`" Condition=`"'`$(NoStamp)' != 'true'`">`n    <WriteLinesToFile File=`"`$(MSBuildProjectDirectory)\..\lib\stamp.txt`" Lines=`"built`" Overwrite=`"true`" />`n  </Target>`n</Project>`n")
+    [IO.File]::WriteAllText((Join-Path $ab 'app\A.cs'), "namespace App;`n`npublic static class A`n{`n    public static int X() => 1;`n}`n")
+    [IO.File]::WriteAllText((Join-Path $ab '.gitignore'), "bin/`nobj/`n")
+    git -C $ab init -q 2>$null
+    git -C $ab add -A 2>$null
+    git -C $ab -c user.email=selftest@local -c user.name=selftest commit -qm init 2>$null
+    $out = (& pwsh -NoProfile -File $gate -Root $ab -All -Only dotnet 2>&1 | Out-String)
+    Check 'a build that rewrites a tracked file fails the run and names it (#231)' `
+        (($LASTEXITCODE -ne 0) -and ($out -match '\[FAIL\] App\.csproj -- the build modified 1 tracked file\(s\): lib/stamp\.txt')) $out
+    git -C $ab checkout -q -- lib/stamp.txt 2>$null
+    [IO.File]::WriteAllText((Join-Path $ab 'qgate.json'), "{ `"env`": { `"NoStamp`": `"true`" } }`n")
+    git -C $ab add qgate.json 2>$null
+    git -C $ab -c user.email=selftest@local -c user.name=selftest commit -qm env 2>$null
+    $out = (& pwsh -NoProfile -File $gate -Root $ab -All -Only dotnet 2>&1 | Out-String)
+    $abCode = $LASTEXITCODE
+    $abDirty = (git -C $ab status --porcelain --untracked-files=no | Out-String).Trim()
+    Check 'with the after-build step opted out the run passes and the tree stays clean (#231)' `
+        (($abCode -eq 0) -and ($out -notmatch 'tracked file\(s\)') -and -not $abDirty) "$out`n$abDirty"
 } else {
     Write-Output '[skip] no .NET SDK on this machine -- the dotnet stack cannot be exercised'
 }
