@@ -6179,6 +6179,20 @@ if (Get-Command typos -ErrorAction SilentlyContinue) {
     Check 'the excluded fixture is green because of the exclusion, not because it is clean' `
         (($LASTEXITCODE -ne 0) -and ($txNone -match '\[FAIL\] typos')) "code=$LASTEXITCODE $txNone"
 
+    # #232: a big art commit named every changed path on the typos command line and
+    # overflowed the 32767-char Windows limit. 1500 x ~70-char paths = ~105k chars;
+    # the last file carries the finding, so a dropped tail cannot pass as green.
+    $tl = Join-Path $tmp 'typos-long'
+    $tlDir = Join-Path $tl ('sourced-art-' + ('x' * 40))
+    New-Item -ItemType Directory -Path $tlDir -Force | Out-Null
+    git -C $tl init -q 2>$null
+    1..1500 | ForEach-Object { [IO.File]::WriteAllText((Join-Path $tlDir ('asset_{0:D4}.prefab' -f $_)), "spelled fine`n") }
+    [IO.File]::WriteAllText((Join-Path $tlDir 'asset_1500.prefab'), "you will $typo this line`n")
+    $tlOut = (& pwsh -NoProfile -File $gate -Root $tl -Only base 2>&1 | Out-String)
+    Check 'typos on the fast lane takes a changed-file list longer than the command line (#232)' `
+        (($LASTEXITCODE -ne 0) -and ($tlOut -match '\[FAIL\] typos') -and ($tlOut -match 'asset_1500') -and
+            ($tlOut -notmatch 'crashed|too long')) "code=$LASTEXITCODE $tlOut"
+
     # #138: a committed web bundle (web/dist, embedded by Go) is minified output, and the
     # full level read its mangled names as misspellings. Both sides: the bundle is quiet,
     # the same word in the web sources it is built from is still red.

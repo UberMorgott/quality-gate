@@ -3521,7 +3521,10 @@ function Invoke-BaseStack($s) {
             # [FAIL] typos and every dotnet stack `[SKIP] ... an earlier stack failed`, so
             # a compile error behind it was never reported. The run is still red.
             $tsw = [Diagnostics.Stopwatch]::StartNew()
-            $tOut = (& typos @targs @paths 2>&1 | Out-String)
+            # #232: the changed paths go over stdin (--file-list -), never argv -- 674 art
+            # paths overflowed the 32767-char Windows command line and crashed the stack.
+            $tOut = $(if ($paths) { ($paths -join "`n") | & typos @targs --file-list - 2>&1 | Out-String }
+                else { & typos @targs 2>&1 | Out-String })
             $tCode = $LASTEXITCODE
             $tsw.Stop()
             if ($Baseline) {
