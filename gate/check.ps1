@@ -3864,6 +3864,40 @@ function Invoke-WithoutHookGitEnv([scriptblock]$Body) {
     try { & $Body } finally { foreach ($v in $saved.Keys) { Set-Item "env:$v" $saved[$v] } }
 }
 
+# quality-gate#234: the gate runs BelowNormal (#225), so while Normal-priority work
+# keeps every core busy its checks get almost no CPU (measured: a 5 s test took 76 s
+# beside 16 busy Normal threads on 16 cores) and a wall-clock timeout fails whichever
+# check is running. Seconds in which the machine had (almost) no idle CPU therefore do
+# not count toward timeoutSec; a hard cap of 4x timeoutSec wall keeps a hang that
+# happens on a busy machine finite (it is reported up to 4x later).
+# shortcut: system idle via GetSystemTimes, Windows only; elsewhere plain wall clock --
+# read /proc/stat when a Linux gate host shows the same starvation.
+function Get-CpuIdleSample {
+    if ($env:QGATE_FAKE_FULL_LOAD) { return [pscustomobject]@{ Idle = 0L; Total = [Diagnostics.Stopwatch]::GetTimestamp() } }
+    if (-not $IsWindows) { return $null }
+    if (-not ('QGateCpu' -as [type])) {
+        Add-Type -TypeDefinition 'public static class QGateCpu { [System.Runtime.InteropServices.DllImport("kernel32.dll")] public static extern bool GetSystemTimes(out long idle, out long kernel, out long user); }'
+    }
+    $idle = 0L; $kernel = 0L; $user = 0L
+    if (-not [QGateCpu]::GetSystemTimes([ref]$idle, [ref]$kernel, [ref]$user)) { return $null }
+    # Kernel time already includes idle time (GetSystemTimes docs).
+    [pscustomobject]@{ Idle = $idle; Total = $kernel + $user }
+}
+function Wait-CustomCheck($Proc, [int]$TimeoutSec) {
+    $sw = [Diagnostics.Stopwatch]::StartNew()
+    $loaded = 0.0; $last = 0.0
+    $prev = try { Get-CpuIdleSample } catch { $null }
+    while ($true) {
+        if ($Proc.WaitForExit(1000)) { return @{ Done = $true; Loaded = $loaded } }
+        $now = try { Get-CpuIdleSample } catch { $null }
+        $t = $sw.Elapsed.TotalSeconds
+        # Under 5% idle across all logical CPUs = full load: a BelowNormal tree is starved.
+        if ($prev -and $now -and ($now.Total -gt $prev.Total) -and (($now.Idle - $prev.Idle) / ($now.Total - $prev.Total)) -lt 0.05) { $loaded += $t - $last }
+        $prev = $now; $last = $t
+        if ((($t - $loaded) -ge $TimeoutSec) -or ($t -ge 4 * $TimeoutSec)) { return @{ Done = $false; Loaded = $loaded } }
+    }
+}
+
 function Invoke-CustomStack($s) {
     $custom = Get-CustomChecks $Root
     if (-not $custom) { return }
@@ -3910,7 +3944,8 @@ function Invoke-CustomStack($s) {
         $p = Start-Process pwsh -ArgumentList '-NoProfile', '-Command', $c.Run `
             -WorkingDirectory $Root -NoNewWindow -PassThru `
             -RedirectStandardOutput $outFile -RedirectStandardError $errFile
-        $done = $p.WaitForExit($c.TimeoutSec * 1000)
+        $wait = Wait-CustomCheck $p $c.TimeoutSec
+        $done = $wait.Done
         $sw.Stop()
         # Kill the tree, not the shell: `pwsh -Command` is a parent, and the build it
         # started is what is actually hanging.
@@ -3925,7 +3960,9 @@ function Invoke-CustomStack($s) {
         # The timeout goes in the NAME. "the command never came back" and "it exited 1"
         # are different findings, and the raw output cannot tell them apart -- a killed
         # command usually printed nothing at all.
-        $name = if ($done) { $c.Name } else { "$($c.Name) -- timeout after $($c.TimeoutSec)s" }
+        $name = if ($done) { $c.Name } elseif ($wait.Loaded -ge 1) {
+            "$($c.Name) -- timeout after $($c.TimeoutSec)s ($([int]$sw.Elapsed.TotalSeconds)s wall, $([int]$wait.Loaded)s under full machine load not counted)"
+        } else { "$($c.Name) -- timeout after $($c.TimeoutSec)s" }
         Phase $name {
             # Only when there is any: a killed command usually printed nothing at all,
             # and an empty line above the reason is not output, it is a gap.

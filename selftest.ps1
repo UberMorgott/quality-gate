@@ -4994,6 +4994,13 @@ try {
     Check 'a check that outruns its timeout is killed and named as a timeout' `
         (($r.Code -ne 0) -and ($r.Out -match '\[FAIL\] hang -- timeout after 1s')) $r.Out
 
+    # #234: seconds of full machine load do not count (a BelowNormal gate is starved then),
+    # but the hang is still killed at the 4x wall cap and the report says why it took longer.
+    $env:QGATE_FAKE_FULL_LOAD = '1'
+    try { $r = Invoke-Gate $cust } finally { Remove-Item Env:QGATE_FAKE_FULL_LOAD }
+    Check 'under full machine load a hang is killed at 4x timeoutSec wall, load seconds named' `
+        (($r.Code -ne 0) -and ($r.Out -match '\[FAIL\] hang -- timeout after 1s \([4-9]s wall, [2-9]s under full machine load not counted\)')) $r.Out
+
     # A command that exits 0 while a process it started keeps running is a green verdict
     # over a held port, and the orphan -- whose parent is already gone -- is exactly what
     # the .Kill($true) above cannot see. The bystander is started FIRST and is the same
