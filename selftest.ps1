@@ -3980,6 +3980,46 @@ try {
     Check 'deleting a remote branch passes the pre-push hook (#180)' (($c -eq 0) -and -not (Test-RemoteRef 'clean')) "code=$c $o"
 } finally { $env:PATH = $pushPath }
 
+# #221: two sessions land onto one main at once. Each clone's pre-push hook sleeps (a slow
+# gate) after both already fetched; without the lock the second push is non-fast-forward.
+$landBare = Join-Path $tmp 'land-remote.git'
+git init -q --bare -b main $landBare 2>$null
+$landSeed = Join-Path $tmp 'land-seed'
+git init -q -b main $landSeed 2>$null
+Set-Content (Join-Path $landSeed 'base.txt') 'base'
+git -C $landSeed add -A 2>$null
+git -C $landSeed -c user.email=selftest@local -c user.name=selftest commit -qm base *> $null
+git -C $landSeed push -q $landBare HEAD:refs/heads/main *> $null
+$landGate = Join-Path $PSScriptRoot 'gate\land.ps1'
+$landers = foreach ($n in 'a', 'b') {
+    $d = Join-Path $tmp "land-$n"
+    git clone -q $landBare $d *> $null
+    Set-Content (Join-Path $d "$n.txt") $n
+    git -C $d add -A 2>$null
+    git -C $d -c user.email=selftest@local -c user.name=selftest commit -qm $n *> $null
+    git -C $d config core.hooksPath .git/hooks 2>$null # a global hooksPath (qgate global on) would skip it
+    git -C $d config user.email selftest@local 2>$null; git -C $d config user.name selftest 2>$null # the rebase commits
+    [IO.File]::WriteAllText((Join-Path $d '.git\hooks\pre-push'), "#!/bin/sh`nsleep 3`n")
+    Start-Job { param($g, $r) $o = (& pwsh -NoProfile -File $g -Root $r 2>&1 | Out-String); [pscustomobject]@{ Code = $LASTEXITCODE; Out = $o } } -ArgumentList $landGate, $d
+}
+$lr = @($landers | Wait-Job -Timeout 120 | Receive-Job); $landers | Remove-Job -Force
+$landLog = @(git -C $landBare log --format=%s main 2>$null)
+Check 'two parallel qgate land runs both reach main, serialized by the lock (#221)' `
+    (($lr.Count -eq 2) -and -not @($lr | Where-Object Code -ne 0) -and ('a' -in $landLog) -and ('b' -in $landLog)) `
+    "codes=$($lr.Code -join ',') log=$($landLog -join ',') $($lr.Out -join ' | ')"
+$landC = Join-Path $tmp 'land-a'
+Set-Content (Join-Path $landC 'base.txt') 'conflict-a'
+git -C $landC -c user.email=selftest@local -c user.name=selftest commit -qam 'conflict a' *> $null
+$landB = Join-Path $tmp 'land-b'
+git -C $landB pull -q --rebase *> $null
+Set-Content (Join-Path $landB 'base.txt') 'conflict-b'
+git -C $landB -c user.email=selftest@local -c user.name=selftest commit -qam 'conflict b' *> $null
+& pwsh -NoProfile -File $landGate -Root $landB *> $null
+$o = (& pwsh -NoProfile -File $landGate -Root $landC 2>&1 | Out-String); $c = $LASTEXITCODE
+Check 'a land whose rebase conflicts aborts the rebase and pushes nothing (#221)' `
+    (($c -eq 1) -and ($o -match 'rebase onto origin/main failed') -and -not (Test-Path (Join-Path $landC '.git\rebase-merge')) -and
+    ((git -C $landBare log -1 --format=%s main 2>$null) -eq 'conflict b')) "code=$c $o"
+
 # A hook does not run in the environment a terminal does: git exports GIT_DIR and
 # leaves GIT_WORK_TREE unset, and under those two variables git stops DISCOVERING the
 # repository and calls the current directory the work tree root. Measured on git 2.53
