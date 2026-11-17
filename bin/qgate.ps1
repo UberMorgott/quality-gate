@@ -14,6 +14,12 @@
 #   qgate selftest        run the gate's own red-then-green self-test
 #   qgate where           print the install directory and version
 $ErrorActionPreference = 'Stop'
+# #225: builds/tests must not preempt a game played next to ~10 agent sessions. Children
+# (pwsh, dotnet, msbuild nodes, csc, go) inherit BelowNormal from this process.
+try { (Get-Process -Id $PID).PriorityClass = 'BelowNormal' } catch { $null = $_ }
+# ...except the Roslyn compiler server: BuildServerConnection starts VBCSCompiler with an explicit
+# NORMAL_PRIORITY_CLASS (measured: Normal under a BelowNormal gate), so csc runs per build instead.
+$env:UseSharedCompilation = 'false'
 $home_ = Split-Path -Parent $PSScriptRoot
 $rest = @($args)
 $cmd = if ($rest.Count -gt 0 -and $rest[0] -notlike '-*') { $rest[0] } else { '' }
