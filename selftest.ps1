@@ -1968,6 +1968,31 @@ if ($dnSdks) {
         Check 'a failing test in MTP mode fails the test phase' `
             (($dnMtpCode -ne 0) -and ($out -match '\[FAIL\] test') -and ($out -match 'Adds') -and
             ($out -notmatch '\[FAIL\] (refs|format|build)')) "code=$dnMtpCode $out"
+        # #235: the fast lane (the pre-commit hook since #200) runs the tests too. The break is
+        # a DATA file the tests read, copied to output -- no .cs changes, the case that shipped.
+        [IO.File]::WriteAllText($mtpTest, ([IO.File]::ReadAllText($mtpTest)).Replace('Assert.Equal(5, 2 + 2)', 'Assert.Equal(4, 2 + 2)'))
+        $mtpProj = Join-Path $dnMtp 'Fixture.Tests.csproj'
+        [IO.File]::WriteAllText($mtpProj, ([IO.File]::ReadAllText($mtpProj)).Replace('</Project>',
+                "  <ItemGroup>`n    <None Include=`"data.txt`" CopyToOutputDirectory=`"PreserveNewest`" />`n  </ItemGroup>`n</Project>"))
+        [IO.File]::WriteAllText((Join-Path $dnMtp 'DataTests.cs'),
+            "namespace Tests;`n`npublic class DataTests`n{`n    [Fact]`n    public void ReadsData() => Assert.Equal(`"4`", File.ReadAllText(Path.Combine(AppContext.BaseDirectory, `"data.txt`")).Trim());`n}`n")
+        [IO.File]::WriteAllText((Join-Path $dnMtp 'data.txt'), "4`n")
+        $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $dnMtp -All 2>&1 | Out-String)
+        $dnMtpCode = $LASTEXITCODE
+        Check 'the fast lane runs the tests and passes a green suite' `
+            (($dnMtpCode -eq 0) -and ($out -match '\[PASS\] test \(')) "code=$dnMtpCode $out"
+        [IO.File]::WriteAllText((Join-Path $dnMtp 'data.txt'), "5`n")
+        $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $dnMtp -All 2>&1 | Out-String)
+        $dnMtpCode = $LASTEXITCODE
+        Check 'a data-only change that breaks a test fails the fast lane' `
+            (($dnMtpCode -ne 0) -and ($out -match '\[FAIL\] test') -and ($out -match 'ReadsData') -and
+            ($out -notmatch '\[FAIL\] (refs|format|build)')) "code=$dnMtpCode $out"
+        [IO.File]::WriteAllText((Join-Path $dnMtp 'qgate.json'), '{"dotnet": {"fastTest": false}}')
+        $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $dnMtp -All 2>&1 | Out-String)
+        $dnMtpCode = $LASTEXITCODE
+        Check 'dotnet.fastTest false keeps the tests off the fast lane' `
+            (($dnMtpCode -eq 0) -and ($out -notmatch '\] test')) "code=$dnMtpCode $out"
+        Remove-Item (Join-Path $dnMtp 'qgate.json')
     } else {
         Write-Output '[skip] no .NET 10 SDK or xunit.v3 not restorable -- the MTP-mode test check cannot run'
     }

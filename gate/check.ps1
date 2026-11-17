@@ -2076,7 +2076,20 @@ function Invoke-DotnetStack($s) {
     # The build could not resolve the references after all: nothing below can say more
     # about code the compiler never read.
     if ($script:DotnetRefSkip) { return }
-    if (-not $Full) { return }
+    # #235: `dotnet test` on the fast lane too. The pre-commit hook dropped -Full (#200), and
+    # with it every .NET test: a data file a test reads (EmbeddedResource / CopyToOutput yml)
+    # broke 25 tests and the commit passed green. --no-build reuses the build above; seconds.
+    # #172: in MTP mode the documented form is `--project`, and -nologo is an MTP-mode
+    # option only from .NET 11 Preview 7 (DOTNET_NOLOGO above covers the banner).
+    $dnTestPhase = {
+        if (Test-DotnetMtpMode $s.Dir) { Phase 'test' { dotnet test --project $proj --no-build -v q } }
+        else { Phase 'test' { dotnet test $proj --no-build -nologo -v q } }
+    }
+    if (-not $Full) {
+        # Opt-out for a suite too slow for every commit: it still runs at -Full.
+        if ((Get-QGateDotnetConfig $Root).fastTest -ne $false -and (Test-DotnetTestProject $info)) { . $dnTestPhase }
+        return
+    }
 
     # Harmony patch targets a game update removed: strings the compiler cannot check. See
     # gate/harmony.ps1. Only where Harmony is referenced; the references themselves are
@@ -2156,10 +2169,7 @@ function Invoke-DotnetStack($s) {
     # the facts come from the evaluation above, never from the csproj text.
     $pkgIds = @($pkgs.Identity)
     if (Test-DotnetTestProject $info) {
-        # #172: in MTP mode the documented form is `--project`, and -nologo is an MTP-mode
-        # option only from .NET 11 Preview 7 (DOTNET_NOLOGO above covers the banner).
-        if (Test-DotnetMtpMode $s.Dir) { Phase 'test' { dotnet test --project $proj --no-build -v q } }
-        else { Phase 'test' { dotnet test $proj --no-build -nologo -v q } }
+        . $dnTestPhase
         if ($Full) { $script:Lines += @(Get-DotnetTestFrameworkDrift $proj $pkgs) }
     }
     # A self-check runner (#88): `Foo.Tests.csproj`, OutputType Exe, no test SDK, exit code
@@ -2197,7 +2207,7 @@ function Invoke-DotnetStack($s) {
     }
     # An omitted phase and a passing one read identically in the report, and this is the
     # level where the reader is entitled to the difference: -Full is what CI and the
-    # generated pre-commit hook run. The fast lane says nothing -- it never promised these.
+    # generated pre-push hook run. The fast lane says nothing -- it never promised these.
     # #170: a production project beside a test project in the same run is not unverified --
     # the sibling's own test phase reports for both, and a sibling that runs nothing still
     # owes its own [SKIP], so a repo with no tests at all keeps it.
@@ -4374,7 +4384,7 @@ if ($ParallelStacks) { $childRec | Export-Clixml -LiteralPath $ParallelOut; exit
 # the fast level was read as the full one. Go only: it is the stack whose tests the level
 # narrows. -Quiet stays silent; a hook that wants the full level passes -Full.
 if (-not $Full -and -not $Quiet -and @($stacks | Where-Object { $_.Stack -eq 'go' })) {
-    $report += '[INFO] level: fast -- go test -short, test cache on, no -race; -Full runs the full level (every test uncached, -race, fuzz), as the pre-commit hook does'
+    $report += '[INFO] level: fast -- go test -short, test cache on, no -race; -Full runs the full level (every test uncached, -race, fuzz), as the pre-push hook does'
 }
 
 # THE INVARIANT: a run that executed zero check phases is not a green run.
