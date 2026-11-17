@@ -2720,6 +2720,19 @@ exit /b %errorlevel%
     }
     finally { $env:PATH = $fbPath; $env:QGATE_ST_FOLDER_FAIL = $null }
     }
+
+    # #230: a project a solution lists imports `$(SolutionDir)...` (Jotunn's JotunnBuildTask);
+    # only a solution build defines it, so the standalone project calls failed MSB4019.
+    $sd = Join-Path $tmp 'slndir'
+    New-Item -ItemType Directory -Path (Join-Path $sd 'app'), (Join-Path $sd 'props') -Force | Out-Null
+    git -C $sd init -q 2>$null
+    [IO.File]::WriteAllText((Join-Path $sd 'props\Shared.props'), "<Project><PropertyGroup><SharedSet>1</SharedSet></PropertyGroup></Project>`n")
+    [IO.File]::WriteAllText((Join-Path $sd 'app\App.csproj'), "<Project Sdk=`"Microsoft.NET.Sdk`">`n  <Import Project=`"`$(SolutionDir)props\Shared.props`" />`n  <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>`n</Project>`n")
+    [IO.File]::WriteAllText((Join-Path $sd 'app\A.cs'), "namespace App;`n`npublic static class A`n{`n    public static int X() => 1;`n}`n")
+    [IO.File]::WriteAllText((Join-Path $sd 'Slndir.sln'), "Microsoft Visual Studio Solution File, Format Version 12.00`r`nProject(`"{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}`") = `"App`", `"app\App.csproj`", `"{6F1C2E8A-0B7D-4E57-9C1A-2B3C4D5E6F70}`"`r`nEndProject`r`n")
+    $out = (& pwsh -NoProfile -File $gate -Root $sd -All -Only dotnet 2>&1 | Out-String)
+    Check 'a solution-listed project importing $(SolutionDir) evaluates standalone (#230)' `
+        (($out -match '\[PASS\] refs') -and ($out -notmatch 'MSB4019')) $out
 } else {
     Write-Output '[skip] no .NET SDK on this machine -- the dotnet stack cannot be exercised'
 }

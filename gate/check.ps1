@@ -1407,11 +1407,34 @@ $script:DnEval = @{}
 $script:FmtShared = $null   # $null = not tried yet, $false = per-project calls
 $script:FmtSlnDir = $null
 
+# #230: every project is built standalone, but a project a solution lists may import
+# `$(SolutionDir)...` (Jotunn's JotunnBuildTask), which only `dotnet build <sln>` defines ->
+# MSB4019. MSBuild reads environment variables as properties, so the nearest .sln/.slnx
+# (project dir up to the repo root) that lists the project sets SolutionDir for every
+# dotnet call on it; a project no solution lists gets the caller's own value back.
+$script:SlnDirOrig = $env:SolutionDir
+function Set-DotnetSolutionDir([string]$ProjPath) {
+    $env:SolutionDir = $script:SlnDirOrig
+    $dir = Split-Path -Parent $ProjPath
+    while ($dir -and $dir.Length -ge $Root.Length) {
+        $rel = [IO.Path]::GetRelativePath($dir, $ProjPath)
+        foreach ($sln in @(Get-ChildItem -LiteralPath $dir -File -ErrorAction SilentlyContinue | Where-Object Extension -in '.sln', '.slnx')) {
+            $t = Get-Content -LiteralPath $sln.FullName -Raw
+            if ($t.Contains("`"$($rel.Replace('/', '\'))`"") -or $t.Contains("`"$($rel.Replace('\', '/'))`"")) {
+                $env:SolutionDir = $dir.TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar
+                return
+            }
+        }
+        $dir = Split-Path -Parent $dir
+    }
+}
+
 # One MSBuild evaluation per csproj, cached: the shared pass needs every project's TFM
 # before the second stack has run its own `refs` phase, and paying for that evaluation
 # twice would cost more than the pass saves.
 function Get-DotnetEval([string]$ProjPath) {
     if (-not $script:DnEval.ContainsKey($ProjPath)) {
+        Set-DotnetSolutionDir $ProjPath
         $sw = [Diagnostics.Stopwatch]::StartNew()
         $q = (& dotnet msbuild $ProjPath -getProperty:TargetFramework -getProperty:TargetFrameworks -getProperty:TargetFrameworkVersion `
                 -getProperty:IsTestProject -getProperty:IsTestingPlatformApplication -getProperty:OutputType -getItem:Reference -getItem:PackageReference -nologo 2>&1 | Out-String).Trim()
@@ -1684,6 +1707,7 @@ function Invoke-DotnetStack($s) {
     # whenever it happened.
     $projAbs = Join-Path $s.Dir $proj
     $ev = Get-DotnetEval $projAbs
+    Set-DotnetSolutionDir $projAbs   # the eval may be cached from the shared pass: set it for this stack's calls too
     # A csproj msbuild cannot even evaluate IS a defect, so this one is a real phase.
     Phase 'refs' { if ($ev.Code -ne 0) { $ev.Out; $global:LASTEXITCODE = 1 } } -Elapsed $ev.Elapsed
     if ($script:Failed) { return }
