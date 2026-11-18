@@ -1987,6 +1987,47 @@ if ($dnSdks) {
         Check 'a data-only change that breaks a test fails the fast lane' `
             (($dnMtpCode -ne 0) -and ($out -match '\[FAIL\] test') -and ($out -match 'ReadsData') -and
             ($out -notmatch '\[FAIL\] (refs|format|build)')) "code=$dnMtpCode $out"
+        # Commit lane: a staged data file of no stack still reaches the root test project, the
+        # test project builds and runs, format waits for the push.
+        $dnLane = Join-Path $tmp 'dotnet-lane'
+        Copy-Item $dnMtp $dnLane -Recurse
+        [IO.File]::WriteAllText((Join-Path $dnLane 'data.txt'), "4`n")
+        git -C $dnLane init -q 2>$null
+        [IO.File]::WriteAllText((Join-Path $dnLane '.gitignore'), "bin/`nobj/`n")
+        git -C $dnLane add -A 2>$null
+        git -C $dnLane -c user.email=selftest@local -c user.name=selftest commit -qm init --no-verify 2>$null
+        $commitLane = { param($R, [string[]]$More = @())
+            $env:GIT_INDEX_FILE = Join-Path $R '.git\index'; $env:QGATE_NO_REUSE = '1'
+            try { $o = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $R -All @More 2>&1 | Out-String); [pscustomobject]@{ Code = $LASTEXITCODE; Out = $o } }
+            finally { $env:GIT_INDEX_FILE = $null; $env:QGATE_NO_REUSE = $null }
+        }
+        [IO.File]::WriteAllText((Join-Path $dnLane 'data.txt'), "5`n")
+        git -C $dnLane add -A 2>$null
+        $r = & $commitLane $dnLane
+        Check 'the commit lane still fails a data-only change that breaks a test (#235)' `
+            (($r.Code -ne 0) -and ($r.Out -match '\[FAIL\] test') -and ($r.Out -match 'ReadsData') -and ($r.Out -match '\[SKIP\] format .*fast lane of a commit')) "code=$($r.Code) $($r.Out)"
+        [IO.File]::WriteAllText((Join-Path $dnLane 'data.txt'), "4`n`n")
+        git -C $dnLane add -A 2>$null
+        $r = & $commitLane $dnLane
+        Check 'the commit lane builds and runs a test project' `
+            (($r.Code -eq 0) -and ($r.Out -match '\[PASS\] build') -and ($r.Out -match '\[PASS\] test \(') -and ($r.Out -notmatch '\[PASS\] format')) "code=$($r.Code) $($r.Out)"
+        # A project that is not a test project waits for the push: its compile error passes
+        # the commit and fails the push lane -- deferred, never lost.
+        $dnLib = Join-Path $tmp 'dotnet-lane-lib'
+        Copy-Item (Join-Path $PSScriptRoot 'testdata\dotnet-fixture') $dnLib -Recurse
+        git -C $dnLib init -q 2>$null
+        git -C $dnLib add -A 2>$null
+        git -C $dnLib -c user.email=selftest@local -c user.name=selftest commit -qm init --no-verify 2>$null
+        [IO.File]::WriteAllText((Join-Path $dnLib 'Broken.cs'), "class {`n")
+        git -C $dnLib add -A 2>$null
+        $r = & $commitLane $dnLib
+        Check 'the commit lane does not build a non-test project' `
+            (($r.Code -eq 0) -and ($r.Out -match '\[SKIP\] build Fixture\.csproj -- not run in the fast lane') -and ($r.Out -notmatch '\[(PASS|FAIL)\] build')) "code=$($r.Code) $($r.Out)"
+        $env:QGATE_PUSH_QUEUE = "selftest-$([guid]::NewGuid().ToString('N'))"
+        $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $dnLib -All -Push 2>&1 | Out-String); $dnMtpCode = $LASTEXITCODE
+        $env:QGATE_PUSH_QUEUE = $null
+        Check 'the push lane catches the compile error the commit lane deferred' `
+            (($dnMtpCode -ne 0) -and ($out -match '\[FAIL\] (format|build)')) "code=$dnMtpCode $out"
         [IO.File]::WriteAllText((Join-Path $dnMtp 'qgate.json'), '{"dotnet": {"fastTest": false}}')
         $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $dnMtp -All 2>&1 | Out-String)
         $dnMtpCode = $LASTEXITCODE
@@ -4853,6 +4894,46 @@ $env:QGATE_HOME = $null
 function Invoke-Trust([string]$Repo, [switch]$Remove) {
     (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\trust.ps1') -Root $Repo -Remove:$Remove 2>&1 | Out-String)
 }
+# Commit lane / push lane: the same `qgate -All -Quiet` from every hook, told apart by the
+# environment git gives each hook. The push-level check exits 3, so running it is visible.
+$lane = Join-Path $tmp 'lanes'
+New-Item -ItemType Directory -Path (Join-Path $lane 'm') -Force | Out-Null
+[IO.File]::WriteAllText((Join-Path $lane 'qgate.json'), '{"checks":[{"name":"quick","run":"exit 0","level":"fast"},{"name":"heavy","run":"exit 3","level":"push"}]}')
+[IO.File]::WriteAllText((Join-Path $lane 'a.txt'), "a`n")
+[IO.File]::WriteAllText((Join-Path $lane 'm\go.mod'), "module m`n`ngo 1.21`n")
+[IO.File]::WriteAllText((Join-Path $lane 'm\bad.go'), "package m`nfunc  Bad( {`n")
+git -C $lane init -q 2>$null
+git -C $lane add -A 2>$null
+git -C $lane -c user.email=selftest@local -c user.name=selftest commit -qm init --no-verify 2>$null
+$null = Invoke-Trust $lane
+$env:QGATE_PUSH_QUEUE = "selftest-$([guid]::NewGuid().ToString('N'))"
+$laneRun = { param([hashtable]$Env, [string[]]$Argv)
+    foreach ($k in $Env.Keys) { Set-Item "env:$k" $Env[$k] }
+    try { $o = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $lane @Argv 2>&1 | Out-String); [pscustomobject]@{ Code = $LASTEXITCODE; Out = $o } }
+    finally { foreach ($k in $Env.Keys) { Remove-Item "env:$k" -ErrorAction SilentlyContinue } }
+}
+[IO.File]::WriteAllText((Join-Path $lane 'a.txt'), "b`n")
+git -C $lane add -A 2>$null
+$r = & $laneRun @{ GIT_INDEX_FILE = (Join-Path $lane '.git\index'); GIT_EXEC_PATH = 'x'; QGATE_NO_REUSE = '1' } @('-All')
+Check 'a commit runs fast checks, skips push checks and unchanged stacks' `
+    (($r.Code -eq 0) -and ($r.Out -match '\[PASS\] quick') -and ($r.Out -match '\[SKIP\] heavy -- level push') -and ($r.Out -notmatch 'go m/')) "code=$($r.Code) $($r.Out)"
+$r = & $laneRun @{} @('-Only', 'custom', '-All')
+Check 'a run outside any hook skips push checks' (($r.Code -eq 0) -and ($r.Out -match '\[SKIP\] heavy -- level push')) "code=$($r.Code) $($r.Out)"
+$r = & $laneRun @{ GIT_EXEC_PATH = 'x' } @('-All')
+Check 'a pre-push hook checks every stack and runs push checks' `
+    (($r.Code -ne 0) -and ($r.Out -match 'go m/')) "code=$($r.Code) $($r.Out)"
+$r = & $laneRun @{ GIT_EXEC_PATH = 'x' } @('-Only', 'custom', '-All')
+Check 'a pre-push hook runs push checks' (($r.Code -ne 0) -and ($r.Out -match '\[FAIL\] heavy')) "code=$($r.Code) $($r.Out)"
+$r = & $laneRun @{} @('-Only', 'custom', '-All', '-Push')
+Check '-Push runs push checks by hand' (($r.Code -ne 0) -and ($r.Out -match '\[FAIL\] heavy')) "code=$($r.Code) $($r.Out)"
+$r = & $laneRun @{ QGATE_MAX_PARALLEL = '0' } @('-Only', 'custom', '-All', '-Full')
+Check '-Full runs push checks too' (($r.Code -ne 0) -and ($r.Out -match '\[FAIL\] heavy')) "code=$($r.Code) $($r.Out)"
+$held = Enter-QGateLock $env:QGATE_PUSH_QUEUE 0 'selftest holder' $null
+$r = & $laneRun @{ GIT_EXEC_PATH = 'x'; QGATE_PUSH_WAIT_MIN = '0' } @('-Only', 'custom', '-All')
+Exit-QGateLock $held
+Check 'the push lane queues machine-wide and names the holder on timeout' `
+    (($r.Code -eq 1) -and ($r.Out -match '\[FAIL\] push queue -- still held after 0 min by selftest holder') -and ($r.Out -notmatch '\] heavy')) "code=$($r.Code) $($r.Out)"
+$env:QGATE_PUSH_QUEUE = $null
 try {
     # `fast` runs at both levels, `full` (the default) only under -Full -- the same
     # split every other phase uses.
@@ -5067,7 +5148,7 @@ try {
             @{ Json = '{"checks":[{"name":"Bad Name","run":"exit 0"}]}'; Match = 'no usable name' },
             @{ Json = '{"checks":[{"name":"a","run":"exit 0"},{"name":"a","run":"exit 0"}]}'; Match = "two checks named 'a'" },
             @{ Json = '{"checks":[{"name":"a"}]}'; Match = 'needs a non-empty' },
-            @{ Json = '{"checks":[{"name":"a","run":"exit 0","level":"sometimes"}]}'; Match = 'must be fast or full' },
+            @{ Json = '{"checks":[{"name":"a","run":"exit 0","level":"sometimes"}]}'; Match = 'must be fast, push or full' },
             @{ Json = '{"checks":"not an array"}'; Match = 'must be an array' },
             @{ Json = '{"checks":[{"name":"s","smoke":{"exe":"x"}}]}'; Match = 'smoke needs a "stages" array' },
             @{ Json = '{"checks":[{"name":"s","run":"exit 0","smoke":{"exe":"x","stages":[{"name":"m","ready":"r"}]}}]}'; Match = 'both "run" and "smoke"' },

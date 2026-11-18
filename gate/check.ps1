@@ -4,6 +4,8 @@
 # output with its detail capped at 6000 chars (status lines are never cut). Fail-fast -- the first failing phase stops the
 # rest, because a linter report on non-compiling code is noise.
 #
+# Inside a commit hook the fast level narrows to the commit lane, in a pre-push hook it adds
+# the push lane (see $script:CommitLane below).
 # Levels: the default (no level switch) is the fast level -- Go tests run -short, with
 # the test cache and without -race. -Fast also drops the expensive bundling phase and
 # is what the agent Stop hook runs on every turn. -Full is opt-in, never the default:
@@ -26,6 +28,7 @@ param(
     [string]$Sarif,       # opt-in: also write the report as SARIF 2.1.0 to this file; stdout unchanged
     [switch]$Parallel,    # opt-in: run independent stacks (go web rust dotnet cpp godot) as concurrent child processes
     [switch]$Hook,        # #181: a git hook is asking -- untrusted qgate.json checks FAIL instead of [SKIP] (implied inside a commit)
+    [switch]$Push,        # the push lane by hand: what a pre-push hook without -Full runs (level "push" checks, one at a time per machine)
     # Internal to -Parallel: the child runs exactly these stacks ("stack|rel;...") and
     # writes its per-stack results to ParallelOut instead of printing a report.
     [Parameter(DontShow)][string]$ParallelStacks,
@@ -198,6 +201,16 @@ if ($Full -and $env:GIT_INDEX_FILE -and $env:QGATE_COMMIT_FULL -ne '1') {
         if (-not $Quiet) { Write-Output '[INFO] commit hook asked for -Full: ran the commit level instead, the full lane runs at pre-push (#201)' }
     }
 }
+# Commit lane and push lane: a commit pays only for cheap checks (each ~3 s, the hook ~30 s),
+# everything heavy waits for the push. Repositories run the same `qgate -All -Quiet` from
+# pre-commit, pre-merge-commit and pre-push, so the hook is told from the environment:
+# measured on git 2.53 + lefthook 2.2.2, GIT_INDEX_FILE is set in the two commit hooks only,
+# GIT_EXEC_PATH in every hook and never in a terminal. A false push lane (`git rebase --exec`,
+# a `!` alias) runs more, never less. The stagedTree child lost GIT_INDEX_FILE on purpose.
+$script:CommitLane = (-not $Full) -and (-not $Push) -and [bool]($env:GIT_INDEX_FILE -or $env:QGATE_STAGED_CHILD)
+$script:PushLane = (-not $Full) -and ($Push -or ([bool]$env:GIT_EXEC_PATH -and -not $script:CommitLane))
+# -All is what the push lane is for; a commit checks the stacks its changes touch.
+if ($script:CommitLane -and $All) { $All = $false; [void]$PSBoundParameters.Remove('All') }
 
 $stacks = @(Get-Stacks $Root)
 $allStacks = $stacks
@@ -422,7 +435,7 @@ if ($ParallelStacks) {
         # No git, so nothing to narrow by. Checking everything is the only honest
         # answer -- an empty change list here used to mean "[SKIP] no changes".
         if (-not $Quiet) { Write-Output '[WARN] not a git repository -- checking every stack' }
-    } elseif ($changed.Count -eq 0) {
+    } elseif ($changed.Count -eq 0 -and -not $script:CommitLane) {
         if (-not $Quiet) { Write-Output '[SKIP] no changes' }
         exit 0
     } else {
@@ -463,6 +476,16 @@ if ($ParallelStacks) {
                 & git -C $Root grep -q -F -e ($p -split '/')[-1] -- '*.go' '*.rs' '*.cs' '*.csproj' '*.js' '*.jsx' '*.mjs' '*.cjs' '*.ts' '*.tsx' '*.c' '*.cc' '*.cpp' '*.h' '*.hpp' '*.gd' 2>$null
                 if ($LASTEXITCODE -eq 1) { continue }
             }
+            # Commit lane: no widening, that is the push lane's job. A file of no stack can
+            # still feed a root project (a data file its tests read, #235), and MSBuild's
+            # shared files feed every .NET project.
+            if (-not $owner -and $script:CommitLane) {
+                $selected += @($stacks | Where-Object {
+                        $_.Stack -notin 'base', 'custom', 'deploy', 'powershell' -and
+                        (-not $_.Rel -or ($_.Stack -eq 'dotnet' -and $p -match '(?i)\.(props|targets|sln|slnx)$|(^|/)(global\.json|nuget\.config)$'))
+                    })
+                continue
+            }
             # A path outside every stack directory (CI config, build scripts, root
             # files) can affect any of them -> run everything.
             if (-not $owner) { $selected = $stacks; $widenedBy = $p; break }
@@ -476,6 +499,12 @@ if ($ParallelStacks) {
         $psStack = @($stacks | Where-Object { $_.Stack -eq 'powershell' })
         if ($psStack -and @($changed | Where-Object { $_ -match '(?i)\.ps(m|d)?1$' })) { $selected += $psStack }
         $stacks = @(@($selected) + $baseStack | Sort-Object Stack, Rel -Unique)
+        # Commit lane: the repo's fast checks always run, and test projects link the sources
+        # they test instead of referencing the project, so any .NET change runs all of them.
+        if ($script:CommitLane) {
+            $dotnetHit = [bool]@($selected | Where-Object Stack -EQ 'dotnet')
+            $stacks = @(@($stacks) + @($allStacks | Where-Object { $_.Stack -eq 'custom' -or ($dotnetHit -and $_.Stack -eq 'dotnet') }) | Sort-Object Stack, Rel -Unique)
+        }
         # Generated code crosses stack boundaries: a .proto edit produces Go and
         # GDScript that nobody touched, so narrowing to the schema directory would
         # report green on a break. Conservative and cheap: re-check everything.
@@ -1729,6 +1758,12 @@ function Invoke-DotnetStack($s) {
         $script:Lines += "[SKIP] ${proj}: needs .NET SDK $($tooNew).x, installed $($sdkVers -join ', ')"
         return
     }
+    # Commit lane: only what `dotnet test` needs. Building a test project is the one build
+    # kept (2.3-3.6 s, #235: failing tests must not reach a commit); pre-push builds the rest.
+    if ($script:CommitLane -and -not ((Test-DotnetTestProject $info) -and (Get-QGateDotnetConfig $Root).fastTest -ne $false)) {
+        $script:Lines += "[SKIP] build $proj -- not run in the fast lane of a commit (pre-push builds it)"
+        return
+    }
     # A multi-targeted project evaluates with TargetFramework EMPTY, so everything inside
     # an `ItemGroup Condition="'$(TargetFramework)' == 'net8.0-windows'"` is simply absent
     # from the answer above. Measured on `net8.0;net8.0-windows`: the conditioned
@@ -1774,7 +1809,11 @@ function Invoke-DotnetStack($s) {
     $changed = $null
     if ($Baseline) { $changed = Get-ChangedPaths $Root $Baseline }
     elseif (-not $Full -and -not $All) { $changed = Get-ChangedPaths $Root }
-    if ($null -ne $changed) {
+    if ($script:CommitLane) {
+        $runFormat = $false
+        $script:Lines += "[SKIP] format $proj -- not run in the fast lane of a commit (pre-push runs it)"
+    }
+    elseif ($null -ne $changed) {
         $prefix = if ($s.Rel) { "$($s.Rel)/" } else { '' }
         # --include is resolved against the CURRENT DIRECTORY, and an ABSOLUTE path
         # matches nothing at all -- silently, exit 0, a green format phase over an
@@ -3867,7 +3906,8 @@ function Get-LeakReport([int]$RootPid, [datetime]$NotBefore, [string]$Name) {
 function Invoke-WithoutHookGitEnv([scriptblock]$Body) {
     $saved = @{}
     # QGATE_HOOK (#181) too: a check that runs a gate of its own (a self-test) is not a hook.
-    foreach ($v in @(@(& git rev-parse --local-env-vars 2>$null) + 'QGATE_HOOK')) {
+    # GIT_EXEC_PATH too: it would make a gate run by a check look like a pre-push hook.
+    foreach ($v in @(@(& git rev-parse --local-env-vars 2>$null) + 'QGATE_HOOK', 'GIT_EXEC_PATH')) {
         $item = Get-Item "env:$v" -ErrorAction SilentlyContinue
         if ($item) { $saved[$v] = $item.Value; Remove-Item "env:$v" }
     }
@@ -3932,8 +3972,8 @@ function Invoke-CustomStack($s) {
     foreach ($c in $custom.Checks) {
         # The same fast/full split every other phase uses: `full` is the level that
         # guards a commit and CI, `fast` also runs on every agent turn.
-        if ($c.Level -eq 'full' -and -not $Full) {
-            $script:Lines += "[SKIP] $($c.Name) -- level full, not run in the fast lane"
+        if (($c.Level -eq 'full' -and -not $Full) -or ($c.Level -eq 'push' -and -not ($Full -or $script:PushLane))) {
+            $script:Lines += "[SKIP] $($c.Name) -- level $($c.Level), not run in the fast lane"
             # `full` is the DEFAULT, so a repo whose only stack is custom would meet the
             # zero-phase invariant on every fast run and block every agent turn over
             # work it explicitly deferred to the level that guards the commit.
@@ -4146,6 +4186,7 @@ function Get-GateSlotHolders([int]$Slots) {
     }
 }
 function Exit-GateSlot {
+    if ($script:PushQueue) { Exit-QGateLock $script:PushQueue; $script:PushQueue = $null }
     if (-not $script:GateSlot) { return }
     $slot = $script:GateSlot; $script:GateSlot = $null
     if ($script:GateSlotFile) {
@@ -4154,6 +4195,19 @@ function Exit-GateSlot {
         $script:GateSlotFile = $null
     }
     try { $slot.ReleaseMutex() } catch { Write-Verbose "slot release: $_" }
+}
+# The push lane is the heavy one now: one at a time per machine, so parallel sessions queue
+# instead of stacking builds and test suites on a PC somebody is using.
+$script:PushQueue = $null
+if ($script:PushLane -and -not $ParallelStacks -and -not $env:QGATE_SLOT_HELD -and @($stacks | Where-Object { $_.Stack -ne 'base' })) {
+    $pushQueueName = if ($env:QGATE_PUSH_QUEUE) { $env:QGATE_PUSH_QUEUE } else { 'push-queue' }
+    $pushWait = if ($env:QGATE_PUSH_WAIT_MIN -match '^\d+$') { [int]$env:QGATE_PUSH_WAIT_MIN } else { 60 }
+    $script:PushQueue = Enter-QGateLock $pushQueueName $pushWait "pid $PID, $Root" { param($h) [Console]::Error.WriteLine("[NOTE] qgate: waiting for the machine-wide push queue -- held by $h") }
+    if (-not $script:PushQueue.Stream) {
+        Write-Output "[FAIL] push queue -- still held after $pushWait min by $($script:PushQueue.Holder)"
+        exit 1
+    }
+    $env:QGATE_SLOT_HELD = '1'
 }
 if ($Full -and -not $ParallelStacks -and -not $env:QGATE_SLOT_HELD -and @($stacks | Where-Object { $_.Stack -ne 'base' })) {
     $slots = [int][Math]::Max(1, [Math]::Floor([Environment]::ProcessorCount / 8))

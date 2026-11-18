@@ -1659,8 +1659,8 @@ function Get-CustomChecks([string]$Root) {
             }
         }
         $level = if ($null -eq $c.level) { 'full' } else { [string]$c.level }
-        if ($level -cnotin 'fast', 'full') {
-            return (& $bad "qgate.json check '$name' has level '$level' -- must be fast or full")
+        if ($level -cnotin 'fast', 'push', 'full') {
+            return (& $bad "qgate.json check '$name' has level '$level' -- must be fast, push or full")
         }
         $sec = 600
         if ($null -ne $c.timeoutSec) {
@@ -1779,6 +1779,33 @@ function Get-TrustKey([string]$Root) {
     if ($env:QGATE_STAGED_CHILD -and $env:QGATE_STAGED_AS -and $env:QGATE_STAGED_DIR -and
         $p -eq $env:QGATE_STAGED_DIR.TrimEnd('\', '/')) { return (Resolve-Path $env:QGATE_STAGED_AS).Path.TrimEnd('\', '/') }
     $p
+}
+
+# A machine-wide queue of one: an exclusive file handle under %LOCALAPPDATA%\qgate\locks, so a
+# killed holder frees it (#221). The holder line sits in a sibling file because a
+# FileShare.None handle cannot be read by the waiter. Returns Stream = $null on timeout.
+function Enter-QGateLock([string]$Name, [int]$WaitMinutes, [string]$Holder, [scriptblock]$OnWait) {
+    $dir = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'qgate\locks'
+    New-Item -ItemType Directory -Force -Path $dir | Out-Null
+    $lockPath = Join-Path $dir "$Name.lock"; $holderPath = Join-Path $dir "$Name.holder"
+    $stream = $null; $seen = $null; $deadline = (Get-Date).AddMinutes($WaitMinutes)
+    while (-not $stream) {
+        try { $stream = [IO.File]::Open($lockPath, 'OpenOrCreate', 'ReadWrite', 'None') }
+        catch [IO.IOException] {
+            if (-not $seen) {
+                $seen = try { "$(Get-Content -LiteralPath $holderPath -Raw -ErrorAction Stop)".Trim() } catch { 'unknown' }
+                if ($OnWait) { & $OnWait $seen }
+            }
+            if ((Get-Date) -ge $deadline) { return @{ Stream = $null; Path = $lockPath; Holder = $seen } }
+            Start-Sleep -Milliseconds 500
+        }
+    }
+    Set-Content -LiteralPath $holderPath "$Holder, since $(Get-Date -Format s)"
+    @{ Stream = $stream; Path = $lockPath; HolderPath = $holderPath }
+}
+function Exit-QGateLock($Lock) {
+    Remove-Item -LiteralPath $Lock.HolderPath -ErrorAction SilentlyContinue
+    $Lock.Stream.Dispose()
 }
 
 # The checks, re-serialised deterministically: sorted by name, the four known fields

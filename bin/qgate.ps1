@@ -59,7 +59,10 @@ qgate -- one quality gate for every stack in the repository
   qgate selftest        the gate's own red-then-green self-test
   qgate where           install path, commit and the tool versions in use
 
-Gate flags: -All  -Fast  -Full  -Only <stack[,stack]>  -Quiet  -Why  -Baseline <rev>  -Mutate  -Fix  -Root <path>  -Sarif <file>  -Parallel
+Gate flags: -All  -Fast  -Full  -Push  -Only <stack[,stack]>  -Quiet  -Why  -Baseline <rev>  -Mutate  -Fix  -Root <path>  -Sarif <file>  -Parallel
+  Inside a commit hook the run is the commit lane: changed stacks only, fast checks, .NET test
+       projects built and run, no format or other builds. A pre-push hook without -Full (or
+       -Push) adds level "push" checks and takes the machine-wide push queue.
   -Quiet prints nothing on a green run and the whole report on a red one
        (what the generated pre-commit hook uses; CI wants the [PASS] lines).
        A [WARN] about the gate's own unreadable config is not silenced.

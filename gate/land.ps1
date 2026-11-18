@@ -33,24 +33,9 @@ if ($LASTEXITCODE -ne 0 -or $urls.Count -ne 1) { Fail "remote '$Remote' must hav
 # Same repository over different spellings (trailing .git or /, case on GitHub) -> one key.
 $key = ($urls[0].Trim().ToLowerInvariant() -replace '/+$', '' -replace '\.git$', '') + " refs/heads/$Branch"
 $hash = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($key))).Substring(0, 16).ToLowerInvariant()
-$dir = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'qgate\locks'
-New-Item -ItemType Directory -Force -Path $dir | Out-Null
-$lockPath = Join-Path $dir "$hash.lock"; $holderPath = Join-Path $dir "$hash.holder"
-
-$lock = $null; $waited = $false; $deadline = (Get-Date).AddMinutes($WaitMinutes)
-while (-not $lock) {
-    try { $lock = [IO.File]::Open($lockPath, 'OpenOrCreate', 'ReadWrite', 'None') }
-    catch [IO.IOException] {
-        if ((Get-Date) -gt $deadline) { Fail "another land still holds $lockPath after $WaitMinutes min" }
-        if (-not $waited) {
-            $holder = try { Get-Content -LiteralPath $holderPath -Raw -ErrorAction Stop } catch { 'unknown' }
-            Write-Output "land: waiting for another land of $key ($("$holder".Trim()))"; $waited = $true
-        }
-        Start-Sleep -Milliseconds 500
-    }
-}
+$lock = Enter-QGateLock $hash $WaitMinutes "pid $PID, $Root" { param($h) Write-Output "land: waiting for another land of $key ($h)" }
+if (-not $lock.Stream) { Fail "another land still holds $($lock.Path) after $WaitMinutes min" }
 try {
-    Set-Content -LiteralPath $holderPath "pid $PID, $Root, since $(Get-Date -Format s)"
     $tracking = "refs/remotes/$Remote/$Branch"
     Invoke-Git fetch -q $Remote "+refs/heads/${Branch}:$tracking"
     & git -C $Root rebase -q $tracking
@@ -62,8 +47,5 @@ try {
     & git -C $Root push $Remote "HEAD:refs/heads/$Branch"
     if ($LASTEXITCODE -ne 0) { Fail "git push exited $LASTEXITCODE (the pre-push gate output is above)" }
     Write-Output "land: $Remote/$Branch is at $("$(& git -C $Root rev-parse --short HEAD)".Trim())"
-} finally {
-    Remove-Item -LiteralPath $holderPath -ErrorAction SilentlyContinue
-    $lock.Dispose()
-}
+} finally { Exit-QGateLock $lock }
 exit 0
