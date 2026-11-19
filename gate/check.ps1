@@ -4233,12 +4233,15 @@ $script:PushQueue = $null
 if ($script:PushLane -and -not $ParallelStacks -and -not $env:QGATE_SLOT_HELD -and @($stacks | Where-Object { $_.Stack -ne 'base' })) {
     $pushQueueName = if ($env:QGATE_PUSH_QUEUE) { $env:QGATE_PUSH_QUEUE } else { 'push-queue' }
     $pushWait = if ($env:QGATE_PUSH_WAIT_MIN -match '^\d+$') { [int]$env:QGATE_PUSH_WAIT_MIN } else { 60 }
-    $script:PushQueue = Enter-QGateLock $pushQueueName $pushWait "pid $PID, $Root" { param($h) [Console]::Error.WriteLine("[NOTE] qgate: waiting for the machine-wide push queue -- held by $h") }
-    if (-not $script:PushQueue.Stream) {
-        Write-Output "[FAIL] push queue -- still held after $pushWait min by $($script:PushQueue.Holder)"
-        exit 1
+    # stderr, not the -Quiet-filtered output: a queued push must not look like a hang (#240).
+    $script:PushQueue = Enter-QGateLock $pushQueueName $pushWait "pid $PID, $Root" { param($h, $pos) [Console]::Error.WriteLine("[NOTE] qgate: waiting for the machine-wide push queue -- position $pos, held by $h") }
+    if ($script:PushQueue.Stream) { $env:QGATE_SLOT_HELD = '1' }
+    else {
+        # Waiting is not a verdict on the code (#240): after $pushWait min at the head, run unqueued.
+        $script:Warnings += "[WARN] push queue -- still held after $pushWait min by $($script:PushQueue.Holder); running without the queue"
+        [Console]::Error.WriteLine($script:Warnings[-1])
+        $script:PushQueue = $null
     }
-    $env:QGATE_SLOT_HELD = '1'
 }
 if ($Full -and -not $ParallelStacks -and -not $env:QGATE_SLOT_HELD -and @($stacks | Where-Object { $_.Stack -ne 'base' })) {
     $slots = [int][Math]::Max(1, [Math]::Floor([Environment]::ProcessorCount / 8))

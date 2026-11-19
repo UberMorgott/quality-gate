@@ -1784,22 +1784,44 @@ function Get-TrustKey([string]$Root) {
 # A machine-wide queue of one: an exclusive file handle under %LOCALAPPDATA%\qgate\locks, so a
 # killed holder frees it (#221). The holder line sits in a sibling file because a
 # FileShare.None handle cannot be read by the waiter. Returns Stream = $null on timeout.
+# #240: waiters take a ticket (<ticks>-<pid> in <Name>.queue) and only the oldest live one
+# may open the lock, so the queue is FIFO. $WaitMinutes counts from reaching the head: a
+# waiter behind others never times out. $OnWait gets (holder, position) on the first
+# wait and once a minute after, so a quiet hook still shows it is queued.
+function Test-QGateTicketLive([string]$TicketName) {
+    $t = $TicketName -split '-'
+    if ($t.Count -ne 2 -or $t[0] -notmatch '^\d+$' -or $t[1] -notmatch '^\d+$') { return $false }
+    try { $p = [Diagnostics.Process]::GetProcessById([int]$t[1]) } catch { return $false }
+    # A reused pid started after the ticket was written; unreadable start time -> assume live.
+    try { $p.StartTime.ToUniversalTime().Ticks -le [long]$t[0] } catch { $true }
+}
 function Enter-QGateLock([string]$Name, [int]$WaitMinutes, [string]$Holder, [scriptblock]$OnWait) {
     $dir = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'qgate\locks'
-    New-Item -ItemType Directory -Force -Path $dir | Out-Null
+    $queueDir = Join-Path $dir "$Name.queue"
+    New-Item -ItemType Directory -Force -Path $queueDir | Out-Null
     $lockPath = Join-Path $dir "$Name.lock"; $holderPath = Join-Path $dir "$Name.holder"
-    $stream = $null; $seen = $null; $deadline = (Get-Date).AddMinutes($WaitMinutes)
-    while (-not $stream) {
-        try { $stream = [IO.File]::Open($lockPath, 'OpenOrCreate', 'ReadWrite', 'None') }
-        catch [IO.IOException] {
-            if (-not $seen) {
-                $seen = try { "$(Get-Content -LiteralPath $holderPath -Raw -ErrorAction Stop)".Trim() } catch { 'unknown' }
-                if ($OnWait) { & $OnWait $seen }
+    $mine = '{0:D19}-{1}' -f [DateTime]::UtcNow.Ticks, $PID
+    $ticket = Join-Path $queueDir $mine
+    Set-Content -LiteralPath $ticket $Holder
+    $stream = $null; $seen = 'unknown'; $deadline = $null; $nextNote = [DateTime]::MinValue
+    try {
+        while (-not $stream) {
+            $ahead = @(Get-ChildItem -LiteralPath $queueDir -File -ErrorAction SilentlyContinue |
+                Where-Object { [string]::CompareOrdinal($_.Name, $mine) -lt 0 } | Where-Object {
+                    if (Test-QGateTicketLive $_.Name) { $true } else { Remove-Item -LiteralPath $_.FullName -ErrorAction SilentlyContinue; $false } })
+            if (-not $ahead) {
+                if (-not $deadline) { $deadline = (Get-Date).AddMinutes($WaitMinutes) }
+                try { $stream = [IO.File]::Open($lockPath, 'OpenOrCreate', 'ReadWrite', 'None'); break } catch [IO.IOException] { Write-Verbose "lock held: $_" }
             }
-            if ((Get-Date) -ge $deadline) { return @{ Stream = $null; Path = $lockPath; Holder = $seen } }
+            if ((Get-Date) -ge $nextNote) {
+                $seen = try { "$(Get-Content -LiteralPath $holderPath -Raw -ErrorAction Stop)".Trim() } catch { 'unknown' }
+                if ($OnWait) { & $OnWait $seen ($ahead.Count + 1) }
+                $nextNote = (Get-Date).AddMinutes(1)
+            }
+            if ($deadline -and (Get-Date) -ge $deadline) { return @{ Stream = $null; Path = $lockPath; Holder = $seen } }
             Start-Sleep -Milliseconds 500
         }
-    }
+    } finally { Remove-Item -LiteralPath $ticket -ErrorAction SilentlyContinue }
     Set-Content -LiteralPath $holderPath "$Holder, since $(Get-Date -Format s)"
     @{ Stream = $stream; Path = $lockPath; HolderPath = $holderPath }
 }

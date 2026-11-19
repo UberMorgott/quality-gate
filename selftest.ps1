@@ -4936,8 +4936,33 @@ Check 'QGATE_PUSH_FULL=1 keeps -Full in a pre-push hook' (($r.Code -ne 0) -and (
 $held = Enter-QGateLock $env:QGATE_PUSH_QUEUE 0 'selftest holder' $null
 $r = & $laneRun @{ GIT_EXEC_PATH = 'x'; QGATE_PUSH_WAIT_MIN = '0' } @('-Only', 'custom', '-All')
 Exit-QGateLock $held
-Check 'the push lane queues machine-wide and names the holder on timeout' `
-    (($r.Code -eq 1) -and ($r.Out -match '\[FAIL\] push queue -- still held after 0 min by selftest holder') -and ($r.Out -notmatch '\] heavy')) "code=$($r.Code) $($r.Out)"
+# #240: the waiter says where it is (stderr, so -Quiet keeps it), and a timeout at the head
+# of the queue is a WARN and an unqueued run, never a FAIL for waiting.
+Check 'the push lane queues machine-wide and shows position + holder while waiting (#240)' `
+    ($r.Out -match 'waiting for the machine-wide push queue -- position 1, held by selftest holder') "code=$($r.Code) $($r.Out)"
+Check 'a push-queue timeout warns and runs the push lane anyway (#240)' `
+    (($r.Out -match '\[WARN\] push queue -- still held after 0 min by selftest holder') -and ($r.Out -notmatch '\[FAIL\] push queue') -and
+    ($r.Out -match '\[FAIL\] heavy')) "code=$($r.Code) $($r.Out)"
+# FIFO: a live older ticket keeps a free lock from a newer waiter, which never times out
+# while behind it; a dead waiter's ticket does not block the queue.
+$qDir = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) "qgate\locks\$env:QGATE_PUSH_QUEUE.queue"
+New-Item -ItemType Directory -Force -Path $qDir | Out-Null
+$selfStart = (Get-Process -Id $PID).StartTime.ToUniversalTime().Ticks
+$older = Join-Path $qDir ('{0:D19}-{1}' -f ($selfStart + 1), $PID)
+Set-Content -LiteralPath $older 'selftest older waiter'
+$fifo = Start-Job { param($d, $n) . $d; $l = Enter-QGateLock $n 0 'fifo waiter' $null; [bool]$l.Stream; if ($l.Stream) { Exit-QGateLock $l } } -ArgumentList (Join-Path $PSScriptRoot 'gate\detect.ps1'), $env:QGATE_PUSH_QUEUE
+$until = (Get-Date).AddSeconds(30) # job start-up is slow on a loaded box: wait for its ticket
+while ($fifo.State -eq 'Running' -and @(Get-ChildItem -LiteralPath $qDir -File).Count -lt 2 -and (Get-Date) -lt $until) { Start-Sleep -Milliseconds 200 }
+Start-Sleep -Seconds 2
+$behind = $fifo.State -eq 'Running'
+Remove-Item -LiteralPath $older
+$fifoGot = @($fifo | Wait-Job -Timeout 30 | Receive-Job); $fifo | Remove-Job -Force
+Check 'a push-queue waiter does not jump an older live waiter, then gets the lock (#240)' ($behind -and ($fifoGot -contains $true)) "behind=$behind got=$fifoGot"
+$dead = Join-Path $qDir ('{0:D19}-{1}' -f 1, $PID) # pid alive but started after the ticket: a reused pid
+Set-Content -LiteralPath $dead 'selftest dead waiter'
+$l = Enter-QGateLock $env:QGATE_PUSH_QUEUE 0 'selftest' $null
+Check 'a dead waiter''s ticket does not block the push queue (#240)' ([bool]$l.Stream -and -not (Test-Path $dead)) "stream=$([bool]$l.Stream)"
+if ($l.Stream) { Exit-QGateLock $l }
 $env:QGATE_PUSH_QUEUE = $null
 try {
     # `fast` runs at both levels, `full` (the default) only under -Full -- the same
