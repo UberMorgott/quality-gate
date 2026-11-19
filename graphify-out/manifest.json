@@ -1,8 +1,8 @@
 {
   "bin/qgate.ps1": {
-    "mtime": 1794616021.349198,
-    "seen": 1794616441.0252004,
-    "ast_hash": "0b98b90996f44e0d6e93e53be98d773a",
+    "mtime": 1795095879.0539505,
+    "seen": 1795096303.1565719,
+    "ast_hash": "0da19f81e6dea9d9f42898809b3df85f",
     "semantic_hash": ""
   },
   "bootstrap.ps1": {
@@ -12,15 +12,15 @@
     "semantic_hash": ""
   },
   "gate/check.ps1": {
-    "mtime": 1794619021.8326232,
-    "seen": 1794619153.1420054,
-    "ast_hash": "42d68b6cd0814863d659c799ca70d219",
+    "mtime": 1795095879.0554872,
+    "seen": 1795096303.1565762,
+    "ast_hash": "58cfe848b6578874863ab276e5f15253",
     "semantic_hash": ""
   },
   "gate/detect.ps1": {
-    "mtime": 1794616021.3512032,
-    "seen": 1794616441.0252073,
-    "ast_hash": "1d62df2a9dad3a4b557d6a21351da415",
+    "mtime": 1795095879.0559995,
+    "seen": 1795096303.156577,
+    "ast_hash": "e1064db0820e972cc26bc85c0cc479cb",
     "semantic_hash": ""
   },
   "gate/outdated.ps1": {
@@ -42,9 +42,9 @@
     "semantic_hash": ""
   },
   "selftest.ps1": {
-    "mtime": 1794618371.8979578,
-    "seen": 1794618685.856288,
-    "ast_hash": "65a3d0482a8bbd81b68e4b81f6f1b656",
+    "mtime": 1795095879.1300135,
+    "seen": 1795096303.156591,
+    "ast_hash": "f602e96d4f897380bfcf6d80bf2d3030",
     "semantic_hash": ""
   },
   "templates/.stylelintrc.json": {
@@ -60,9 +60,9 @@
     "semantic_hash": ""
   },
   "templates/pre-commit": {
-    "mtime": 1794091604.4678955,
-    "seen": 1794616441.0252318,
-    "ast_hash": "bf9464535f89a09afda2b8372f9230bd",
+    "mtime": 1795095878.679551,
+    "seen": 1795096303.1565988,
+    "ast_hash": "e610ca98d9c47dc8807f6043a75edda7",
     "semantic_hash": ""
   },
   "testdata/go-fixture/go.mod": {
@@ -126,9 +126,9 @@
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1794618371.8949432,
-    "seen": 1794618685.856323,
-    "ast_hash": "12cc64dc71a65acacc2fda7428cb708f",
+    "mtime": 1795095879.0539505,
+    "seen": 1795096303.1566234,
+    "ast_hash": "ba95f375b4b447af0ee8f71b1b0df6ff",
     "semantic_hash": ""
   },
   "templates/.golangci.yml": {
@@ -144,9 +144,9 @@
     "semantic_hash": ""
   },
   "templates/lefthook.yml": {
-    "mtime": 1794091604.4678955,
-    "seen": 1794616441.0252314,
-    "ast_hash": "3758406ad665fe18e4eb0e74c57b6c1b",
+    "mtime": 1795095878.679551,
+    "seen": 1795096303.156598,
+    "ast_hash": "cc1eeb3f9fe39d5ee7def1cd807374d1",
     "semantic_hash": ""
   },
   "testdata/proto-fixture/buf.yaml": {
@@ -210,9 +210,9 @@
     "semantic_hash": ""
   },
   "gate/harmony.cs": {
-    "mtime": 1794613958.6766124,
-    "seen": 1794616441.0252109,
-    "ast_hash": "f2d445815ce29cb88e25010b9a518a59",
+    "mtime": 1795095879.127673,
+    "seen": 1795096303.1565795,
+    "ast_hash": "8ed892b8cc30ed958fec5a27c9ecc177",
     "semantic_hash": ""
   },
   "gate/harmony.ps1": {
@@ -252,9 +252,9 @@
     "semantic_hash": ""
   },
   "testdata/harmony-fixture/Mod/Patches.cs": {
-    "mtime": 1794613958.6791303,
-    "seen": 1794616441.0252469,
-    "ast_hash": "0be7cc7da3c7df14b4e5e13820a4c8d8",
+    "mtime": 1795095879.1300135,
+    "seen": 1795096303.1566138,
+    "ast_hash": "a46a039fa2e302a45ef8c1ad25c32fc7",
     "semantic_hash": ""
   },
   "gate/smoke.ps1": {
@@ -348,9 +348,9 @@
     "semantic_hash": ""
   },
   "gate/pre-push.ps1": {
-    "mtime": 1794086783.1507118,
-    "seen": 1794088193.2941525,
-    "ast_hash": "9f08f4845788477e8f37fce494b0a19b",
+    "mtime": 1795095878.6774995,
+    "seen": 1795096303.1565838,
+    "ast_hash": "89feeddc92429a60a89af62365922c30",
     "semantic_hash": ""
   },
   "hooks/pre-push": {
@@ -360,9 +360,9 @@
     "semantic_hash": ""
   },
   "templates/pre-push": {
-    "mtime": 1793221501.9235623,
-    "seen": 1793223317.0155828,
-    "ast_hash": "e2ac041e56386c438ebe3390cb971bdb",
+    "mtime": 1795095878.6800683,
+    "seen": 1795096303.1565993,
+    "ast_hash": "d4c4c888d44fc98dc292523fce2a6bb4",
     "semantic_hash": ""
   },
   "testdata/harmony-fixture/BclCore/BclCore.csproj": {
@@ -387,6 +387,12 @@
     "mtime": 1794616021.3512032,
     "seen": 1794616441.025219,
     "ast_hash": "ae130ccf71ecf868bdc4b90c12d59fa9",
+    "semantic_hash": ""
+  },
+  "gate/land.ps1": {
+    "mtime": 1795095878.9634397,
+    "seen": 1795096303.1565824,
+    "ast_hash": "4ac37992a362da03a10a7dbabf13560a",
     "semantic_hash": ""
   }
 }
