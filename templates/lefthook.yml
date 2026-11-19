@@ -44,7 +44,7 @@
 #
 # No -Full here (quality-gate#200): -Full takes the machine-wide slot queue (#123),
 # and commits in ~15 parallel worktrees waited 18-30 min behind other repos' full
-# runs. The full lane runs at pre-push below, where the work leaves the machine.
+# runs. pre-push below runs the push lane; -Full only on an explicit run (release).
 pre-commit:
   jobs:
     - &quality_gate
@@ -77,7 +77,7 @@ pre-merge-commit:
 # `git fetch && git rebase origin/main && git push` used to push a rebased tree no
 # gate had seen. `qgate pre-push` reads git's ref lines from stdin -- hence
 # use_stdin, without which lefthook keeps them -- refuses a push of anything but the
-# clean checked-out HEAD, then runs the same -All -Full gate on it. Its own job, not
+# clean checked-out HEAD, then runs the -All push lane on it (-Full: explicit only). Its own job, not
 # the anchor: the run line differs, and the stdin parsing has to live in the gate
 # because this string loses its quotes (third trap above).
 pre-push:

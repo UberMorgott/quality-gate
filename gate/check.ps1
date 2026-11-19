@@ -186,7 +186,7 @@ function Get-LefthookBlock([string]$Text, [string]$HookName) {
 # commit git sets GIT_INDEX_FILE (commit.c run_commit_hook; measured on git 2.53 + lefthook
 # 2.2.2: set in pre-commit and pre-merge-commit, absent in pre-push and outside hooks;
 # lefthook sets no variable of its own). There the run drops to the commit level -- but only
-# when the full lane still runs at pre-push for this repo; otherwise -Full is kept, never
+# when a pre-push gate job still runs for this repo; otherwise -Full is kept, never
 # silently lost, and the #188 hooks check below names the stale job.
 # QGATE_COMMIT_FULL=1: a deliberate full gate inside a commit -- keeps -Full and the queue.
 if ($Full -and $env:GIT_INDEX_FILE -and $env:QGATE_COMMIT_FULL -ne '1') {
@@ -198,8 +198,19 @@ if ($Full -and $env:GIT_INDEX_FILE -and $env:QGATE_COMMIT_FULL -ne '1') {
     if ($ppText -match 'qgate|quality-gate' -or ($ppText -match 'lefthook' -and $lhPush)) {
         $Full = $false
         [void]$PSBoundParameters.Remove('Full')
-        if (-not $Quiet) { Write-Output '[INFO] commit hook asked for -Full: ran the commit level instead, the full lane runs at pre-push (#201)' }
+        if (-not $Quiet) { Write-Output '[INFO] commit hook asked for -Full: ran the commit level instead, pre-push gates the push; -Full runs on an explicit run (#201)' }
     }
+}
+# Old lefthook.yml copies (pre-#180) run `qgate -All -Full` as their pre-push job. Since
+# 2026-11-19 a push runs the push lane; -Full is for an explicit run (release, CI). In a
+# pre-push hook git sets GIT_EXEC_PATH but not GIT_INDEX_FILE (measured, see below), and
+# no terminal sets GIT_EXEC_PATH. QGATE_PUSH_FULL=1 (`qgate pre-push -Full` sets it) keeps -Full.
+if ($Full -and $env:GIT_EXEC_PATH -and -not $env:GIT_INDEX_FILE -and -not $env:QGATE_STAGED_CHILD -and $env:QGATE_PUSH_FULL -ne '1') {
+    $Full = $false
+    [void]$PSBoundParameters.Remove('Full')
+    $Push = [switch]$true
+    $PSBoundParameters['Push'] = $Push
+    if (-not $Quiet) { Write-Output '[INFO] push hook asked for -Full: ran the push lane instead; -Full runs on an explicit run (QGATE_PUSH_FULL=1 keeps it)' }
 }
 # Commit lane and push lane: a commit pays only for cheap checks (each ~3 s, the hook ~30 s),
 # everything heavy waits for the push. Repositories run the same `qgate -All -Quiet` from
@@ -732,7 +743,7 @@ if (-not $ParallelStacks -and (Test-Path -LiteralPath $lhCfg)) {
         $lhStale = @('pre-commit', 'pre-merge-commit' | Where-Object { (Get-LefthookBlock $lhText $_) -match '(?m)^[^#\r\n]*qgate(\.cmd)?\b[^\r\n]*-Full' })
         if ($lhStale) {
             $lhNoPush = if ((Get-LefthookBlock $lhText 'pre-push') -notmatch 'qgate') { '; with no pre-push gate job here the commit keeps -Full and waits for the machine-wide full-gate slot' } else { '' }
-            $script:Warnings += "[WARN] hooks: lefthook.yml $($lhStale -join ', ') runs the gate with -Full (a pre-#200 template copy)$lhNoPush -- re-copy templates/lefthook.yml from the gate (commit level -All -Quiet, full lane at pre-push), then run: lefthook install"
+            $script:Warnings += "[WARN] hooks: lefthook.yml $($lhStale -join ', ') runs the gate with -Full (a pre-#200 template copy)$lhNoPush -- re-copy templates/lefthook.yml from the gate (commit level -All -Quiet, push lane at pre-push), then run: lefthook install"
         }
     }
 }
@@ -4438,7 +4449,7 @@ if ($ParallelStacks) { $childRec | Export-Clixml -LiteralPath $ParallelOut; exit
 # the fast level was read as the full one. Go only: it is the stack whose tests the level
 # narrows. -Quiet stays silent; a hook that wants the full level passes -Full.
 if (-not $Full -and -not $Quiet -and @($stacks | Where-Object { $_.Stack -eq 'go' })) {
-    $report += '[INFO] level: fast -- go test -short, test cache on, no -race; -Full runs the full level (every test uncached, -race, fuzz), as the pre-push hook does'
+    $report += '[INFO] level: fast -- go test -short, test cache on, no -race; -Full runs the full level (every test uncached, -race, fuzz), run it before a release'
 }
 
 # THE INVARIANT: a run that executed zero check phases is not a green run.

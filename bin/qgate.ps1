@@ -39,7 +39,7 @@ qgate -- one quality gate for every stack in the repository
   qgate trust           print this repo's qgate.json "checks" and allow them to run here
                         (-Root <path> for another repo, -Remove to forget them)
   qgate pre-push        what the pre-push hook runs: refuses a push of anything but the
-                        clean checked-out HEAD, then qgate -All -Full on it (git stdin)
+                        clean checked-out HEAD, then qgate -All -Push on it (git stdin)
   qgate land            fetch, rebase onto origin/main and push (pre-push still gates) under
                         one machine-wide lock: parallel sessions stop losing push races
                         (-Remote <name> -Branch <name> -WaitMinutes <n>)

@@ -4,7 +4,7 @@
 # Same platform switch as templates/pre-commit, for the same measured reason. git's
 # `<local ref> <local sha> <remote ref> <remote sha>` lines arrive on stdin and are
 # inherited by exec; `qgate pre-push` refuses anything but the clean checked-out HEAD
-# and then gates it with -All -Full.
+# and then gates it with the -All push lane (-Full only on an explicit run).
 if uname -o 2>/dev/null | grep -q Msys; then
   exec qgate.cmd pre-push
 else

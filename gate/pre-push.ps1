@@ -19,6 +19,10 @@
 # No reuse of an earlier verdict by tree hash: the result also depends on the toolchain,
 # the gate version, restored packages and advisory feeds. `git push --no-verify` still
 # bypasses this, like every client-side hook.
+#
+# Push lane, not -Full (owner, 2026-11-19): -Full on every push of every repo kept the machine busy
+# (fuzz, -race, uncached tests). -Full runs on an explicit `qgate -All -Full` (release, CI).
+# A repo that wants it here anyway: `qgate pre-push -Full` (extra args reach check.ps1).
 [CmdletBinding(PositionalBinding = $false)]
 param([string]$Root, [Parameter(ValueFromRemainingArguments = $true)][string[]]$Extra)
 
@@ -78,5 +82,6 @@ if ($untracked) {
     Write-Output "[WARN] pre-push -- $($untracked.Count) untracked file(s) in the work tree are part of what the gate builds: $(@($untracked | Select-Object -First 5) -join ', ')"
 }
 
-& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'check.ps1') -Root $Root -All -Full -Quiet -Hook @Extra
+if (@($Extra) -contains '-Full') { $env:QGATE_PUSH_FULL = '1' }
+& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'check.ps1') -Root $Root -All -Push -Quiet -Hook @Extra
 exit $LASTEXITCODE

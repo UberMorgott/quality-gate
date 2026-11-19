@@ -3166,11 +3166,11 @@ Check 'every generated pre-commit invocation is quiet on green' `
     (($invocations.Count -ge 3) -and ($noisy.Count -eq 0)) `
     "found $($invocations.Count), noisy: $($noisy -join ' | ')"
 # #200: -Full takes the machine-wide slot queue, so a commit hook passing it waited
-# 18-30 min behind other repos' full runs. The full lane lives at pre-push.
+# 18-30 min behind other repos' full runs. Since 2026-11-19 pre-push runs the push lane, not -Full.
 $fullAtCommit = @($invocations | Where-Object { $_ -match '-Full' })
 Check 'generated commit hooks run the default level, not -Full' ($fullAtCommit.Count -eq 0) ($fullAtCommit -join ' | ')
-Check 'the generated pre-push still runs the full lane' `
-    (($lh -match '(?m)^\s*run:.*qgate(\.cmd)? pre-push') -and ((Get-Content (Join-Path $PSScriptRoot 'gate\pre-push.ps1') -Raw) -match "-All -Full")) 'pre-push wiring'
+Check 'the generated pre-push runs the push lane, not -Full' `
+    (($lh -match '(?m)^\s*run:.*qgate(\.cmd)? pre-push') -and ((Get-Content (Join-Path $PSScriptRoot 'gate\pre-push.ps1') -Raw) -match "-All -Push ") -and ((Get-Content (Join-Path $PSScriptRoot 'gate\pre-push.ps1') -Raw) -notmatch "check\.ps1'\) [^\r\n]*-Full")) 'pre-push wiring'
 
 # 13b (#80). Wire ends by running the gate once: on a red repository it says so and
 # names the adoption path instead of "break something on purpose", and wiring still
@@ -3761,7 +3761,7 @@ if ($held) {
         [pscustomobject]@{ Done = $done; Code = $(if ($done) { $hp.ExitCode }); Out = $t }
     }
     $sr = & $staleRun
-    Check 'a stale commit-hook -Full run does not queue when pre-push runs the full lane' `
+    Check 'a stale commit-hook -Full run does not queue when pre-push runs the gate' `
         ($sr.Done -and ($sr.Code -eq 0) -and ($sr.Out -notmatch 'waiting for a machine-wide') -and ($sr.Out -match '\[INFO\] commit hook asked for -Full')) "code=$($sr.Code) $($sr.Out)"
     Remove-Item $qPush
     $sr = & $staleRun
@@ -4928,6 +4928,11 @@ $r = & $laneRun @{} @('-Only', 'custom', '-All', '-Push')
 Check '-Push runs push checks by hand' (($r.Code -ne 0) -and ($r.Out -match '\[FAIL\] heavy')) "code=$($r.Code) $($r.Out)"
 $r = & $laneRun @{ QGATE_MAX_PARALLEL = '0' } @('-Only', 'custom', '-All', '-Full')
 Check '-Full runs push checks too' (($r.Code -ne 0) -and ($r.Out -match '\[FAIL\] heavy')) "code=$($r.Code) $($r.Out)"
+# An old pre-push job still passing -Full runs the push lane; QGATE_PUSH_FULL=1 keeps -Full.
+$r = & $laneRun @{ GIT_EXEC_PATH = 'x'; QGATE_MAX_PARALLEL = '0' } @('-Only', 'custom', '-All', '-Full')
+Check 'a stale -Full pre-push job runs the push lane' (($r.Code -ne 0) -and ($r.Out -match '\[INFO\] push hook asked for -Full') -and ($r.Out -match '\[FAIL\] heavy')) "code=$($r.Code) $($r.Out)"
+$r = & $laneRun @{ GIT_EXEC_PATH = 'x'; QGATE_PUSH_FULL = '1'; QGATE_MAX_PARALLEL = '0' } @('-Only', 'custom', '-All', '-Full')
+Check 'QGATE_PUSH_FULL=1 keeps -Full in a pre-push hook' (($r.Code -ne 0) -and ($r.Out -notmatch 'push hook asked') -and ($r.Out -match '\[FAIL\] heavy')) "code=$($r.Code) $($r.Out)"
 $held = Enter-QGateLock $env:QGATE_PUSH_QUEUE 0 'selftest holder' $null
 $r = & $laneRun @{ GIT_EXEC_PATH = 'x'; QGATE_PUSH_WAIT_MIN = '0' } @('-Only', 'custom', '-All')
 Exit-QGateLock $held

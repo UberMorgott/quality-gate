@@ -27,7 +27,7 @@
 #
 # No -Full (quality-gate#200): -Full takes the machine-wide slot queue (#123), and
 # every commit in ~15 parallel worktrees waited 18-30 min behind other repos' full
-# runs. The full lane runs where work leaves the machine: pre-push (`qgate pre-push`).
+# runs. Pushes run the push lane (`qgate pre-push`); -Full only on an explicit run.
 if uname -o 2>/dev/null | grep -q Msys; then
   exec qgate.cmd -All -Quiet
 else
