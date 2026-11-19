@@ -24,6 +24,7 @@ param(
     [string]$Baseline,    # git rev: report only issues newer than it (adoption on a dirty codebase)
     [switch]$Mutate,      # on demand only: Go mutation testing (gremlins), advisory; scoped by -Baseline
     [switch]$Fix,         # explicit only, never from a hook: gofmt -w + golangci-lint --fix on Go stacks, then the normal gate
+    [switch]$UpdateEscapes, # explicit only: rewrite the qgate.json go.hotPaths escape baseline instead of judging it
     [string]$Root,        # repo root; defaults to the git root of the cwd
     [string]$Sarif,       # opt-in: also write the report as SARIF 2.1.0 to this file; stdout unchanged
     [switch]$Parallel,    # opt-in: run independent stacks (go web rust dotnet cpp godot) as concurrent child processes
@@ -1036,6 +1037,15 @@ function Invoke-GoStackOnce($s) {
     New-Item -ItemType Directory -Path $outDir -Force | Out-Null
     try { Phase 'go build' { if ($hasMain) { go build -o $outDir ./... } else { go build ./... } } }
     finally { Remove-Item $outDir -Recurse -Force -ErrorAction SilentlyContinue }
+    # quality-gate#233: opt-in (qgate.json go.hotPaths) heap-escape baseline, every lane --
+    # a cached build replays its -m diagnostics, so it costs what `go build` costs.
+    # shortcut: with go.tags it runs under the first tag set only; one baseline per set if a repo needs it.
+    $hot = Get-GoHotPaths $Root
+    if ($hot.Error) { Fail $hot.Error }
+    elseif ($hot -and (-not $script:GoTagSets -or $script:PhaseSuffix -eq " [tags=$($script:GoTagSets[0])]")) {
+        Phase 'go escapes' { Invoke-GoEscapes $Root $s.Dir $hot -Update:$UpdateEscapes }
+        if ($script:GoEscapesGone) { $script:Lines += "[INFO] go escapes: $($script:GoEscapesGone) baseline entr$(if ($script:GoEscapesGone -eq 1) { 'y' } else { 'ies' }) no longer produced -- qgate -Only go -UpdateEscapes shrinks the baseline" }
+    }
     # quality-gate#130: aegis lint, when installed, stands in for go vet + golangci-lint
     # run (Get-AegisLint says when it may). Only its pass is a verdict: exit 1 prints its
     # findings and lets the usual golangci-lint + go vet decide, so a disagreement between

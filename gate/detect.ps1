@@ -1065,6 +1065,91 @@ function Get-GoDeterministic([string]$Root) {
     [pscustomobject]@{ Dirs = $dirs; Error = '' }
 }
 
+# quality-gate#233: qgate.json {"go": {"hotPaths": {"packages": ["internal/sim/..."],
+# "escapeBaseline": "qgate.escapes.txt"}}} -- root-relative package directories ("/..." =
+# with subdirectories) whose heap escapes (`go build -gcflags=-m`) must not grow past a
+# committed baseline. Same contract as Get-GoDeterministic: $null when not declared, else
+# .Packages ({Rel, Recursive}), .Baseline (absolute) and .Error.
+function Get-GoHotPaths([string]$Root) {
+    $file = Join-Path $Root 'qgate.json'
+    if (-not (Test-Path $file)) { return $null }
+    $json = try { Get-Content $file -Raw | ConvertFrom-Json } catch { $null }
+    if ($null -eq $json -or $null -eq $json.go -or $json.go.PSObject.Properties.Name -notcontains 'hotPaths') { return $null }
+    $hp = $json.go.hotPaths
+    $bad = { param($m) [pscustomobject]@{ Packages = @(); Baseline = ''; Error = $m } }
+    if ($hp -isnot [pscustomobject] -or $hp.packages -isnot [Array] -or -not $hp.packages) {
+        return (& $bad 'qgate.json "go.hotPaths.packages" must be a non-empty array of root-relative package directories ("internal/sim" or "internal/sim/...")')
+    }
+    $pkgs = @()
+    foreach ($e in $hp.packages) {
+        if ($e -isnot [string] -or -not $e.Trim()) { return (& $bad 'qgate.json "go.hotPaths.packages" entries must be non-empty strings') }
+        $p = $e.Trim() -replace '\\', '/'
+        $rec = $p -eq '...' -or $p.EndsWith('/...')
+        $rel = ($p -replace '(^|/)\.\.\.$', '' -replace '^\./', '').TrimEnd('/')
+        if ($rel -eq '.') { $rel = '' }
+        if (-not (Test-Path (Join-Path $Root $rel) -PathType Container)) { return (& $bad "qgate.json go.hotPaths.packages '$e' is not a directory") }
+        $pkgs += [pscustomobject]@{ Rel = $rel; Recursive = $rec }
+    }
+    $bl = if ($hp.PSObject.Properties.Name -contains 'escapeBaseline') { $hp.escapeBaseline } else { 'qgate.escapes.txt' }
+    if ($bl -isnot [string] -or -not $bl.Trim()) { return (& $bad 'qgate.json "go.hotPaths.escapeBaseline" must be a root-relative file path') }
+    [pscustomobject]@{ Packages = $pkgs; Baseline = [IO.Path]::GetFullPath((Join-Path $Root $bl)); Error = '' }
+}
+
+# One Go stack's half of go.hotPaths: `go build -gcflags=-m` over the hot packages inside
+# $Dir, its "escapes to heap" / "moved to heap" lines keyed by root-relative file and
+# message (no line:col, so unrelated edits do not churn), diffed as a multiset against the
+# baseline lines of the same packages. -Update rewrites those lines and leaves the rest.
+# Output is the phase's detail; a new escape leaves LASTEXITCODE 1. Baseline entries no
+# longer produced land in $script:GoEscapesGone (an [INFO], not a failure).
+function Invoke-GoEscapes([string]$Root, [string]$Dir, $Hot, [switch]$Update) {
+    $script:GoEscapesGone = 0
+    $pre = ([IO.Path]::GetRelativePath($Root, $Dir) -replace '\\', '/').TrimEnd('/')
+    if ($pre -eq '.') { $pre = '' }
+    # shortcut: an entry that also covers a nested module's directory is built from the outer module too (go stops at the nested go.mod); split entries per module if that bites.
+    $mine = @($Hot.Packages | Where-Object { -not $pre -or $_.Rel -eq $pre -or $_.Rel.StartsWith("$pre/") })
+    $patterns = @($mine | ForEach-Object {
+            $local = if ($pre) { $_.Rel.Substring($pre.Length).TrimStart('/') } else { $_.Rel }
+            $p = if ($local) { "./$local" } else { '.' }
+            if ($_.Recursive) { if ($local) { "$p/..." } else { './...' } } else { $p }
+        })
+    if (-not $patterns) { return }
+    $inScope = {
+        param($line)
+        $f = $line.Substring(0, [Math]::Max(0, $line.IndexOf('.go: ') + 3))
+        $d = if ($f.Contains('/')) { $f.Substring(0, $f.LastIndexOf('/')) } else { '' }
+        foreach ($m in $mine) { if ($d -eq $m.Rel -or ($m.Recursive -and (-not $m.Rel -or $d.StartsWith("$($m.Rel)/")))) { return $true } }
+        $false
+    }
+    # -gcflags without a pattern= prefix applies to the packages named here only.
+    $out = @(go build '-gcflags=-m' @patterns 2>&1 | ForEach-Object { "$_" })
+    if ($LASTEXITCODE -ne 0) { $out; return }
+    $cur = @($out | Where-Object { $_ -notmatch 'does not escape' } | ForEach-Object {
+            if ($_ -match '^(.+?\.go):\d+:\d+: (.*(?:escapes to heap|moved to heap: ).*)$') {
+                $f = $Matches[1] -replace '\\', '/' -replace '^\./', ''
+                "$(if ($pre) { "$pre/" })${f}: $($Matches[2])"
+            }
+        } | Sort-Object)
+    $base = @(if (Test-Path -LiteralPath $Hot.Baseline) { Get-Content -LiteralPath $Hot.Baseline | Where-Object { $_.Trim() -and -not $_.StartsWith('#') } })
+    $old = @($base | Where-Object { & $inScope $_ })
+    if ($Update) {
+        $all = @(@($base | Where-Object { -not (& $inScope $_) }) + $cur | Sort-Object)
+        New-Item -ItemType Directory -Path (Split-Path $Hot.Baseline) -Force | Out-Null
+        [IO.File]::WriteAllText($Hot.Baseline, "# qgate go.hotPaths escape baseline (qgate -Only go -UpdateEscapes rewrites it)`n" + (($all | ForEach-Object { "$_`n" }) -join ''))
+        $script:Lines += "[INFO] go escapes: baseline written, $($cur.Count) escape(s) for $($patterns -join ' ') -> $($Hot.Baseline)"
+        return
+    }
+    $left = [Collections.Generic.List[string]]::new([string[]]$old)
+    $new = @(foreach ($c in $cur) { if (-not $left.Remove($c)) { $c } })
+    $script:GoEscapesGone = $left.Count
+    if ($new) {
+        "$($new.Count) new heap escape(s) in go.hotPaths packages, not in $($Hot.Baseline):"
+        $new | ForEach-Object { "       $_" }
+        "       why: go build -gcflags=-m=2 $($patterns -join ' ')"
+        '       accepted on purpose: qgate -Only go -UpdateEscapes, then commit the baseline diff'
+        $global:LASTEXITCODE = 1
+    }
+}
+
 # quality-gate#40: qgate.json {"go": {"lintGoos": ["linux"]}} -- extra GOOS targets that
 # go vet and golangci-lint run under at -Full, so a _linux.go file is not first read by
 # CI. Opt-in only: cross-GOOS turns cgo off, and a cgo package or a Windows-only import

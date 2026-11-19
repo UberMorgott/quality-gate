@@ -643,6 +643,39 @@ if ((Get-Command deadcode -ErrorAction SilentlyContinue) -and -not (Test-GoToolS
     Check 'a module with no main package is not a deadcode warning' (-not (Get-GoDeadcode $dc)) "$(Get-GoDeadcode $dc)"
 } else { Write-Output '[skip] deadcode not on PATH or stale -- deadcode checks cannot run' }
 
+# #233: heap-escape baseline, opt-in through qgate.json go.hotPaths. No key is no phase; a
+# clean hot package passes; a new escape fails naming file and variable; -UpdateEscapes
+# accepts it; an escape gone from the code is an [INFO], not a failure.
+Check 'no go.hotPaths key is no go escapes phase' ($script:noCfgOut -and $script:noCfgOut -notmatch 'go escapes') $script:noCfgOut
+$hotd = Join-Path $tmp 'go-hot'
+Copy-Item (Join-Path $PSScriptRoot 'testdata\go-fixture') $hotd -Recurse
+New-Item -ItemType Directory -Path (Join-Path $hotd 'hot') | Out-Null
+$hotSrc = "// Package hot is a hot path.`npackage hot`n`n// Sum adds xs.`nfunc Sum(xs []int) int {`n`tt := 0`n`tfor _, x := range xs {`n`t`tt += x`n`t}`n`treturn t`n}"
+Set-GoFile (Join-Path $hotd 'hot\hot.go') $hotSrc
+[IO.File]::WriteAllText((Join-Path $hotd 'qgate.json'), '{"go": {"hotPaths": {"packages": "hot"}}}')
+Check 'a non-array go.hotPaths.packages is a named config error' ((Get-GoHotPaths $hotd).Error -match 'must be a non-empty array')
+[IO.File]::WriteAllText((Join-Path $hotd 'qgate.json'), '{"go": {"hotPaths": {"packages": ["nosuch/..."]}}}')
+Check 'a go.hotPaths directory that does not exist is a named config error' ((Get-GoHotPaths $hotd).Error -match "'nosuch/\.\.\.' is not a directory")
+[IO.File]::WriteAllText((Join-Path $hotd 'qgate.json'), '{"go": {"hotPaths": {"packages": ["hot/..."], "escapeBaseline": "qgate/escapes.txt"}}}')
+$r = (& pwsh -NoProfile -File $gate -Root $hotd -Only go -Fast 2>&1 | Out-String); $code = $LASTEXITCODE
+Check 'an opted-in hot package with no escapes passes go escapes' (($code -eq 0) -and ($r -match '(?m)^\[PASS\] go escapes')) $r
+Set-GoFile (Join-Path $hotd 'hot\hot.go') "$hotSrc`n`n// New returns a heap int.`nfunc New() *int {`n`tv := 1`n`treturn &v`n}"
+$r = (& pwsh -NoProfile -File $gate -Root $hotd -Only go -Fast 2>&1 | Out-String); $code = $LASTEXITCODE
+Check 'a new escape in a hot package fails go escapes, naming file and variable' `
+    (($code -eq 1) -and ($r -match '(?m)^\[FAIL\] go escapes') -and ($r -match 'hot/hot\.go: moved to heap: v') -and ($r -match 'gcflags=-m=2 \./hot/\.\.\.')) $r
+$hot = Get-GoHotPaths $hotd
+Push-Location $hotd
+try {
+    $null = Invoke-GoEscapes $hotd $hotd $hot -Update
+    $bl = Get-Content (Join-Path $hotd 'qgate\escapes.txt') -Raw
+    Check '-UpdateEscapes writes the escape without line:col' ($bl -match '(?m)^hot/hot\.go: moved to heap: v$') $bl
+    $o = @(Invoke-GoEscapes $hotd $hotd $hot); $c = $LASTEXITCODE
+    Check 'an escape held by the baseline passes' (($c -eq 0) -and -not $o) "$o"
+    Set-GoFile (Join-Path $hotd 'hot\hot.go') $hotSrc
+    $o = @(Invoke-GoEscapes $hotd $hotd $hot); $c = $LASTEXITCODE
+    Check 'an escape gone from the code is counted, not failed' (($c -eq 0) -and -not $o -and $script:GoEscapesGone -eq 1) "$o gone=$($script:GoEscapesGone)"
+} finally { Pop-Location }
+
 # #46: purity profile, opt-in through qgate.json go.deterministic. No key is no check; a
 # malformed key is named; a listed impure package is warned per construct; a listed pure
 # package is not.
