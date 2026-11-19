@@ -4122,6 +4122,42 @@ $o = (& pwsh -NoProfile -File $landGate -Root $landC 2>&1 | Out-String); $c = $L
 Check 'a land whose rebase conflicts aborts the rebase and pushes nothing (#221)' `
     (($c -eq 1) -and ($o -match 'rebase onto origin/main failed') -and -not (Test-Path (Join-Path $landC '.git\rebase-merge')) -and
     ((git -C $landBare log -1 --format=%s main 2>$null) -eq 'conflict b')) "code=$c $o"
+# #241: main moves on the remote while the pre-push gate runs (a push from outside the lock).
+# land re-fetches, rebases and pushes again instead of failing 'cannot lock ref'.
+$env:QGATE_PUSH_QUEUE = "selftest-$([guid]::NewGuid().ToString('N'))"
+$mover = Join-Path $tmp 'land-mover'
+git clone -q $landBare $mover *> $null
+Set-Content (Join-Path $mover 'mover.txt') 'mover'
+git -C $mover add -A 2>$null
+git -C $mover -c user.email=selftest@local -c user.name=selftest commit -qm mover *> $null
+$landM = Join-Path $tmp 'land-m'
+git clone -q $landBare $landM *> $null
+New-Item -ItemType Directory -Force -Path (Join-Path $landM 'm') | Out-Null
+[IO.File]::WriteAllText((Join-Path $landM 'm\go.mod'), "module m`n`ngo 1.21`n") # a non-base stack: land takes the push queue
+git -C $landM add -A 2>$null
+git -C $landM -c user.email=selftest@local -c user.name=selftest commit -qm m *> $null
+git -C $landM config core.hooksPath .git/hooks 2>$null
+git -C $landM config user.email selftest@local 2>$null; git -C $landM config user.name selftest 2>$null
+$moverSh = $mover -replace '\\', '/'
+[IO.File]::WriteAllText((Join-Path $landM '.git\hooks\pre-push'),
+    "#!/bin/sh`necho `"`$QGATE_SLOT_HELD`" >> .git/slot-held`nif [ ! -f .git/moved ]; then touch .git/moved; unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE; git -C '$moverSh' push -q origin HEAD:refs/heads/main; fi`n")
+$o = (& pwsh -NoProfile -File $landGate -Root $landM 2>&1 | Out-String); $c = $LASTEXITCODE
+$landLog = @(git -C $landBare log --format=%s main 2>$null)
+Check 'a land whose main moved during the pre-push gate rebases and pushes again (#241)' `
+    (($c -eq 0) -and ($o -match 'moved during the push, rebasing again') -and ($landLog[0] -eq 'm') -and ('mover' -in $landLog)) "code=$c log=$($landLog -join ',') $o"
+$slotHeld = @(Get-Content (Join-Path $landM '.git\slot-held') -ErrorAction SilentlyContinue)
+Check 'land holds the push queue across rebase + push, and tells the pre-push gate (#241)' `
+    (($slotHeld.Count -eq 2) -and -not @($slotHeld | Where-Object { $_ -ne '1' })) "slot-held=$($slotHeld -join ',')"
+# The other side: a push the gate refused, with main unmoved, still fails once, no retry.
+Set-Content (Join-Path $landM 'm.txt') 'm2'
+git -C $landM add -A 2>$null
+git -C $landM commit -qm m2 *> $null
+[IO.File]::WriteAllText((Join-Path $landM '.git\hooks\pre-push'), "#!/bin/sh`nexit 1`n")
+$o = (& pwsh -NoProfile -File $landGate -Root $landM 2>&1 | Out-String); $c = $LASTEXITCODE
+Check 'a land the pre-push gate refuses fails without a retry (#241)' `
+    (($c -eq 1) -and ($o -match 'git push exited 1 \(the pre-push gate output is above\)') -and ($o -notmatch 'rebasing again') -and
+    ((git -C $landBare log -1 --format=%s main 2>$null) -eq 'm')) "code=$c $o"
+$env:QGATE_PUSH_QUEUE = $null
 
 # A hook does not run in the environment a terminal does: git exports GIT_DIR and
 # leaves GIT_WORK_TREE unset, and under those two variables git stops DISCOVERING the
