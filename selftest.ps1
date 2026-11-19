@@ -5010,6 +5010,14 @@ try {
     $r = Invoke-Gate $cust
     Check 'a go test failure after 145 passing packages is still reported' `
         (($r.Code -ne 0) -and ($r.Out -match 'TestFlaky') -and ($r.Out -match 'want 1, got 2') -and ($r.Out -match '\[145 passing go test package lines omitted\]')) $r.Out
+    # #224: a script's failing line between 200 `ok <case>` lines (which mention "failure"
+    # themselves) fell into the cut. Over budget, the failure line stays; the detail stays capped.
+    [IO.File]::WriteAllText($custJson,
+        '{"checks":[{"name":"preflight","run":"1..100 | % { ''ok   case '' + $_ + '' wrong hash in the accept-list = failure stands'' }; ''FAIL case-42 exits 1 (got 0)''; 101..200 | % { ''ok   case '' + $_ + '' wrong hash in the accept-list = failure stands'' }; exit 1","level":"fast"}]}')
+    $null = Invoke-Trust $cust
+    $r = Invoke-Gate $cust
+    Check 'a failing line among 200 passing lines is still reported (#224)' `
+        (($r.Code -ne 0) -and ($r.Out -match 'FAIL case-42 exits 1') -and ($r.Out -match 'ok\s+case 200 ') -and ($r.Out -match '\.\.\.\[truncated, \d+ more chars\]') -and ($r.Out.Length -lt 8000)) $r.Out
 
     # Trust is a hash of the checks, so editing the command re-arms the gate. This is
     # the case the feature exists to survive: a pull, a branch switch or a teammate

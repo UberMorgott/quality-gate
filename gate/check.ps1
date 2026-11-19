@@ -842,6 +842,11 @@ function Fail([string]$Message) {
 function Format-StackOutput([string[]]$Lines, [int]$Max) {
     $status = '^\s*(\[(PASS|FAIL|SKIP|UNKNOWN|WARN|NOTE)\]|fix:|run:)'
     $noise = '^(ok\s+\S+\s+(\(cached\)|\d+(\.\d+)?s)|\?\s+\S+\s+\[no test files\])'
+    # quality-gate#224: a custom test script prints `ok <case>` per pass and its `FAIL <case>`
+    # lines last, so the head cut kept the passes and dropped the failure. Over budget, lines
+    # that name a failure (and are not a pass line that merely mentions one) are kept, then the tail.
+    $failing = '(?i)\b(fail(ed|ure|s)?|errors?|assert\w*|exception|panic)\b'
+    $passing = '(?i)^\s*(ok|pass(ed)?|\[?pass\]?)\b'
     $rows = @($Lines | ForEach-Object { "$_" -split "`r?`n" })
     $parts = [Collections.Generic.List[object]]::new(); $blk = $null
     foreach ($r in $rows) {
@@ -860,8 +865,23 @@ function Format-StackOutput([string[]]$Lines, [int]$Max) {
             $omitted = $p.Count - $keep.Count
         }
         $used = 0; $cut = 0
-        foreach ($r in $keep) {
-            if ($used + $r.Length + 1 -le $cap) { $out.Add($r); $used += $r.Length + 1 } else { $cut += $r.Length + 1; $used = $cap + 1 }
+        $hot = @(if ((($keep | Measure-Object -Property Length -Sum).Sum + $keep.Count) -gt $cap) {
+                0..($keep.Count - 1) | Where-Object { $keep[$_] -match $failing -and $keep[$_] -notmatch $passing } })
+        if ($hot) {
+            # Still over budget with failure lines in it: keep those, then fill from the tail.
+            $pick = [Collections.Generic.HashSet[int]]::new()
+            foreach ($i in @($hot) + @(($keep.Count - 1)..0)) {
+                if ($pick.Contains($i)) { continue }
+                if ($used + $keep[$i].Length + 1 -le $cap) { [void]$pick.Add($i); $used += $keep[$i].Length + 1 } else { $cut += $keep[$i].Length + 1 }
+            }
+            $gap = $false
+            for ($i = 0; $i -lt $keep.Count; $i++) {
+                if ($pick.Contains($i)) { $out.Add($keep[$i]); $gap = $false } elseif (-not $gap) { $out.Add('...'); $gap = $true }
+            }
+        } else {
+            foreach ($r in $keep) {
+                if ($used + $r.Length + 1 -le $cap) { $out.Add($r); $used += $r.Length + 1 } else { $cut += $r.Length + 1; $used = $cap + 1 }
+            }
         }
         if ($omitted) { $out.Add("...[$omitted passing go test package lines omitted]") }
         if ($cut) { $out.Add("...[truncated, $cut more chars]") }
