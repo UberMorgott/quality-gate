@@ -331,6 +331,7 @@ public sealed class QGateHarmony : ISignatureTypeProvider<string, object>, ICust
         checkedSinks = new();
         nChecked = nDynamic = nComputed = nUnloaded = 0;
         CheckAttributes();
+        guards = PrepareGuards();
         CheckIL();
         foreach (var (msg, sink) in stored) (checkedSinks.Contains(sink) ? probes : fails).Add(msg);
     }
@@ -751,6 +752,36 @@ public sealed class QGateHarmony : ISignatureTypeProvider<string, object>, ICust
         return (BaseName(r, mr.Parent), r.GetString(mr.Name), mr.DecodeMethodSignature(this, null), gen);
     }
 
+    // "PatchClass|TypeName" pairs a Prepare() null-checks TypeByName("TypeName") for. Prepare
+    // false skips the whole patch class: Harmony never calls its TargetMethod (#215).
+    // shortcut: any null check counts (`== null` too) and only a literal TypeByName right before it;
+    // read the branch direction / a stored local when a real mod needs it.
+    HashSet<string> guards;
+    string scanType, scanMethod;
+    HashSet<string> PrepareGuards()
+    {
+        var r = mod.R;
+        var g = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var mh in r.MethodDefinitions)
+        {
+            var m = r.GetMethodDefinition(mh);
+            if (m.RelativeVirtualAddress == 0 || r.GetString(m.Name) != "Prepare") continue;
+            List<Ins> ins;
+            try { ins = Decode(mod.Pe.GetMethodBody(m.RelativeVirtualAddress).GetILReader(), new HashSet<int>()); }
+            catch (BadImageFormatException) { continue; }
+            catch (ArgumentException) { continue; }
+            if (ins == null) continue;
+            for (int i = 1; i < ins.Count; i++)
+            {
+                if (ins[i - 1].Op != OpCodes.Ldstr || ins[i].Op != OpCodes.Call || !NullCheckAt(ins, i + 1)) continue;
+                var c = Callee(r, Tok(ins[i].Arg));
+                if (c.Parent == "HarmonyLib.AccessTools" && c.Name == "TypeByName")
+                    g.Add(Name(r, m.GetDeclaringType()) + "|" + Norm(r.GetUserString((UserStringHandle)MetadataTokens.Handle(ins[i - 1].Arg))));
+            }
+        }
+        return g;
+    }
+
     void CheckIL()
     {
         var r = mod.R;
@@ -777,6 +808,8 @@ public sealed class QGateHarmony : ISignatureTypeProvider<string, object>, ICust
             targets.Add(er.HandlerOffset);
             if (er.Kind == ExceptionRegionKind.Filter) targets.Add(er.FilterOffset);
         }
+        scanType = Name(r, m.GetDeclaringType());
+        scanMethod = r.GetString(m.Name);
         var locKey = "L" + MetadataTokens.GetRowNumber(mh) + ":";
         var st = new List<V>();
         // Failed lookups whose null is followed to where it is checked; one never judged fails.
@@ -922,6 +955,9 @@ public sealed class QGateHarmony : ISignatureTypeProvider<string, object>, ICust
             if (a[0]?.K != 's') { nDynamic++; return (null, null); }
             var hit = FindType(a[0].S, true);
             if (hit == null && Unloaded(AsmOf(a[0].S), Norm(a[0].S))) { nUnloaded++; return (null, null); }
+            // Prepare() guards this type: absent, the patch is skipped (Prepare's own lookup still warns).
+            // 'G' tells the member lookup it is handed to that there is nothing to check.
+            if (hit == null && scanMethod != "Prepare" && guards.Contains(scanType + "|" + Norm(a[0].S))) { nUnloaded++; return (null, new V { K = 'G' }); }
             nChecked++;
             if (hit == null) return ($"type {Norm(a[0].S)} not found ({label})", null);
             if (listTargets) okLookup = $"type {hit} ({label})";
@@ -960,6 +996,7 @@ public sealed class QGateHarmony : ISignatureTypeProvider<string, object>, ICust
             int ti = p.IndexOf("System.Type[]");
             if (what == "method" && ti >= 0) typeArgs = a[ti];
         }
+        if (type?.K == 'G') return (null, null);
         if (type?.K != 'T' || type.S.StartsWith("!") || member?.K != 's') { nDynamic++; return (null, null); }
         var tn = FindType(type.S, byName);
         if (tn == null)

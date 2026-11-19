@@ -2545,8 +2545,13 @@ public sealed class Bad
     Check 'a TypeByName null never checked still fails (unchecked AccessTools, plain helper, dereference)' `
         (@((Get-InlineReport $out) -split "`r?`n" -match '^\s*type SoftDep\.(Unchecked|Used|Deref) not found \(AccessTools\.TypeByName\)' |
             ForEach-Object Trim | Select-Object -Unique).Count -eq 3) $out
+    # Prepare() false skips the patch class: its TargetMethod's guarded type may be absent (#215).
+    Check 'a TargetMethod type guarded by the same Prepare() is not a failure' `
+        ((Get-InlineReport $out) -notmatch '(?m)^(?!\[WARN\]).*SoftDep\.Optional') $out
+    Check 'a TargetMethod type Prepare() does not guard still fails' `
+        ((Get-InlineReport $out) -match '(?m)^\s*type SoftDep\.Unguarded not found \(AccessTools\.TypeByName\)') $out
     Check 'lookups that cannot be checked statically are counted' `
-        ($out -match '\[NOTE\] harmony: Mod\.dll -- \d+ target\(s\) checked, 4 not checkable statically') $out
+        ($out -match '\[NOTE\] harmony: Mod\.dll -- \d+ target\(s\) checked, 7 not checkable statically') $out
     Check 'valid Harmony targets stay silent (assignable, interface, generic argumentTypes too)' `
         (($out -notmatch 'HealthPatch|HealthGetterPatch|AssignablePatch|m_health|Lookups\.Valid')) $out
     # -Why names every target that resolved: a new patch is confirmed by name, not by a count.

@@ -62,6 +62,28 @@ public static class ComputedPatch
     public static void Postfix() { }
 }
 
+// An optional plugin's target: Prepare() false skips the patch, TargetMethod is never called (#215).
+[HarmonyPatch]
+public static class OptionalPatch
+{
+    public static bool Prepare() => AccessTools.TypeByName("SoftDep.Optional") != null;
+
+    public static MethodBase TargetMethod() => AccessTools.Method(AccessTools.TypeByName("SoftDep.Optional"), "Run");
+
+    public static void Postfix() { }
+}
+
+// Prepare guards a different type: the TargetMethod's own missing type still fails.
+[HarmonyPatch]
+public static class MisguardedPatch
+{
+    public static bool Prepare() => AccessTools.TypeByName("SoftDep.Guard") != null;
+
+    public static MethodBase TargetMethod() => AccessTools.Method(AccessTools.TypeByName("SoftDep.Unguarded"), "Run");
+
+    public static void Postfix() { }
+}
+
 public static class Lookups
 {
     public static object Valid() => AccessTools.Field(typeof(Hud), "m_health");
