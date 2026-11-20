@@ -4012,6 +4012,70 @@ function Wait-CustomCheck($Proc, [int]$TimeoutSec) {
     }
 }
 
+# One qgate.json command check, launched. Redirected to files, not read from pipes: a
+# process that fills a pipe nobody is draining blocks forever, and the whole reason there
+# is a timeout is that this command may not come back. Keyed by check AND process, like
+# the Go build directory: two agents in one repo must not write over each other.
+function Start-CustomCheck($c) {
+    $outFile = Join-Path ([IO.Path]::GetTempPath()) "quality-gate-custom-$(Get-PathKey "$Root|$($c.Name)")-$PID.out"
+    $sw = [Diagnostics.Stopwatch]::StartNew()
+    # Read before the launch, so nothing born after it can be mistaken for something
+    # that was already here: this is the whole defence against a recycled pid.
+    $launchedAt = Get-Date
+    $p = Start-Process pwsh -ArgumentList '-NoProfile', '-Command', $c.Run `
+        -WorkingDirectory $Root -NoNewWindow -PassThru `
+        -RedirectStandardOutput $outFile -RedirectStandardError "$outFile.err"
+    [pscustomobject]@{ Check = $c; Proc = $p; OutFile = $outFile; Watch = $sw; LaunchedAt = $launchedAt; Done = $false; Loaded = 0.0; Code = 1; Leak = ''; Text = '' }
+}
+
+# After exit (.Done) or timeout: exit code, leaked processes, output; temp files removed.
+function Complete-CustomCheck($r) {
+    $r.Watch.Stop()
+    # Kill the tree, not the shell: `pwsh -Command` is a parent, and the build it
+    # started is what is actually hanging.
+    if (-not $r.Done) { try { $r.Proc.Kill($true) } catch { } ; [void]$r.Proc.WaitForExit(5000) }
+    else { $r.Proc.WaitForExit() }
+    $r.Code = if ($r.Done) { $r.Proc.ExitCode } else { 1 }
+    # Asked before the temp files are removed: a leaked child still holding the
+    # inherited stdout handle keeps them undeletable.
+    $r.Leak = Get-LeakReport $r.Proc.Id $r.LaunchedAt $r.Check.Name
+    $r.Text = ((@((Get-Content $r.OutFile -Raw -ErrorAction SilentlyContinue),
+                (Get-Content "$($r.OutFile).err" -Raw -ErrorAction SilentlyContinue)) -join '') -as [string]).TrimEnd()
+    Remove-Item $r.OutFile, "$($r.OutFile).err" -Force -ErrorAction SilentlyContinue
+    $r
+}
+
+# qgate.json "parallelChecks": N -- up to N command checks at once. A push lane of 31 test
+# suites that mostly wait on timers and child processes ran one by one in ~4 min. Each
+# check keeps its own process, timeout (full-load seconds not counted, 4x cap, #234) and
+# leak report; the caller reports them in declared order. Opt-in: checks that share files
+# (two builds of one project) must not be pooled. Not part of the trust hash -- it changes
+# when the trusted commands run, not what runs.
+function Invoke-CustomPool($Checks, [int]$Size) {
+    $todo = [Collections.Generic.Queue[object]]::new([object[]]@($Checks))
+    $running = [Collections.Generic.List[object]]::new()
+    $results = @{}
+    $prev = try { Get-CpuIdleSample } catch { $null }
+    $tick = [Diagnostics.Stopwatch]::StartNew()
+    while ($todo.Count -or $running.Count) {
+        while ($running.Count -lt $Size -and $todo.Count) { $running.Add((Start-CustomCheck $todo.Dequeue())) }
+        [void]$running[0].Proc.WaitForExit(250)
+        $now = try { Get-CpuIdleSample } catch { $null }
+        $dt = $tick.Elapsed.TotalSeconds; $tick.Restart()
+        $starved = $prev -and $now -and ($now.Total -gt $prev.Total) -and (($now.Idle - $prev.Idle) / ($now.Total - $prev.Total)) -lt 0.05
+        $prev = $now
+        foreach ($r in @($running)) {
+            if ($starved) { $r.Loaded += $dt }
+            $wall = $r.Watch.Elapsed.TotalSeconds
+            $r.Done = $r.Proc.HasExited
+            if (-not $r.Done -and ($wall - $r.Loaded) -lt $r.Check.TimeoutSec -and $wall -lt 4 * $r.Check.TimeoutSec) { continue }
+            [void]$running.Remove($r)
+            $results[$r.Check.Name] = Complete-CustomCheck $r
+        }
+    }
+    $results
+}
+
 function Invoke-CustomStack($s) {
     $custom = Get-CustomChecks $Root
     if (-not $custom) { return }
@@ -4033,6 +4097,13 @@ function Invoke-CustomStack($s) {
     # From the repository root, whatever -Root said: a command written in qgate.json
     # is written against the repository, not against wherever the shell stood.
     Set-Location $Root
+    # "parallelChecks" (opt-in): the command checks this lane runs go through a pool first;
+    # the loop below then reports them in qgate.json order, as a sequential run would.
+    $pooled = @{}
+    if ($custom.Parallel -gt 1) {
+        $pool = @($custom.Checks | Where-Object { -not $_.Smoke -and -not (($_.Level -eq 'full' -and -not $Full) -or ($_.Level -eq 'push' -and -not ($Full -or $script:PushLane))) })
+        if ($pool.Count -gt 1) { $pooled = Invoke-CustomPool $pool $custom.Parallel }
+    }
     foreach ($c in $custom.Checks) {
         # The same fast/full split every other phase uses: `full` is the level that
         # guards a commit and CI, `fast` also runs on every agent turn.
@@ -4045,32 +4116,14 @@ function Invoke-CustomStack($s) {
             continue
         }
         if ($c.Smoke) { Invoke-SmokeCheck $c; continue }
-        # Redirected to files, not read from pipes: a process that fills a pipe nobody
-        # is draining blocks forever, and the whole reason there is a timeout here is
-        # that this command may not come back. Keyed by check AND process, like the Go
-        # build directory: two agents in one repo must not write over each other.
-        $outFile = Join-Path ([IO.Path]::GetTempPath()) "quality-gate-custom-$(Get-PathKey "$Root|$($c.Name)")-$PID.out"
-        $errFile = "$outFile.err"
-        $sw = [Diagnostics.Stopwatch]::StartNew()
-        # Read before the launch, so nothing born after it can be mistaken for something
-        # that was already here: this is the whole defence against a recycled pid.
-        $launchedAt = Get-Date
-        $p = Start-Process pwsh -ArgumentList '-NoProfile', '-Command', $c.Run `
-            -WorkingDirectory $Root -NoNewWindow -PassThru `
-            -RedirectStandardOutput $outFile -RedirectStandardError $errFile
-        $wait = Wait-CustomCheck $p $c.TimeoutSec
-        $done = $wait.Done
-        $sw.Stop()
-        # Kill the tree, not the shell: `pwsh -Command` is a parent, and the build it
-        # started is what is actually hanging.
-        if (-not $done) { try { $p.Kill($true) } catch { } ; [void]$p.WaitForExit(5000) }
-        $code = if ($done) { $p.ExitCode } else { 1 }
-        # Asked before the temp files are removed: a leaked child still holding the
-        # inherited stdout handle keeps them undeletable.
-        $leak = Get-LeakReport $p.Id $launchedAt $c.Name
-        $text = ((@((Get-Content $outFile -Raw -ErrorAction SilentlyContinue),
-                    (Get-Content $errFile -Raw -ErrorAction SilentlyContinue)) -join '') -as [string]).TrimEnd()
-        Remove-Item $outFile, $errFile -Force -ErrorAction SilentlyContinue
+        $r = $pooled[$c.Name]
+        if (-not $r) {
+            $r = Start-CustomCheck $c
+            $wait = Wait-CustomCheck $r.Proc $c.TimeoutSec
+            $r.Done = $wait.Done; $r.Loaded = $wait.Loaded
+            $r = Complete-CustomCheck $r
+        }
+        $done = $r.Done; $code = $r.Code; $leak = $r.Leak; $text = $r.Text; $sw = $r.Watch; $wait = @{ Loaded = $r.Loaded }
         # The timeout goes in the NAME. "the command never came back" and "it exited 1"
         # are different findings, and the raw output cannot tell them apart -- a killed
         # command usually printed nothing at all.

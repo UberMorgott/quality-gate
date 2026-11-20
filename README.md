@@ -109,6 +109,7 @@ Place one optional `qgate.json` at the repository root. Tool-specific rules rema
 | Key | Meaning |
 | --- | --- |
 | `checks` | Array of custom checks: unique `name` matching `^[a-z0-9][a-z0-9._-]*$`, `run` command or `smoke` object, `level` (`fast` runs on every commit, `push` in a pre-push hook without `-Full` or with `-Push`, default `full` only under `-Full`, which runs all three), positive `timeoutSec` (default 600; seconds in which the machine had under 5% idle CPU do not count, since the gate runs BelowNormal, up to a hard cap of 4x `timeoutSec` wall). |
+| `parallelChecks` | Opt-in whole number 1-16: up to that many `run` checks of the lane at once, each with its own timeout and leak report, reported in declared order. Only for checks that share no files. Not part of the trust hash. |
 | `baseline` | Git revision for existing-debt adoption, including hooks; use a fixed commit SHA, not a branch. |
 | `tools` | Exact version pins for `go`, `golangci-lint`, `cargo`, `node`, `buf`, `gdformat`, `gdlint`, `gdtoolkit`, `godot`; mismatches warn in fast and fail in full. |
 | `strictSkips` | Opt-in, full level only (hooks included): `true` fails the run on any `[SKIP]`; an array (`["typos", "vuln", "tidy"]`) fails only skips whose line starts with a listed check name. Skips caused by an earlier failure are not counted. |

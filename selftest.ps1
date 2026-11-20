@@ -5212,6 +5212,28 @@ try {
         (($r.Code -ne 0) -and ($r.Out -match '\[FAIL\] boom') -and ($r.Out -match 'the-real-reason') -and
             ($r.Out -match 'run: Write-Output the-real-reason; exit 3')) $r.Out
 
+    # "parallelChecks": the pool runs the checks at once and reports them in declared order;
+    # a failure and a timeout keep their own names; the key is not part of the trust hash
+    # (trusted without it, the checks still run with it). Sequential run of the same checks
+    # is the baseline the parallel one must beat.
+    $pc = '{"name":"p1","run":"Start-Sleep 3","level":"fast"},{"name":"p2","run":"Start-Sleep 3","level":"fast"},{"name":"p3","run":"Start-Sleep 3","level":"fast"},{"name":"p4","run":"Start-Sleep 60","level":"fast","timeoutSec":2}'
+    [IO.File]::WriteAllText($custJson, "{`"checks`":[$pc]}")
+    Invoke-Trust $cust | Out-Null
+    $psw = [Diagnostics.Stopwatch]::StartNew(); $rs = Invoke-Gate $cust; $seqSec = $psw.Elapsed.TotalSeconds
+    [IO.File]::WriteAllText($custJson, "{`"parallelChecks`":4,`"checks`":[$pc]}")
+    $psw.Restart(); $r = Invoke-Gate $cust; $parSec = $psw.Elapsed.TotalSeconds
+    $order = @([regex]::Matches($r.Out, '(?m)^\[(PASS|FAIL)\] (p\d)') | ForEach-Object { $_.Groups[2].Value })
+    Check '"parallelChecks" runs checks at once, reports them in declared order, trust unchanged' `
+        ((($order -join ',') -eq 'p1,p2,p3,p4') -and ($parSec -lt $seqSec - 4) -and ($r.Out -notmatch 'untrusted')) "seq=$seqSec par=$parSec $($r.Out)"
+    Check '"parallelChecks" names a pooled timeout as a timeout' `
+        (($r.Code -ne 0) -and ($r.Out -match '\[FAIL\] p4 -- timeout after 2s') -and ($r.Out -match '\[PASS\] p1') -and ($r.Out -match '\[PASS\] p3')) $r.Out
+    [IO.File]::WriteAllText($custJson, '{"parallelChecks":2,"checks":[{"name":"q1","run":"exit 0","level":"fast"},{"name":"q2","run":"Write-Output pooled-reason; exit 4","level":"fast"}]}')
+    Invoke-Trust $cust | Out-Null
+    $r = Invoke-Gate $cust
+    Check '"parallelChecks" keeps a pooled failure, its output and its command under its own name' `
+        (($r.Code -ne 0) -and ($r.Out -match '\[PASS\] q1') -and ($r.Out -match '\[FAIL\] q2') -and ($r.Out -match 'pooled-reason') -and
+            ($r.Out -match 'run: Write-Output pooled-reason; exit 4')) $r.Out
+
     # A command that never comes back is not a command that failed, and the raw output
     # cannot tell them apart: a killed process usually printed nothing at all.
     [IO.File]::WriteAllText($custJson,
@@ -5273,6 +5295,7 @@ try {
             @{ Json = '{"checks":"not an array"}'; Match = 'must be an array' },
             @{ Json = '{"checks":[{"name":"s","smoke":{"exe":"x"}}]}'; Match = 'smoke needs a "stages" array' },
             @{ Json = '{"checks":[{"name":"s","run":"exit 0","smoke":{"exe":"x","stages":[{"name":"m","ready":"r"}]}}]}'; Match = 'both "run" and "smoke"' },
+            @{ Json = '{"parallelChecks":"4","checks":[{"name":"a","run":"exit 0"}]}'; Match = '"parallelChecks" must be a whole number' },
             @{ Json = '{"checks":[{"name":"s","level":"fast","smoke":{"exe":"x","stages":[{"name":"m","ready":"r"}]}}]}'; Match = 'its level can only be full' })) {
         [IO.File]::WriteAllText($custJson, $case.Json)
         Invoke-Trust $cust | Out-Null

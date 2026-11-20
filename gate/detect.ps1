@@ -1702,6 +1702,13 @@ function Get-CustomChecks([string]$Root) {
     $json = try { Get-Content $file -Raw | ConvertFrom-Json } catch { $null }
     if ($null -eq $json -or $json.PSObject.Properties.Name -notcontains 'checks') { return $null }
     $bad = { param($m) [pscustomobject]@{ Checks = @(); Error = $m } }
+    # "parallelChecks": N runs up to N command checks at once (check.ps1 Invoke-CustomPool).
+    $par = 1
+    if ($json.PSObject.Properties.Name -contains 'parallelChecks') {
+        $pc = $json.parallelChecks
+        if (($pc -isnot [int] -and $pc -isnot [long]) -or $pc -lt 1 -or $pc -gt 16) { return (& $bad "qgate.json `"parallelChecks`" must be a whole number from 1 to 16, got '$pc'") }
+        $par = [int]$pc
+    }
     $raw = $json.checks
     if ($raw -isnot [Array]) { return (& $bad 'qgate.json "checks" must be an array') }
     if ($raw.Count -eq 0) { return $null }
@@ -1756,7 +1763,7 @@ function Get-CustomChecks([string]$Root) {
         }
         $checks += [pscustomobject]@{ Name = $name; Run = $run; Level = $level; TimeoutSec = $sec; Smoke = $smoke }
     }
-    [pscustomobject]@{ Checks = $checks; Error = '' }
+    [pscustomobject]@{ Checks = $checks; Error = ''; Parallel = $par }
 }
 
 # qgate.json "deploy": [{"built": "<path>", "deployed": "<path>"}] -- the copy a game or
