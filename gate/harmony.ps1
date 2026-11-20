@@ -22,7 +22,7 @@ if (-not ('QGateHarmony' -as [type])) { Add-Type -Path (Join-Path $PSScriptRoot 
 # framework's own), and the assembly the build just wrote. BuildProjectReferences=false:
 # `build` already built them, this only asks where they are.
 $msArgs = @($Project, '-t:ResolveReferences', '-getProperty:TargetPath', '-getItem:ReferencePath',
-    '-getItem:ProjectReference', '-p:BuildProjectReferences=false', '-nologo')
+    '-getItem:_MSBuildProjectReferenceExistent', '-p:BuildProjectReferences=false', '-nologo')
 if ($Tfm) { $msArgs += "-p:TargetFramework=$Tfm" }
 $raw = (& dotnet msbuild @msArgs 2>&1 | Out-String)
 $info = if ($LASTEXITCODE -eq 0) { try { $raw | ConvertFrom-Json } catch { $null } }
@@ -36,20 +36,22 @@ $refs = @($info.Items.ReferencePath.FullPath)
 # A referenced project's own references do not flow into ours (a <Private>false</Private> game
 # reference), yet a test project loads that game at run time and looks its types up by name
 # (#184): resolve them too, transitively. A project that will not resolve adds nothing.
-# shortcut: a multi-targeting referenced project is skipped (no TFM passed); pick its nearest TFM when a repo needs it.
+# _MSBuildProjectReferenceExistent = the ProjectReference items after MSBuild picked each one's
+# nearest TFM (SetTargetFramework="TargetFramework=net472" for a multi-targeting project, #244);
+# without it the outer multi-TFM build has no ResolveReferences target.
 $seen = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
-$queue = [Collections.Generic.Queue[string]]::new()
-foreach ($p in @($info.Items.ProjectReference.FullPath)) { if ($p) { $queue.Enqueue($p) } }
+$queue = [Collections.Generic.Queue[object]]::new()
+foreach ($r in @($info.Items._MSBuildProjectReferenceExistent)) { if ($r.FullPath) { $queue.Enqueue($r) } }
 while ($queue.Count) {
-    $p = $queue.Dequeue()
-    if (-not $seen.Add($p)) { continue }
-    $sub = try {
-        & dotnet msbuild $p -t:ResolveReferences -getItem:ReferencePath -getItem:ProjectReference '-p:BuildProjectReferences=false' -nologo 2>$null |
-            Out-String | ConvertFrom-Json
-    } catch { $null }
+    $r = $queue.Dequeue()
+    if (-not $seen.Add("$($r.FullPath)|$($r.SetTargetFramework)")) { continue }
+    $subArgs = @($r.FullPath, '-t:ResolveReferences', '-getItem:ReferencePath', '-getItem:_MSBuildProjectReferenceExistent',
+        '-p:BuildProjectReferences=false', '-nologo')
+    if ($r.SetTargetFramework) { $subArgs += "-p:$($r.SetTargetFramework)" }
+    $sub = try { & dotnet msbuild @subArgs 2>$null | Out-String | ConvertFrom-Json } catch { $null }
     if (-not $sub) { continue }
     $refs += @($sub.Items.ReferencePath.FullPath)
-    foreach ($q in @($sub.Items.ProjectReference.FullPath)) { if ($q) { $queue.Enqueue($q) } }
+    foreach ($q in @($sub.Items._MSBuildProjectReferenceExistent)) { if ($q.FullPath) { $queue.Enqueue($q) } }
 }
 # Our own references first: the checker indexes the first copy of a type it meets.
 $uniq = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
@@ -86,3 +88,5 @@ if ($extra) {
 $lines = [QGateHarmony]::Run(@($mod) + $extra, 1, $refs, (Split-Path $Project), $Root, $Targets.IsPresent)
 $lines
 if ($lines | Where-Object { $_ -notmatch '^\[(WARN|NOTE)\] ' }) { exit 1 }
+# The verdict is the findings, not whichever msbuild probe ran last (#244).
+exit 0

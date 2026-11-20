@@ -2663,6 +2663,49 @@ public static class SuiteLookups
     Check 'a type no reachable assembly declares still fails (TypeByName)' `
         ($hmIn -match '(?m)^(?!\[WARN\]).*type HudGone not found \(AccessTools\.TypeByName\)') $out
 
+    # #244: the referenced project multi-targets. Its outer build has no ResolveReferences target
+    # (MSB4057): the gate must ask it at the TFM MSBuild picked for the reference, so its game
+    # reference resolves, and a clean phase must not inherit that probe's exit code.
+    $hmMulti = New-Item -ItemType Directory -Force (Join-Path $hm 'Multi')
+    [IO.File]::WriteAllText((Join-Path $hmMulti 'Multi.csproj'), @'
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks>netstandard2.0;net8.0</TargetFrameworks>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="Game">
+      <HintPath>..\lib\Game.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+</Project>
+'@)
+    $hmSuite2 = New-Item -ItemType Directory -Force (Join-Path $hm 'Suite2')
+    [IO.File]::WriteAllText((Join-Path $hmSuite2 'Suite2.csproj'), @'
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Multi\Multi.csproj" />
+    <Reference Include="0Harmony">
+      <HintPath>..\lib\0Harmony.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+</Project>
+'@)
+    [IO.File]::WriteAllText((Join-Path $hmSuite2 'Suite2Lookups.cs'), @'
+using HarmonyLib;
+
+public static class Suite2Lookups
+{
+    public static void Run() { _ = AccessTools.TypeByName("Hud"); }
+}
+'@)
+    $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $hmSuite2 -All -Full 2>&1 | Out-String)
+    Check 'a multi-targeting referenced project''s references resolve at its nearest TFM and the phase passes (#244)' `
+        (($out -match '\[PASS\] build') -and ($out -match '\[PASS\] harmony') -and ($out -notmatch 'type Hud not found')) $out
+
     # #125: a legacy (non-SDK) csproj names neither TargetFramework nor TargetFrameworks, only
     # TargetFrameworkVersion. The empty TFM list unrolled to $null and `$tfms[0]` crashed the
     # stack before the harmony phase. Same "game", same dangling target, legacy project file.
