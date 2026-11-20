@@ -749,6 +749,27 @@ if (-not $ParallelStacks -and (Test-Path -LiteralPath $lhCfg)) {
     }
 }
 
+# One JSON line per phase that ran, in every lane and under -Quiet: a consumer's push gate
+# took 10-38 min and nothing recorded which check paid for it. QGATE_TIMINGS = the file
+# (default %LOCALAPPDATA%\qgate\timings.jsonl), `0` turns it off. Advisory: a write that
+# fails (another gate appending, a locked disk) never changes the verdict.
+function Write-PhaseTiming([string]$Name, [double]$Secs, [string]$Result) {
+    $file = if ($env:QGATE_TIMINGS) { $env:QGATE_TIMINGS } elseif ($env:LOCALAPPDATA) { Join-Path $env:LOCALAPPDATA 'qgate\timings.jsonl' } else { Join-Path $HOME '.config/qgate/timings.jsonl' }
+    if ($file -eq '0') { return }
+    $lane = if ($Full) { 'full' } elseif ($script:PushLane) { 'push' } elseif ($script:CommitLane) { 'commit' } else { 'fast' }
+    $repo = if ($env:QGATE_STAGED_AS) { $env:QGATE_STAGED_AS } else { $Root }
+    $line = [ordered]@{ ts = [DateTime]::UtcNow.ToString('o'); repo = $repo; lane = $lane; name = $Name; seconds = [Math]::Round($Secs, 2); result = $Result } | ConvertTo-Json -Compress
+    foreach ($try in 1..3) {
+        try {
+            New-Item -ItemType Directory -Force -Path (Split-Path $file) -ErrorAction Stop | Out-Null
+            # shortcut: one 5 MB generation kept as .1; a longer history needs a real store.
+            if ((Test-Path -LiteralPath $file) -and (Get-Item -LiteralPath $file).Length -gt 5MB) { Move-Item -LiteralPath $file "$file.1" -Force -ErrorAction Stop }
+            [IO.File]::AppendAllText($file, "$line`n")
+            return
+        } catch { Start-Sleep -Milliseconds (50 * $try) }
+    }
+}
+
 function Phase {
     # -Elapsed: seconds the TOOL took, for a phase whose command ran before the block.
     # `dotnet msbuild` and `dotnet format` run ahead of their Phase (their output has to
@@ -795,7 +816,9 @@ function Phase {
     # anything that parses them and inconsistent between machines.
     $secs = if ($Elapsed -ge 0) { $Elapsed } else { $sw.Elapsed.TotalSeconds }
     $sec = if ($Time) { $Time } else { "$($secs.ToString('0.0', [Globalization.CultureInfo]::InvariantCulture))s" }
-    if (($LASTEXITCODE -ne 0) -or ($FailIfOutput -and $out)) {
+    $phaseFailed = ($LASTEXITCODE -ne 0) -or ($FailIfOutput -and $out)
+    Write-PhaseTiming $Name $secs $(if ($phaseFailed) { 'fail' } else { 'pass' })
+    if ($phaseFailed) {
         $script:Lines += "[FAIL] $Name ($sec)"
         if ($out) { $script:Lines += $out }
         # A phase killed because the HOST ran out of memory is not a finding about the

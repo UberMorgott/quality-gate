@@ -124,6 +124,8 @@ $gate = Join-Path $PSScriptRoot 'gate\check.ps1'
 # other's fixtures mid-check.
 $tmp = Join-Path ([IO.Path]::GetTempPath()) "quality-gate-selftest-$([guid]::NewGuid())"
 New-Item -ItemType Directory -Path $tmp | Out-Null
+# Every gate run below appends its phase timings; keep them out of the developer's log.
+$env:QGATE_TIMINGS = Join-Path $tmp 'timings.jsonl'
 
 $script:Fails = 0
 # Counted, because the last line claiming "all checks passed" is the only thing
@@ -5000,6 +5002,13 @@ $r = & $laneRun @{ GIT_EXEC_PATH = 'x' } @('-Only', 'custom', '-All')
 Check 'a pre-push hook runs push checks' (($r.Code -ne 0) -and ($r.Out -match '\[FAIL\] heavy')) "code=$($r.Code) $($r.Out)"
 $r = & $laneRun @{} @('-Only', 'custom', '-All', '-Push')
 Check '-Push runs push checks by hand' (($r.Code -ne 0) -and ($r.Out -match '\[FAIL\] heavy')) "code=$($r.Code) $($r.Out)"
+# Per-phase timings: one JSON line per phase that ran, -Quiet included; skipped phases none.
+$tFile = Join-Path $tmp 'timings-lane.jsonl'
+$r = & $laneRun @{ QGATE_TIMINGS = $tFile } @('-Only', 'custom', '-All', '-Push', '-Quiet')
+$t = @(Get-Content -LiteralPath $tFile -ErrorAction SilentlyContinue | ForEach-Object { $_ | ConvertFrom-Json })
+Check 'each phase run appends name, lane, seconds, result, repo and time to QGATE_TIMINGS under -Quiet' `
+    ((@($t | Where-Object { $_.name -eq 'heavy' -and $_.lane -eq 'push' -and $_.result -eq 'fail' -and $_.seconds -ge 0 -and (Split-Path $_.repo -Leaf) -eq 'lanes' -and $_.ts }).Count -eq 1) -and
+    (@($t | Where-Object { $_.name -eq 'quick' -and $_.result -eq 'pass' }).Count -eq 1)) "code=$($r.Code) $(Get-Content -LiteralPath $tFile -Raw -ErrorAction SilentlyContinue)"
 $r = & $laneRun @{ QGATE_MAX_PARALLEL = '0' } @('-Only', 'custom', '-All', '-Full')
 Check '-Full runs push checks too' (($r.Code -ne 0) -and ($r.Out -match '\[FAIL\] heavy')) "code=$($r.Code) $($r.Out)"
 # An old pre-push job still passing -Full runs the push lane; QGATE_PUSH_FULL=1 keeps -Full.
