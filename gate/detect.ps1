@@ -1042,6 +1042,356 @@ function Get-GoMutants([string]$Dir, [string]$Baseline) {
     if ($hits.Count -gt 20) { "       ... $($hits.Count - 20) more: run gremlins unleash -S l" }
 }
 
+function Get-RustMetadataRaw([string]$Dir, [string]$ManifestPath = '') {
+    if (-not (Get-Command cargo -ErrorAction SilentlyContinue)) {
+        return [pscustomobject]@{ Data = $null; Error = 'cargo not on PATH' }
+    }
+    $prev = $global:LASTEXITCODE
+    $saved = @{}
+    if ($env:GIT_INDEX_FILE -or $env:GIT_DIR -or $env:GIT_WORK_TREE -or $env:GIT_EXEC_PATH -or $env:QGATE_HOOK) {
+        foreach ($v in @(@(& git rev-parse --local-env-vars 2>$null) + 'GIT_EXEC_PATH', 'QGATE_HOOK')) {
+            $item = Get-Item "env:$v" -ErrorAction SilentlyContinue
+            if ($item) { $saved[$v] = $item.Value; Remove-Item "env:$v" }
+        }
+    }
+    $errFile = Join-Path ([IO.Path]::GetTempPath()) "qgate-cargo-meta-$PID-$([IO.Path]::GetRandomFileName()).err"
+    $args = @('metadata', '--offline', '--no-deps', '--format-version', '1')
+    if ($ManifestPath) { $args += '--manifest-path', $ManifestPath }
+    Push-Location -LiteralPath $Dir
+    try {
+        $raw = (& cargo @args 2>$errFile | Out-String)
+        $code = $LASTEXITCODE
+    } finally {
+        Pop-Location
+        foreach ($v in $saved.Keys) { Set-Item "env:$v" $saved[$v] }
+        $errText = if (Test-Path -LiteralPath $errFile) { Get-Content -LiteralPath $errFile -Raw -ErrorAction SilentlyContinue } else { '' }
+        Remove-Item -LiteralPath $errFile -Force -ErrorAction SilentlyContinue
+        $global:LASTEXITCODE = $prev
+    }
+    if ($code -ne 0 -or -not $raw.Trim()) {
+        $why = @("$errText" -split "`r?`n" | Where-Object { $_.Trim() }) | Select-Object -First 1
+        if (-not $why) { $why = "cargo metadata exited $code" }
+        return [pscustomobject]@{ Data = $null; Error = $why }
+    }
+    $meta = try { $raw | ConvertFrom-Json -ErrorAction Stop } catch { $null }
+    if (-not $meta) { return [pscustomobject]@{ Data = $null; Error = 'cargo metadata returned invalid JSON' } }
+    [pscustomobject]@{ Data = $meta; Error = '' }
+}
+
+function Get-RustWorkspaceInfo([string]$Dir, [string]$RepoRoot = '') {
+    $empty = {
+        param([string]$Err)
+        [pscustomobject]@{
+            WorkspaceRoot   = $null
+            IsWorkspace     = $false
+            InRepoWorkspace = $false
+            MemberNames     = [string[]]@()
+            DoctestPackages = [string[]]@()
+            HasLib          = $false
+            Edition         = '2021'
+            MemberEditions  = @()
+            Error           = $Err
+        }
+    }
+    $res = Get-RustMetadataRaw $Dir
+    if ($res.Error) { return (& $empty $res.Error) }
+    $meta = $res.Data
+    $wsRoot = if ($meta.workspace_root) { [IO.Path]::GetFullPath([string]$meta.workspace_root).TrimEnd('\', '/') } else { [IO.Path]::GetFullPath($Dir).TrimEnd('\', '/') }
+    $sep = [IO.Path]::DirectorySeparatorChar
+    $cmp = if ($IsWindows) { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal }
+    $normWithSep = {
+        param([string]$P)
+        $full = [IO.Path]::GetFullPath($P)
+        if ($full.EndsWith('\') -or $full.EndsWith('/')) { $full } else { "$full$sep" }
+    }
+    $repoPrefix = if ($RepoRoot) { & $normWithSep $RepoRoot } else { '' }
+    $isInsideRepo = {
+        param([string]$Path, [bool]$IsFile = $false)
+        if (-not $repoPrefix) { return $true }
+        if (-not $Path) { return $false }
+        $d = if ($IsFile) { [IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($Path)) } else { $Path }
+        if (-not $d) { return $false }
+        (& $normWithSep $d).StartsWith($repoPrefix, $cmp)
+    }
+    $memberIds = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    foreach ($id in @($meta.workspace_members)) { if ($id) { [void]$memberIds.Add([string]$id) } }
+    $allMembers = @($meta.packages | Where-Object { $memberIds.Contains([string]$_.id) })
+    $members = if ($repoPrefix) {
+        @($allMembers | Where-Object { & $isInsideRepo ([string]$_.manifest_path) $true })
+    } else {
+        $allMembers
+    }
+    $inRepoWorkspace = if (-not $repoPrefix) {
+        $true
+    } else {
+        (& $isInsideRepo $wsRoot $false) -and ($members.Count -eq $allMembers.Count)
+    }
+    $memberNames = [string[]]@($members | ForEach-Object { [string]$_.name })
+    $doctestPkgs = [string[]]@($members | Where-Object { @($_.targets | Where-Object { $_.doctest -eq $true }).Count -gt 0 } | ForEach-Object { [string]$_.name })
+    $libKinds = @('lib', 'rlib', 'cdylib', 'dylib', 'proc-macro')
+    $hasLib = [bool]($members | Where-Object { @($_.targets | Where-Object { @($_.kind | Where-Object { $_ -in $libKinds }).Count -gt 0 }).Count -gt 0 } | Select-Object -First 1)
+    $memberEditions = @(@(foreach ($m in $members) {
+        if (-not $m.manifest_path) { continue }
+        $mDir = [IO.Path]::GetDirectoryName([IO.Path]::GetFullPath([string]$m.manifest_path))
+        if (-not $mDir) { continue }
+        [pscustomobject]@{
+            Name      = [string]$m.name
+            DirPrefix = (& $normWithSep $mDir)
+            Edition   = if ($m.edition) { [string]$m.edition } else { '2021' }
+        }
+    }) | Sort-Object { $_.DirPrefix.Length } -Descending)
+    $edition = [string](@($members | Where-Object { $_.edition } | Select-Object -First 1).edition)
+    if (-not $edition) { $edition = [string](@($allMembers | Where-Object { $_.edition } | Select-Object -First 1).edition) }
+    if (-not $edition) { $edition = '2021' }
+    $rootManifest = Join-Path $wsRoot 'Cargo.toml'
+    $isWorkspace = ($allMembers.Count -gt 1) -or ((Test-Path -LiteralPath $rootManifest -PathType Leaf) -and ((Get-Content -LiteralPath $rootManifest -Raw -ErrorAction SilentlyContinue) -match '(?m)^\s*\[workspace\]'))
+    [pscustomobject]@{
+        WorkspaceRoot   = $wsRoot
+        IsWorkspace     = $isWorkspace
+        InRepoWorkspace = $inRepoWorkspace
+        MemberNames     = $memberNames
+        DoctestPackages = $doctestPkgs
+        HasLib          = $hasLib
+        Edition         = $edition
+        MemberEditions  = $memberEditions
+        Error           = ''
+    }
+}
+
+function Get-QGateRustConfig([string]$Root) {
+    $cfg = [pscustomobject]@{
+        Preset          = ''
+        StrictClippy    = 'off'
+        Doc             = 'off'
+        Deny            = 'off'
+        Shear           = 'off'
+        Semver          = 'off'
+        ExtraLints      = [string[]]@()
+        DenyOffline     = $false
+        TestRunner      = 'cargo'
+        FeaturePowerset = ''
+        Miri            = $false
+        Error           = ''
+    }
+    $file = Join-Path $Root 'qgate.json'
+    if (-not (Test-Path -LiteralPath $file)) { return $cfg }
+    $json = try { Get-Content -LiteralPath $file -Raw | ConvertFrom-Json } catch { $null }
+    if ($null -eq $json -or $json.PSObject.Properties.Name -notcontains 'rust') { return $cfg }
+    $raw = $json.rust
+    if ($raw -isnot [Management.Automation.PSCustomObject]) {
+        $cfg.Error = 'qgate.json "rust" must be an object'
+        return $cfg
+    }
+    $knownKeys = @('preset', 'strictClippy', 'doc', 'deny', 'shear', 'semver', 'extraLints', 'denyOffline', 'testRunner', 'featurePowerset', 'miri')
+    foreach ($p in $raw.PSObject.Properties) {
+        if ($p.Name -notin $knownKeys) {
+            $cfg.Error = "qgate.json rust has unknown key '$($p.Name)' -- known: $($knownKeys -join ', ')"
+            return $cfg
+        }
+    }
+    $props = $raw.PSObject.Properties.Name
+    if ($props -contains 'preset') {
+        if ($raw.preset -isnot [string] -or $raw.preset -cnotin '', 'recommended', 'strict') {
+            $cfg.Error = "qgate.json `"rust.preset`" must be '', 'recommended' or 'strict', got '$($raw.preset)'"
+            return $cfg
+        }
+        $cfg.Preset = $raw.preset
+    }
+    $presetMode = switch ($cfg.Preset) {
+        'recommended' { 'warn' }
+        'strict' { 'fail' }
+        default { 'off' }
+    }
+    $cfg.StrictClippy = $presetMode
+    $cfg.Doc = $presetMode
+    $cfg.Deny = $presetMode
+    $cfg.Shear = $presetMode
+
+    $modeMap = @{ strictClippy = 'StrictClippy'; doc = 'Doc'; deny = 'Deny'; shear = 'Shear'; semver = 'Semver' }
+    foreach ($k in $modeMap.Keys) {
+        if ($props -contains $k) {
+            $v = $raw.$k
+            if ($v -isnot [string] -or $v -cnotin 'off', 'warn', 'fail') {
+                $cfg.Error = "qgate.json `"rust.$k`" must be 'off', 'warn' or 'fail', got '$v'"
+                return $cfg
+            }
+            $cfg.($modeMap[$k]) = $v
+        }
+    }
+    if ($props -contains 'extraLints') {
+        if ($raw.extraLints -isnot [Array] -or @($raw.extraLints | Where-Object { $_ -isnot [string] -or -not $_.Trim() })) {
+            $cfg.Error = 'qgate.json "rust.extraLints" must be an array of non-empty lint strings'
+            return $cfg
+        }
+        $cfg.ExtraLints = [string[]]@($raw.extraLints | ForEach-Object { $_.Trim() })
+    }
+    if ($props -contains 'denyOffline') {
+        if ($raw.denyOffline -isnot [bool]) {
+            $cfg.Error = "qgate.json `"rust.denyOffline`" must be true or false, got '$($raw.denyOffline)'"
+            return $cfg
+        }
+        $cfg.DenyOffline = [bool]$raw.denyOffline
+    }
+    if ($props -contains 'testRunner') {
+        if ($raw.testRunner -isnot [string] -or $raw.testRunner -cnotin 'cargo', 'nextest') {
+            $cfg.Error = "qgate.json `"rust.testRunner`" must be 'cargo' or 'nextest', got '$($raw.testRunner)'"
+            return $cfg
+        }
+        $cfg.TestRunner = $raw.testRunner
+    }
+    if ($props -contains 'featurePowerset') {
+        if ($raw.featurePowerset -isnot [string] -or $raw.featurePowerset -cnotin '', 'each', 'powerset') {
+            $cfg.Error = "qgate.json `"rust.featurePowerset`" must be '', 'each' or 'powerset', got '$($raw.featurePowerset)'"
+            return $cfg
+        }
+        $cfg.FeaturePowerset = $raw.featurePowerset
+    }
+    if ($props -contains 'miri') {
+        $m = $raw.miri
+        if ($m -is [bool]) {
+            $cfg.Miri = $m
+        } elseif ($m -is [Management.Automation.PSCustomObject]) {
+            $mProps = $m.PSObject.Properties.Name
+            foreach ($mp in $mProps) {
+                if ($mp -notin 'packages', 'toolchain') {
+                    $cfg.Error = "qgate.json rust.miri has unknown key '$mp' -- known: packages, toolchain"
+                    return $cfg
+                }
+            }
+            $pkgs = [string[]]@()
+            if ($mProps -contains 'packages') {
+                if ($m.packages -isnot [Array] -or @($m.packages | Where-Object { $_ -isnot [string] -or -not $_.Trim() })) {
+                    $cfg.Error = 'qgate.json "rust.miri.packages" must be an array of non-empty package names'
+                    return $cfg
+                }
+                $pkgs = [string[]]@($m.packages | ForEach-Object { $_.Trim() })
+            }
+            $tc = 'nightly'
+            if ($mProps -contains 'toolchain') {
+                if ($m.toolchain -isnot [string] -or -not $m.toolchain.Trim()) {
+                    $cfg.Error = 'qgate.json "rust.miri.toolchain" must be a non-empty string'
+                    return $cfg
+                }
+                $tc = $m.toolchain.Trim()
+            }
+            $cfg.Miri = [pscustomobject]@{ Packages = $pkgs; Toolchain = $tc }
+        } else {
+            $cfg.Error = 'qgate.json "rust.miri" must be a boolean or { packages, toolchain } object'
+            return $cfg
+        }
+    }
+    $cfg
+}
+
+function Get-RustMutants([string]$Dir, [string]$Since, [string]$MutantsExe, [string[]]$ScopeArgs = @('--workspace')) {
+    $prev = $global:LASTEXITCODE
+    $tracked = @()
+    $untracked = @()
+    if ($Since) {
+        $tracked = @((& git -C $Dir -c core.quotepath=false diff --name-only -z --relative $Since -- '*.rs' 2>$null | Out-String) -split "`0" |
+                ForEach-Object { $_.Trim("`n", "`r") } | Where-Object { $_ })
+        $untracked = @((& git -C $Dir -c core.quotepath=false ls-files --others --exclude-standard -z -- '*.rs' 2>$null | Out-String) -split "`0" |
+                ForEach-Object { $_.Trim("`n", "`r") } | Where-Object { $_ })
+        if ($tracked.Count -eq 0 -and $untracked.Count -eq 0) {
+            $global:LASTEXITCODE = $prev
+            return @('[PASS] cargo mutants (no .rs files changed)')
+        }
+    }
+    $tmpOut = Join-Path ([IO.Path]::GetTempPath()) "qgate-rust-mutants-$PID-$([IO.Path]::GetRandomFileName())"
+    $diffFile = $null
+    $diffText = ''
+    try {
+        if ($Since -and $tracked.Count -gt 0) {
+            $diffText = (& git -C $Dir -c core.quotepath=false diff --no-color --no-ext-diff --relative $Since -- '*.rs' 2>$null | Out-String)
+        }
+        if ($Since -and -not $diffText.Trim() -and $untracked.Count -eq 0) {
+            return @('[PASS] cargo mutants (no .rs files changed)')
+        }
+        $runs = [Collections.Generic.List[object]]::new()
+        if ($Since) {
+            if ($diffText.Trim()) {
+                $diffFile = Join-Path ([IO.Path]::GetTempPath()) "qgate-rust-mutants-$PID-$([IO.Path]::GetRandomFileName()).diff"
+                [IO.File]::WriteAllText($diffFile, $diffText)
+                $runs.Add(@('--in-diff', $diffFile))
+            }
+            if ($untracked.Count -gt 0) {
+                $fileArgs = @()
+                foreach ($u in $untracked) { $fileArgs += '--file', $u }
+                $runs.Add($fileArgs)
+            }
+        } else {
+            $runs.Add(@())
+        }
+        $saved = @{}
+        if ($env:GIT_INDEX_FILE -or $env:GIT_DIR -or $env:GIT_WORK_TREE -or $env:GIT_EXEC_PATH -or $env:QGATE_HOOK) {
+            foreach ($v in @(@(& git rev-parse --local-env-vars 2>$null) + 'GIT_EXEC_PATH', 'QGATE_HOOK')) {
+                $item = Get-Item "env:$v" -ErrorAction SilentlyContinue
+                if ($item) { $saved[$v] = $item.Value; Remove-Item "env:$v" }
+            }
+        }
+        $missed = [Collections.Generic.List[string]]::new()
+        $timeouts = [Collections.Generic.List[string]]::new()
+        $summaries = [Collections.Generic.List[string]]::new()
+        $worstCode = 0
+        $failOut = @()
+        Push-Location -LiteralPath $Dir
+        try {
+            $idx = 0
+            foreach ($extraArgs in $runs) {
+                $runOutDir = Join-Path $tmpOut "r$idx"
+                $idx++
+                New-Item -ItemType Directory -Path $runOutDir -Force | Out-Null
+                $mArgs = @('mutants') + @($ScopeArgs) + @('-o', $runOutDir, '--jobs', '2', '--timeout', '60') + @($extraArgs)
+                $out = @(& $MutantsExe @mArgs 2>&1 | ForEach-Object { "$_" })
+                $code = $LASTEXITCODE
+                foreach ($ln in $out) {
+                    $t = $ln.Trim()
+                    if ($t -match '^MISSED\s+') { $missed.Add($t) }
+                    elseif ($t -match '^TIMEOUT\s+') { $timeouts.Add($t) }
+                    elseif ($t -match '^\d+\s+mutants?\s+tested\b') { $summaries.Add($t) }
+                }
+                if ($code -eq 4 -or ($code -notin 0, 2, 3)) {
+                    $worstCode = $code
+                    $failOut = @($out | Where-Object { $_.Trim() })
+                    break
+                }
+                if ($code -eq 2 -and $worstCode -eq 0) { $worstCode = 2 }
+                elseif ($code -eq 3 -and $worstCode -eq 0) { $worstCode = 3 }
+            }
+        } finally {
+            Pop-Location
+            foreach ($v in $saved.Keys) { Set-Item "env:$v" $saved[$v] }
+        }
+        if ($worstCode -eq 4) {
+            $lines = @('[FAIL] cargo mutants: baseline tests failed / unviable')
+            $lines += @($failOut | Select-Object -Last 10 | ForEach-Object { "       $_" })
+            return $lines
+        }
+        if ($worstCode -notin 0, 2, 3) {
+            $why = @($failOut | Select-Object -Last 1)
+            return @("[FAIL] cargo mutants: error (exit $worstCode)$(if ($why) { " -- $why" })")
+        }
+        if ($worstCode -eq 2) {
+            $head = "[WARN] cargo mutants: survived mutant(s)$(if ($summaries.Count) { " ($($summaries -join '; '))" }) -- advisory, not a failure"
+            $lines = @($head) + @($missed | Select-Object -First 20 | ForEach-Object { "       $_" })
+            if ($missed.Count -gt 20) { $lines += "       ... $($missed.Count - 20) more" }
+            if ($timeouts.Count -gt 0) { $lines += @($timeouts | Select-Object -First 10 | ForEach-Object { "       $_" }) }
+            return $lines
+        }
+        if ($worstCode -eq 3) {
+            $head = "[WARN] cargo mutants: timeout(s)$(if ($summaries.Count) { " ($($summaries -join '; '))" }) -- advisory, not a failure"
+            $lines = @($head) + @($timeouts | Select-Object -First 20 | ForEach-Object { "       $_" })
+            if ($timeouts.Count -gt 20) { $lines += "       ... $($timeouts.Count - 20) more" }
+            return $lines
+        }
+        return @("[PASS] cargo mutants$(if ($summaries.Count) { " ($($summaries -join '; '))" })")
+    } finally {
+        Remove-Item -LiteralPath $tmpOut -Recurse -Force -ErrorAction SilentlyContinue
+        if ($diffFile) { Remove-Item -LiteralPath $diffFile -Force -ErrorAction SilentlyContinue }
+        $global:LASTEXITCODE = $prev
+    }
+}
+
 # quality-gate#46: qgate.json {"go": {"deterministic": ["server/internal/sim", ...]}} --
 # package directories, relative to the repository root, that must replay bit-for-bit.
 # Same contract as Get-DeployEntries: $null when nothing is declared, else .Dirs
@@ -2087,16 +2437,56 @@ function Get-Stacks([string]$Root) {
         $stacks += [pscustomobject]@{ Stack = 'web'; Dir = $dir; Rel = (& $rel $dir); Marker = "package.json + $bundler"; Implemented = $true; Warn = $warn }
     }
 
-    foreach ($m in Find-Marker $Root @('Cargo.toml')) {
-        $dir = $m.DirectoryName
-        # A workspace member has no [package] of its own to build; the workspace
-        # root already covers it.
-        if ((Get-Content $m.FullName -Raw) -notmatch '(?m)^\s*\[package\]') { continue }
-        $warn = ''
-        if (-not (Get-Command cargo -ErrorAction SilentlyContinue)) {
-            $warn = 'cargo not on PATH -- the gate cannot verify this stack until it is'
+    $hasCargo = [bool](Get-Command cargo -ErrorAction SilentlyContinue)
+    $seenRoots = @{}
+    $seenMemberManifests = @{}
+    $fallbackWorkspaces = @()
+    $rootNorm = [IO.Path]::GetFullPath($Root)
+    $rootCmp = if ($rootNorm.Length -le 3 -and $rootNorm -match '^[A-Za-z]:\\?$') { $rootNorm.TrimEnd('\') + '\' } else { $rootNorm.TrimEnd('\', '/') }
+    $rootPrefix = if ($rootCmp.EndsWith('\')) { $rootCmp } else { "$rootCmp\" }
+    $rustMarkers = @(Find-Marker $Root @('Cargo.toml') | Sort-Object { ($_.FullName -split '[\\/]').Count }, { $_.FullName.Length })
+    foreach ($m in $rustMarkers) {
+        $manifestPath = [IO.Path]::GetFullPath($m.FullName)
+        if ($seenMemberManifests.ContainsKey($manifestPath)) { continue }
+        $dirNorm = [IO.Path]::GetFullPath($m.DirectoryName).TrimEnd('\', '/')
+        if ($hasCargo) {
+            $metaRes = Get-RustMetadataRaw $m.DirectoryName $m.FullName
+            if (-not $metaRes.Error -and $metaRes.Data) {
+                $meta = $metaRes.Data
+                $seenMemberManifests[$manifestPath] = $true
+                $memberIds = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+                foreach ($id in @($meta.workspace_members)) { if ($id) { [void]$memberIds.Add([string]$id) } }
+                foreach ($pkg in @($meta.packages)) {
+                    if ($memberIds.Contains([string]$pkg.id) -and $pkg.manifest_path) {
+                        $seenMemberManifests[[IO.Path]::GetFullPath([string]$pkg.manifest_path)] = $true
+                    }
+                }
+                $wsRoot = if ($meta.workspace_root) { [IO.Path]::GetFullPath([string]$meta.workspace_root).TrimEnd('\', '/') } else { $dirNorm }
+                $insideRoot = $wsRoot.Equals($rootCmp.TrimEnd('\'), [StringComparison]::OrdinalIgnoreCase) -or $wsRoot.StartsWith($rootPrefix, [StringComparison]::OrdinalIgnoreCase)
+                $emitDir = if ($insideRoot) { $wsRoot } else { $dirNorm }
+                if ($seenRoots.ContainsKey($emitDir)) { continue }
+                $seenRoots[$emitDir] = $true
+                $r = [IO.Path]::GetRelativePath($rootNorm, $emitDir)
+                $relPath = if ($r -eq '.') { '' } else { $r.Replace('\', '/') }
+                $stacks += [pscustomobject]@{ Stack = 'rust'; Dir = $emitDir; Rel = $relPath; Marker = 'Cargo.toml'; Implemented = $true; Warn = '' }
+            } else {
+                if ($seenRoots.ContainsKey($dirNorm)) { continue }
+                $seenRoots[$dirNorm] = $true
+                $r = [IO.Path]::GetRelativePath($rootNorm, $dirNorm)
+                $relPath = if ($r -eq '.') { '' } else { $r.Replace('\', '/') }
+                $stacks += [pscustomobject]@{ Stack = 'rust'; Dir = $dirNorm; Rel = $relPath; Marker = 'Cargo.toml'; Implemented = $true; Warn = "cargo metadata failed -- $($metaRes.Error)" }
+            }
+        } else {
+            $txt = Get-Content -LiteralPath $m.FullName -Raw -ErrorAction SilentlyContinue
+            if ($txt -notmatch '(?m)^\s*\[(workspace|package)\]') { continue }
+            if ($fallbackWorkspaces | Where-Object { $dirNorm.StartsWith("$_\", [StringComparison]::OrdinalIgnoreCase) }) { continue }
+            if ($txt -match '(?m)^\s*\[workspace\]') { $fallbackWorkspaces += $dirNorm }
+            if ($seenRoots.ContainsKey($dirNorm)) { continue }
+            $seenRoots[$dirNorm] = $true
+            $r = [IO.Path]::GetRelativePath($rootNorm, $dirNorm)
+            $relPath = if ($r -eq '.') { '' } else { $r.Replace('\', '/') }
+            $stacks += [pscustomobject]@{ Stack = 'rust'; Dir = $dirNorm; Rel = $relPath; Marker = 'Cargo.toml'; Implemented = $true; Warn = 'cargo not on PATH -- the gate cannot verify this stack until it is' }
         }
-        $stacks += [pscustomobject]@{ Stack = 'rust'; Dir = $dir; Rel = (& $rel $dir); Marker = 'Cargo.toml'; Implemented = $true; Warn = $warn }
     }
 
     # One stack per PROJECT FILE, not per directory: a .NET repo carries several

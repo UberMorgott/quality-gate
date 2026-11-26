@@ -90,6 +90,11 @@ jobs:
           # bootstrap.ps1 is for developer machines; CI only needs it on PATH.
           "$env:RUNNER_TEMP\quality-gate\bin" | Add-Content -Path $env:GITHUB_PATH
 
+      - name: install rust gate tools
+        if: steps.stacks.outputs.rust == 'true'
+        shell: pwsh
+        run: qgate tools "cargo-deny,cargo-shear"
+
       - name: qgate
         shell: pwsh
         run: qgate -All -Full

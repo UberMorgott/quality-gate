@@ -1,4 +1,4 @@
-# Quality gate: one entry point for every static check in the repository.
+﻿# Quality gate: one entry point for every static check in the repository.
 #
 # Token-cheap by design: on success one short line per phase, on failure the raw tool
 # output with its detail capped at 6000 chars (status lines are never cut). Fail-fast -- the first failing phase stops the
@@ -246,6 +246,7 @@ if (Test-Path $pinFile) {
             'go' { if ((& go version 2>$null) -match 'go(\d+\.\d+(\.\d+)?)') { $Matches[1] } }
             'golangci-lint' { if ((& golangci-lint --version 2>$null) -match 'version (\S+)') { $Matches[1].TrimStart('v') } }
             'cargo' { if ((& cargo --version 2>$null) -match 'cargo (\S+)') { $Matches[1] } }
+            'rustc' { if ((& rustc --version 2>$null) -match 'rustc (\S+)') { $Matches[1] } }
             'node' { ((& node --version 2>$null) -as [string]) -replace '^v', '' }
             'buf' { if ((& buf --version 2>$null) -match '(\d+\.\d+\.\d+\S*)') { $Matches[1] } }
             # gdformat and gdlint ship from one pip package at one version, so
@@ -264,7 +265,7 @@ if (Test-Path $pinFile) {
         }
         if (-not $known) {
             # A typo'd key used to be a silent no-op that read as enforcement.
-            $w = "[WARN] qgate.json pins unknown tool '$($p.Name)' -- known: go, golangci-lint, cargo, node, buf, gdformat/gdlint/gdtoolkit, godot"
+            $w = "[WARN] qgate.json pins unknown tool '$($p.Name)' -- known: go, golangci-lint, cargo, rustc, node, buf, gdformat/gdlint/gdtoolkit, godot"
             Write-Output $w
             $script:Advisories += $w
         } elseif ($have -and $have -ne ([string]$p.Value).TrimStart('v')) {
@@ -464,7 +465,7 @@ if ($ParallelStacks) {
         # the root (CI config, scripts, README) still widens.
         $rootOwns = @{
             go     = '(\.go|(^|/)go\.(mod|sum|work))$'
-            rust   = '(\.rs|(^|/)Cargo\.(toml|lock))$'
+            rust   = '(\.rs|(^|/)(Cargo\.(toml|lock)|\.?rustfmt\.toml|\.?clippy\.toml|\.?deny\.toml|rust-toolchain(\.toml)?)|(^|/)\.cargo/config(\.toml)?)$'
             web    = '\.(js|jsx|mjs|cjs|ts|tsx|mts|cts|vue|svelte|css|scss)$'
             dotnet = '\.(cs|csproj)$'
             cpp    = '\.(c|cc|cpp|cxx|h|hh|hpp|hxx)$'
@@ -1481,11 +1482,543 @@ function Invoke-RustStack($s) {
         Fail 'rust: cargo not on PATH (cannot verify this stack)'
         return
     }
-    Phase 'cargo fmt' { cargo fmt --check }
+    $ws = Get-RustWorkspaceInfo $s.Dir $Root
+    $rcfg = Get-QGateRustConfig $Root
+    if ($rcfg.Error) { Fail $rcfg.Error; return }
+
+    $manifestPath = Join-Path $s.Dir 'Cargo.toml'
+    $pkgList = [Collections.Generic.List[string]]::new()
+    foreach ($pkg in @($ws.MemberNames)) { $pkgList.Add('-p'); $pkgList.Add([string]$pkg) }
+    [string[]]$pkgArgs = $pkgList.ToArray()
+    [string[]]$fmtArgs = if ($pkgArgs.Count -gt 0) { $pkgArgs } else { [string[]]@('--manifest-path', $manifestPath) }
+    [string[]]$scopeArgs = if ($ws.InRepoWorkspace) { [string[]]@('--workspace') }
+                           elseif ($pkgArgs.Count -gt 0) { $pkgArgs }
+                           else { [string[]]@('--manifest-path', $manifestPath) }
+
+    $lockDir = if ($ws.WorkspaceRoot) { $ws.WorkspaceRoot } else { $s.Dir }
+    $lockTracked = Invoke-WithoutHookGitEnv {
+        $prevCode = $global:LASTEXITCODE
+        & git -C $lockDir ls-files --error-unmatch Cargo.lock *> $null
+        $ok = ($LASTEXITCODE -eq 0)
+        $global:LASTEXITCODE = $prevCode
+        $ok
+    }
+    [string[]]$lockedArgs = @()
+    if ($lockTracked) { $lockedArgs = [string[]]@('--locked') }
+
+    if ($Fix) {
+        $sep = [IO.Path]::DirectorySeparatorChar
+        $cmp = if ($IsWindows) { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal }
+        $strCmp = if ($IsWindows) { [StringComparer]::OrdinalIgnoreCase } else { [StringComparer]::Ordinal }
+        $stripUnc = {
+            param([string]$Path)
+            if ($Path.StartsWith('\\?\UNC\', [StringComparison]::OrdinalIgnoreCase)) { return '\\' + $Path.Substring(8) }
+            if ($Path.StartsWith('\\?\', [StringComparison]::Ordinal)) { return $Path.Substring(4) }
+            $Path
+        }
+        $resolvePhysical = {
+            param([string]$Path)
+            try { $cur = & $stripUnc ([IO.Path]::GetFullPath($Path)) } catch { return $null }
+            for ($hop = 0; $hop -lt 32; $hop++) {
+                $changed = $false
+                $probe = $cur
+                $tail = [Collections.Generic.List[string]]::new()
+                while ($probe) {
+                    $item = Get-Item -LiteralPath $probe -Force -ErrorAction SilentlyContinue
+                    if ($item -and ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+                        $resolved = try { $item.ResolveLinkTarget($true) } catch { $null }
+                        if (-not $resolved) { return $null }
+                        $target = & $stripUnc ([IO.Path]::GetFullPath($resolved.FullName))
+                        for ($i = $tail.Count - 1; $i -ge 0; $i--) { $target = Join-Path $target $tail[$i] }
+                        $cur = $target
+                        $changed = $true
+                        break
+                    }
+                    $parent = Split-Path -Path $probe -Parent
+                    if (-not $parent -or $parent -eq $probe) { break }
+                    $tail.Add((Split-Path -Path $probe -Leaf))
+                    $probe = $parent
+                }
+                if (-not $changed) { return $cur }
+            }
+            $null
+        }
+        $rootPhys = & $resolvePhysical $Root
+        if (-not $rootPhys) { $rootPhys = [IO.Path]::GetFullPath($Root) }
+        $rootFull = $rootPhys.TrimEnd('\', '/')
+        $rootPrefix = if ($rootFull.EndsWith('\') -or $rootFull.EndsWith('/')) { $rootFull } else { "$rootFull$sep" }
+        $inRootFiles = [Collections.Generic.List[string]]::new()
+        $outRootFiles = [Collections.Generic.List[string]]::new()
+        $hardLinkFiles = [Collections.Generic.List[string]]::new()
+        $seenFmt = [Collections.Generic.HashSet[string]]::new($strCmp)
+        $fmtCheckOut = Invoke-WithoutHookGitEnv {
+            & cargo fmt @fmtArgs -- --check -l 2>$null
+        }
+        foreach ($ln in @($fmtCheckOut)) {
+            $p = "$ln".Trim()
+            if (-not $p) { continue }
+            $p = & $stripUnc $p
+            $abs = try { [IO.Path]::GetFullPath($p, $s.Dir) } catch { $null }
+            if (-not $abs -or -not (Test-Path -LiteralPath $abs -PathType Leaf)) { continue }
+            if (-not $seenFmt.Add($abs)) { continue }
+            $phys = & $resolvePhysical $abs
+            if (-not $phys -or -not $phys.StartsWith($rootPrefix, $cmp)) {
+                $outRootFiles.Add($abs)
+                continue
+            }
+            $fi = Get-Item -LiteralPath $phys -Force -ErrorAction SilentlyContinue
+            if ($fi -and $fi.LinkType -eq 'HardLink') {
+                $hardLinkFiles.Add($abs)
+                continue
+            }
+            $inRootFiles.Add($abs)
+        }
+        if ($outRootFiles.Count -eq 0 -and $hardLinkFiles.Count -eq 0) {
+            if ($inRootFiles.Count -gt 0) {
+                Invoke-WithoutHookGitEnv {
+                    & cargo fmt @fmtArgs *> $null
+                }
+            }
+        } else {
+            if ($inRootFiles.Count -gt 0) {
+                $byEdition = @{}
+                $defaultEd = if ($ws.Edition) { [string]$ws.Edition } else { '2021' }
+                foreach ($f in $inRootFiles) {
+                    $ed = $defaultEd
+                    foreach ($me in @($ws.MemberEditions)) {
+                        if ($f.StartsWith($me.DirPrefix, $cmp)) { $ed = $me.Edition; break }
+                    }
+                    if (-not $byEdition.ContainsKey($ed)) { $byEdition[$ed] = [Collections.Generic.List[string]]::new() }
+                    $byEdition[$ed].Add($f)
+                }
+                Invoke-WithoutHookGitEnv {
+                    foreach ($ed in $byEdition.Keys) {
+                        [string[]]$files = $byEdition[$ed].ToArray()
+                        & rustfmt --edition $ed --config skip_children=true @files *> $null
+                    }
+                }
+            }
+            if ($outRootFiles.Count -gt 0) {
+                $script:Lines += "[INFO] fix: skipped $($outRootFiles.Count) rustfmt file(s) outside repo root"
+            }
+            if ($hardLinkFiles.Count -gt 0) {
+                $script:Lines += "[INFO] fix: skipped $($hardLinkFiles.Count) hard-linked rustfmt file(s)"
+            }
+        }
+        $global:LASTEXITCODE = 0
+        $script:Lines += '[INFO] fix: cargo fmt'
+    }
+
+    Invoke-WithoutHookGitEnv {
+        Phase 'cargo fmt' { cargo fmt @fmtArgs -- --check }
+    }
     # clippy compiles as it lints, so a separate `cargo build` would only pay the
     # same cost twice. --all-targets covers tests and benches, not just the binary.
-    Phase 'cargo clippy' { cargo clippy --all-targets --quiet -- -D warnings }
-    Invoke-WithoutHookGitEnv { Phase 'cargo test' { cargo test --quiet } }
+    Invoke-WithoutHookGitEnv {
+        Phase 'cargo clippy' { cargo clippy @scopeArgs @lockedArgs --all-targets --quiet -- -D warnings }
+    }
+    if ($rcfg.TestRunner -eq 'nextest') {
+        $nx = Get-ToolPath 'cargo-nextest'
+        if ($nx) {
+            Invoke-WithoutHookGitEnv { Phase 'cargo nextest' { & $nx nextest run @scopeArgs @lockedArgs --no-tests=pass } }
+            if ($ws.DoctestPackages.Count -gt 0) {
+                $docList = [Collections.Generic.List[string]]::new()
+                foreach ($p in $ws.DoctestPackages) { $docList.Add('-p'); $docList.Add([string]$p) }
+                [string[]]$docArgs = $docList.ToArray()
+                Invoke-WithoutHookGitEnv { Phase 'cargo doctest' { cargo test --doc @docArgs @lockedArgs --quiet } }
+            }
+        } else {
+            $script:Lines += '[WARN] cargo-nextest not on PATH (qgate tools cargo-nextest) -- falling back to cargo test'
+            Invoke-WithoutHookGitEnv { Phase 'cargo test' { cargo test @scopeArgs @lockedArgs --quiet } }
+        }
+    } else {
+        Invoke-WithoutHookGitEnv { Phase 'cargo test' { cargo test @scopeArgs @lockedArgs --quiet } }
+    }
+
+    $reportRustCheck = {
+        param([string]$Name, [string]$Mode, [bool]$HasIssues, [double]$Secs, [string]$Suffix, [string[]]$Details)
+        $script:Phases++
+        $sec = "$($Secs.ToString('0.0', [Globalization.CultureInfo]::InvariantCulture))s"
+        Write-PhaseTiming $Name $Secs $(if ($HasIssues) { 'fail' } else { 'pass' })
+        if (-not $HasIssues) {
+            $script:Lines += "[PASS] $Name ($sec)"
+        } elseif ($Mode -eq 'fail') {
+            $script:Failed = $true
+            $script:Lines += "[FAIL] ${Name}${Suffix} ($sec)"
+            if ($Details) { $script:Lines += $Details }
+        } else {
+            $lines = @("[WARN] ${Name}${Suffix} ($sec)") + @($Details | Select-Object -First 30 | ForEach-Object { "       $_" })
+            if (@($Details).Count -gt 30) { $lines += "       ... $(@($Details).Count - 30) more" }
+            $script:Lines += ($lines -join "`n")
+        }
+    }
+    $invokeModePhase = {
+        param([string]$PhaseName, [string]$Mode, [scriptblock]$CheckScript)
+        if ($script:Failed) { $script:Lines += "[SKIP] $PhaseName -- not run: an earlier phase failed"; return }
+        if ($Mode -eq 'fail') { Invoke-WithoutHookGitEnv { Phase $PhaseName $CheckScript }; return }
+        $sw = [Diagnostics.Stopwatch]::StartNew()
+        $out = (Invoke-WithoutHookGitEnv { $global:LASTEXITCODE = 0; & $CheckScript 2>&1 } | Out-String).TrimEnd()
+        $code = $LASTEXITCODE
+        $global:LASTEXITCODE = 0
+        $sw.Stop()
+        $detail = if ($code -ne 0) { @($out -split "`r?`n" | Where-Object { $_.Trim() }) } else { @() }
+        & $reportRustCheck $PhaseName $Mode ($code -ne 0) $sw.Elapsed.TotalSeconds '' $detail
+    }
+
+    $baseSpanDir = if ($ws.WorkspaceRoot) { $ws.WorkspaceRoot } else { $s.Dir }
+    $formatRustDiag = {
+        param($Msg, [string]$DiagCode)
+        $span = @($Msg.spans | Where-Object { $_.is_primary } | Select-Object -First 1)
+        $hasSpan = [bool]($span -and $span.file_name)
+        $tagCode = if ($DiagCode) { "[$DiagCode] " } else { '' }
+        $line = if ($hasSpan) {
+            $fp = [string]$span.file_name
+            $abs = try { [IO.Path]::GetFullPath($fp, $baseSpanDir) } catch { $fp }
+            if ($abs -and -not (Test-Path -LiteralPath $abs -PathType Leaf) -and $baseSpanDir -ne $s.Dir) {
+                $alt = try { [IO.Path]::GetFullPath($fp, $s.Dir) } catch { $null }
+                if ($alt -and (Test-Path -LiteralPath $alt -PathType Leaf)) { $abs = $alt }
+            }
+            $rel = if ([IO.Path]::IsPathRooted($abs)) { [IO.Path]::GetRelativePath($s.Dir, $abs) } else { $fp }
+            "$($rel -replace '\\', '/'):$($span.line_start): ${tagCode}$($Msg.message)"
+        } else {
+            "${tagCode}$($Msg.message)"
+        }
+        [pscustomobject]@{ Line = $line; IsError = ($Msg.level -eq 'error'); HasSpan = $hasSpan }
+    }
+    $finishJsonPhase = {
+        param([string]$PhaseName, [string]$Mode, [double]$Secs, [int]$ExitCode, [string]$RawErr, [string[]]$NonJsonOut, $Findings)
+        $hiddenCount = 0
+        $keptFindings = [Collections.Generic.List[string]]::new()
+        foreach ($f in $Findings) {
+            if (-not $f.IsError -and $f.HasSpan -and $Baseline) {
+                if ((Test-BaselineLine $f.Line $s.Dir) -eq $false) {
+                    $hiddenCount++
+                    continue
+                }
+            }
+            $keptFindings.Add($f.Line)
+        }
+        if ($hiddenCount -gt 0) {
+            $script:Warnings += "[NOTE] ${PhaseName}: $hiddenCount pre-existing finding(s) hidden by -Baseline $Baseline"
+        }
+        if ($ExitCode -ne 0 -and ($Findings.Count -eq 0 -or $keptFindings.Count -eq 0)) {
+            $errLines = @((@($NonJsonOut) + @($RawErr -split "`r?`n")) | Where-Object { "$_".Trim() })
+            if (-not $errLines) { $errLines = @("$PhaseName exited $ExitCode") }
+            & $reportRustCheck $PhaseName $Mode $true $Secs '' $errLines
+        } else {
+            $suf = if ($keptFindings.Count -gt 0) { " ($($keptFindings.Count) finding(s))" } else { '' }
+            & $reportRustCheck $PhaseName $Mode ($keptFindings.Count -gt 0) $Secs $suf @($keptFindings)
+        }
+    }
+
+    if ($Full -and -not $script:Failed) {
+        if ($rcfg.StrictClippy -ne 'off') {
+            $strictLints = @(
+                'clippy::redundant_clone', 'clippy::needless_collect', 'clippy::inefficient_to_string',
+                'clippy::cloned_instead_of_copied', 'clippy::collection_is_never_read',
+                'clippy::large_futures', 'clippy::large_stack_arrays', 'clippy::large_stack_frames',
+                'clippy::rc_buffer', 'clippy::rc_mutex', 'clippy::mutex_atomic', 'clippy::mem_forget',
+                'clippy::significant_drop_in_scrutinee', 'clippy::undocumented_unsafe_blocks',
+                'unsafe_op_in_unsafe_fn', 'clippy::dbg_macro'
+            ) + @($rcfg.ExtraLints | Where-Object { $_ }) | Select-Object -Unique
+            $normLint = {
+                param([string]$Name)
+                ($Name.Trim().ToLowerInvariant() -replace '-', '_') -replace '^rust::', ''
+            }
+            $extraLintSet = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+            foreach ($el in @($rcfg.ExtraLints | Where-Object { $_ })) {
+                $n = & $normLint $el
+                [void]$extraLintSet.Add($n)
+                if ($n.StartsWith('clippy::')) { [void]$extraLintSet.Add($n.Substring(8)) }
+            }
+            $wantedSet = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+            $lintFlagList = [Collections.Generic.List[string]]::new()
+            foreach ($l in $strictLints) {
+                $lintFlagList.Add('-W'); $lintFlagList.Add([string]$l)
+                [void]$wantedSet.Add((& $normLint $l))
+            }
+            [string[]]$lintFlags = $lintFlagList.ToArray()
+            $errFile = Join-Path ([IO.Path]::GetTempPath()) "qgate-clippy-strict-$PID-$([IO.Path]::GetRandomFileName()).err"
+            $sw = [Diagnostics.Stopwatch]::StartNew()
+            try {
+                $rawJson = (Invoke-WithoutHookGitEnv {
+                        $global:LASTEXITCODE = 0
+                        & cargo clippy @scopeArgs @lockedArgs --all-targets --message-format=json -- @lintFlags 2>$errFile
+                    } | Out-String)
+                $cCode = $LASTEXITCODE
+            } finally {
+                $cErr = if (Test-Path -LiteralPath $errFile) { "$(Get-Content -LiteralPath $errFile -Raw -ErrorAction SilentlyContinue)".TrimEnd() } else { '' }
+                Remove-Item -LiteralPath $errFile -Force -ErrorAction SilentlyContinue
+                $global:LASTEXITCODE = 0
+            }
+            $sw.Stop()
+            $unknownLints = [Collections.Generic.List[string]]::new()
+            $seenUnknown = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+            $badExtraLints = [Collections.Generic.List[string]]::new()
+            $seenBadExtra = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+            $seenFindings = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+            $allFindings = [Collections.Generic.List[object]]::new()
+            foreach ($ln in @($rawJson -split "`r?`n")) {
+                $t = $ln.Trim()
+                if (-not $t -or $t[0] -ne '{') { continue }
+                $obj = try { $t | ConvertFrom-Json -ErrorAction Stop } catch { $null }
+                if (-not $obj -or $obj.reason -ne 'compiler-message' -or -not $obj.message) { continue }
+                $msg = $obj.message
+                $diagCode = if ($msg.code -and $msg.code.code) { [string]$msg.code.code } else { '' }
+                $isUnknownLint = ($diagCode -in 'unknown_lints', 'renamed_and_removed_lints') -or
+                    ($diagCode -eq 'E0602' -and $msg.message -like 'unknown lint:*') -or
+                    ($msg.message -like 'unknown lint:*')
+                if ($isUnknownLint) {
+                    $badName = ''
+                    if ([string]$msg.message -match '(?i)(?:unknown\s+lint:\s*|lint\s+)`([^`]+)`') {
+                        $badName = $Matches[1].Trim()
+                    } else {
+                        foreach ($ch in @($msg.children)) {
+                            if ([string]$ch.message -match 'requested on the command line with `-[WDFA]\s+([^`]+)`') {
+                                $badName = $Matches[1].Trim()
+                                break
+                            }
+                        }
+                    }
+                    $normBad = if ($badName) { & $normLint $badName } else { '' }
+                    if ($normBad -and $extraLintSet.Contains($normBad)) {
+                        if ($seenBadExtra.Add($badName)) { $badExtraLints.Add($badName) }
+                    } else {
+                        if ($seenUnknown.Add([string]$msg.message)) { $unknownLints.Add([string]$msg.message) }
+                    }
+                    continue
+                }
+                if ($msg.level -notin 'error', 'warning') { continue }
+                $isErr = ($msg.level -eq 'error')
+                $normCode = & $normLint $diagCode
+                if (-not $isErr) {
+                    $fromCmd = @($msg.children | Where-Object { $_.level -eq 'note' -and $_.message -like 'requested on the command line with *' }).Count -gt 0
+                    if (-not ($wantedSet.Contains($normCode) -or $fromCmd)) { continue }
+                }
+                $f = & $formatRustDiag $msg $diagCode
+                if ($seenFindings.Add("$($f.IsError)|$($f.Line)")) { $allFindings.Add($f) }
+            }
+            if ($unknownLints.Count -gt 0) {
+                $script:Lines += "[INFO] clippy strict: unknown lint(s) skipped: $($unknownLints -join '; ')"
+            }
+            if ($badExtraLints.Count -gt 0) {
+                $script:Phases++
+                Write-PhaseTiming 'clippy strict' $sw.Elapsed.TotalSeconds 'fail'
+                Fail "clippy strict: unknown/removed lint in qgate.json rust.extraLints: $($badExtraLints -join ', ')"
+            } else {
+                & $finishJsonPhase 'clippy strict' $rcfg.StrictClippy $sw.Elapsed.TotalSeconds $cCode $cErr @() $allFindings
+            }
+        }
+
+        if (-not $script:Failed -and $rcfg.Doc -ne 'off') {
+            $errFile = Join-Path ([IO.Path]::GetTempPath()) "qgate-doc-$PID-$([IO.Path]::GetRandomFileName()).err"
+            $sw = [Diagnostics.Stopwatch]::StartNew()
+            try {
+                $rawDoc = (Invoke-WithoutHookGitEnv {
+                        $global:LASTEXITCODE = 0
+                        & cargo doc @scopeArgs @lockedArgs --no-deps --message-format=json 2>$errFile
+                    } | Out-String)
+                $docExit = $LASTEXITCODE
+            } finally {
+                $docErr = if (Test-Path -LiteralPath $errFile) { "$(Get-Content -LiteralPath $errFile -Raw -ErrorAction SilentlyContinue)".TrimEnd() } else { '' }
+                Remove-Item -LiteralPath $errFile -Force -ErrorAction SilentlyContinue
+                $global:LASTEXITCODE = 0
+            }
+            $sw.Stop()
+            $docNonJson = [Collections.Generic.List[string]]::new()
+            $docFindings = [Collections.Generic.List[object]]::new()
+            $seenDoc = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+            foreach ($ln in @($rawDoc -split "`r?`n")) {
+                $t = $ln.Trim()
+                if (-not $t) { continue }
+                if ($t[0] -ne '{') { $docNonJson.Add($t); continue }
+                $obj = try { $t | ConvertFrom-Json -ErrorAction Stop } catch { $null }
+                if (-not $obj) { $docNonJson.Add($t); continue }
+                if ($obj.reason -ne 'compiler-message' -or -not $obj.message) { continue }
+                $msg = $obj.message
+                $diagCode = if ($msg.code -and $msg.code.code) { [string]$msg.code.code } else { '' }
+                $isErr = ($msg.level -eq 'error')
+                $isIntraDocWarn = ($msg.level -eq 'warning') -and ($diagCode -in 'rustdoc::broken_intra_doc_links', 'rustdoc::private_intra_doc_links')
+                if (-not ($isErr -or $isIntraDocWarn)) { continue }
+                $f = & $formatRustDiag $msg $diagCode
+                if ($seenDoc.Add("$($f.IsError)|$($f.Line)")) { $docFindings.Add($f) }
+            }
+            & $finishJsonPhase 'cargo doc' $rcfg.Doc $sw.Elapsed.TotalSeconds $docExit $docErr $docNonJson.ToArray() $docFindings
+        }
+
+        if (-not $script:Failed -and $rcfg.Deny -ne 'off') {
+            $denyExe = Get-ToolPath 'cargo-deny'
+            if (-not $denyExe) {
+                if ($rcfg.Deny -eq 'fail') { Fail 'cargo-deny not on PATH -- required when rust.deny is fail (qgate tools cargo-deny)' }
+                else { $script:Lines += '[WARN] cargo-deny not on PATH -- phase skipped (qgate tools cargo-deny)' }
+            } else {
+                [string[]]$denyScopeArgs = if ($ws.InRepoWorkspace) { [string[]]@('--workspace') } else { [string[]]@('--manifest-path', $manifestPath) }
+                $denyList = [Collections.Generic.List[string]]::new()
+                $denyList.AddRange($denyScopeArgs)
+                if ($lockedArgs.Count -gt 0) { $denyList.AddRange($lockedArgs) }
+                if ($rcfg.DenyOffline) { $denyList.Add('--offline') }
+                $denyList.Add('--format'); $denyList.Add('json')
+                if ((Test-Path -LiteralPath (Join-Path $s.Dir 'deny.toml') -PathType Leaf) -or (Test-Path -LiteralPath (Join-Path $s.Dir '.deny.toml') -PathType Leaf)) {
+                    $denyList.Add('check')
+                } else {
+                    $denyList.Add('--config'); $denyList.Add((Join-Path $PSScriptRoot 'qgate.deny.toml'))
+                    $denyList.Add('check'); $denyList.Add('advisories'); $denyList.Add('bans'); $denyList.Add('sources')
+                }
+                [string[]]$denyArgs = $denyList.ToArray()
+                $sw = [Diagnostics.Stopwatch]::StartNew()
+                $denyOut = (Invoke-WithoutHookGitEnv {
+                        $global:LASTEXITCODE = 0
+                        & $denyExe @denyArgs 2>&1 | ForEach-Object { "$_" }
+                    } | Out-String).TrimEnd()
+                $dCode = $LASTEXITCODE
+                $global:LASTEXITCODE = 0
+                $sw.Stop()
+
+                $errDiags = [Collections.Generic.List[string]]::new()
+                $warnDiags = [Collections.Generic.List[string]]::new()
+                $logMsgs = [Collections.Generic.List[string]]::new()
+                $rawLines = @($denyOut -split "`r?`n" | Where-Object { $_.Trim() })
+                foreach ($ln in $rawLines) {
+                    $t = $ln.Trim()
+                    if ($t[0] -ne '{') { continue }
+                    $obj = try { $t | ConvertFrom-Json -ErrorAction Stop } catch { $null }
+                    if (-not $obj -or -not $obj.fields) { continue }
+                    if ($obj.type -eq 'diagnostic') {
+                        $sev = [string]$obj.fields.severity
+                        if ($sev -notin 'error', 'warning') { continue }
+                        $codeTag = if ($obj.fields.code) { "[$($obj.fields.code)]" } else { '' }
+                        $line = "[$sev]$codeTag $($obj.fields.message)"
+                        if ($sev -eq 'error') { $errDiags.Add($line) } else { $warnDiags.Add($line) }
+                    } elseif ($obj.type -eq 'log' -and ([string]$obj.fields.level -in 'ERROR', 'WARN') -and $obj.fields.message) {
+                        $logMsgs.Add("[$(([string]$obj.fields.level).ToLowerInvariant())] $($obj.fields.message)")
+                    }
+                }
+                if ($dCode -ne 0 -or $errDiags.Count -gt 0) {
+                    $details = @($errDiags) + @($warnDiags)
+                    if ($details.Count -eq 0) {
+                        $details = if ($logMsgs.Count -gt 0) { @($logMsgs) } elseif ($rawLines.Count -gt 0) { $rawLines } else { @("cargo-deny exited $dCode") }
+                    }
+                    $nFind = $errDiags.Count + $warnDiags.Count
+                    $suf = if ($nFind -gt 0) { " ($nFind finding(s))" } else { '' }
+                    & $reportRustCheck 'cargo deny' $rcfg.Deny $true $sw.Elapsed.TotalSeconds $suf $details
+                } elseif ($warnDiags.Count -gt 0) {
+                    & $reportRustCheck 'cargo deny' 'warn' $true $sw.Elapsed.TotalSeconds " ($($warnDiags.Count) warning(s))" @($warnDiags)
+                } else {
+                    & $reportRustCheck 'cargo deny' $rcfg.Deny $false $sw.Elapsed.TotalSeconds '' @()
+                }
+            }
+        }
+
+        if (-not $script:Failed -and $rcfg.Shear -ne 'off') {
+            $shearExe = Get-ToolPath 'cargo-shear'
+            if (-not $shearExe) {
+                if ($rcfg.Shear -eq 'fail') { Fail 'cargo-shear not on PATH -- required when rust.shear is fail (qgate tools cargo-shear)' }
+                else { $script:Lines += '[WARN] cargo-shear not on PATH -- phase skipped (qgate tools cargo-shear)' }
+            } else {
+                $shearList = [Collections.Generic.List[string]]::new()
+                $shearList.Add('--format=json')
+                if (-not $ws.InRepoWorkspace -and $pkgArgs.Count -gt 0) { $shearList.AddRange($pkgArgs) }
+                if ($lockedArgs.Count -gt 0) { $shearList.AddRange($lockedArgs) }
+                [string[]]$shearArgs = $shearList.ToArray()
+                $errFile = Join-Path ([IO.Path]::GetTempPath()) "qgate-shear-$PID-$([IO.Path]::GetRandomFileName()).err"
+                $sw = [Diagnostics.Stopwatch]::StartNew()
+                try {
+                    $shearOut = (Invoke-WithoutHookGitEnv {
+                            $global:LASTEXITCODE = 0
+                            & $shearExe @shearArgs 2>$errFile
+                        } | Out-String).Trim()
+                    $sCode = $LASTEXITCODE
+                } finally {
+                    $sErr = if (Test-Path -LiteralPath $errFile) { "$(Get-Content -LiteralPath $errFile -Raw -ErrorAction SilentlyContinue)".TrimEnd() } else { '' }
+                    Remove-Item -LiteralPath $errFile -Force -ErrorAction SilentlyContinue
+                    $global:LASTEXITCODE = 0
+                }
+                $sw.Stop()
+                $shearJson = try { if ($shearOut) { $shearOut | ConvertFrom-Json -ErrorAction Stop } else { $null } } catch { $null }
+                if ($null -eq $shearJson) {
+                    $errLines = @("$sErr`n$shearOut" -split "`r?`n" | Where-Object { $_.Trim() })
+                    if (-not $errLines) { $errLines = @("cargo-shear exited $sCode with invalid JSON output") }
+                    & $reportRustCheck 'cargo shear' $rcfg.Shear $true $sw.Elapsed.TotalSeconds '' $errLines
+                } else {
+                    $sFindings = @(@($shearJson.findings) | Where-Object { $null -ne $_ } | ForEach-Object {
+                            $loc = if ($_.file) { "$($_.file): " } else { '' }
+                            $sev = if ($_.severity) { "[$($_.severity)] " } else { '' }
+                            $cd = if ($_.code) { "$($_.code): " } else { '' }
+                            $hp = if ($_.help) { " ($($_.help))" } else { '' }
+                            "${loc}${sev}${cd}$($_.message)${hp}"
+                        })
+                    if ($sCode -ne 0 -and $sFindings.Count -eq 0) {
+                        $errLines = @($sErr -split "`r?`n" | Where-Object { $_.Trim() })
+                        if (-not $errLines) { $errLines = @("cargo-shear exited $sCode") }
+                        & $reportRustCheck 'cargo shear' $rcfg.Shear $true $sw.Elapsed.TotalSeconds '' $errLines
+                    } else {
+                        $suf = if ($sFindings.Count -gt 0) { " ($($sFindings.Count) finding(s))" } else { '' }
+                        & $reportRustCheck 'cargo shear' $rcfg.Shear ($sFindings.Count -gt 0) $sw.Elapsed.TotalSeconds $suf $sFindings
+                    }
+                }
+            }
+        }
+
+        if (-not $script:Failed -and $rcfg.FeaturePowerset) {
+            $hackExe = Get-ToolPath 'cargo-hack'
+            if (-not $hackExe) {
+                $script:Lines += '[WARN] cargo-hack not on PATH -- featurePowerset skipped (cargo install cargo-hack)'
+            } else {
+                [string[]]$hackArgs = [string[]]@('--feature-powerset', '--depth', '2')
+                if ($rcfg.FeaturePowerset -eq 'each') { $hackArgs = [string[]]@('--each-feature') }
+                Invoke-WithoutHookGitEnv {
+                    Phase 'cargo hack' { & $hackExe hack check @scopeArgs @lockedArgs --all-targets @hackArgs }
+                }
+            }
+        }
+
+        if (-not $script:Failed -and $rcfg.Semver -in 'warn', 'fail' -and $ws.HasLib) {
+            $svExe = Get-ToolPath 'cargo-semver-checks'
+            if (-not $svExe) {
+                if ($rcfg.Semver -eq 'fail') { Fail 'cargo-semver-checks not on PATH -- required when rust.semver is fail (cargo install cargo-semver-checks)' }
+                else { $script:Lines += '[WARN] cargo-semver-checks not on PATH -- phase skipped (cargo install cargo-semver-checks)' }
+            } else {
+                [string[]]$svScopeArgs = @()
+                if ($ws.InRepoWorkspace) { $svScopeArgs = [string[]]@('--workspace') }
+                elseif ($pkgArgs.Count -gt 0) { $svScopeArgs = $pkgArgs }
+                & $invokeModePhase 'cargo semver-checks' $rcfg.Semver { & $svExe semver-checks check-release @svScopeArgs }
+            }
+        }
+
+        if (-not $script:Failed -and $rcfg.Miri) {
+            $tc = if ($rcfg.Miri -is [PSCustomObject] -and $rcfg.Miri.Toolchain) { [string]$rcfg.Miri.Toolchain } else { 'nightly' }
+            [string[]]$miriArgs = if ($rcfg.Miri -is [PSCustomObject] -and $rcfg.Miri.Packages.Count -gt 0) {
+                $mList = [Collections.Generic.List[string]]::new()
+                foreach ($mp in $rcfg.Miri.Packages) { $mList.Add('-p'); $mList.Add([string]$mp) }
+                $mList.ToArray()
+            } else {
+                $scopeArgs
+            }
+            Invoke-WithoutHookGitEnv {
+                Phase 'cargo miri' { cargo "+$tc" miri test @miriArgs @lockedArgs }
+            }
+        }
+    }
+
+    if ($Mutate -and -not $script:Failed) {
+        $mutExe = Get-ToolPath 'cargo-mutants'
+        if (-not $mutExe) {
+            $script:Lines += '[SKIP] cargo-mutants -- not on PATH (qgate tools cargo-mutants)'
+        } else {
+            $mut = @(Get-RustMutants $s.Dir $Baseline $mutExe $scopeArgs)
+            $script:Lines += @($mut | Where-Object { "$_" -match '^\[PASS\]' })
+            $failMut = @($mut | Where-Object { "$_" -match '^\[FAIL\]' })
+            if ($failMut) {
+                Fail $failMut[0]
+                if ($failMut.Count -gt 1) { $script:Lines += $failMut[1..($failMut.Count - 1)] }
+                $restMut = @($mut | Where-Object { "$_" -notmatch '^\[(PASS|FAIL)\]' })
+                if ($restMut) { $script:Lines += $restMut }
+            } else {
+                $warnMut = @($mut | Where-Object { "$_" -notmatch '^\[PASS\]' })
+                if ($warnMut) { $script:Warnings += $warnMut }
+            }
+        }
+    }
 }
 
 # --- dotnet: one format pass over a temporary solution ---------------------

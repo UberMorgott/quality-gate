@@ -49,7 +49,7 @@ Run from the repository or pass `-Root <path>`. Stack discovery uses marker file
 | `qgate global [on\|off\|status]` | Manage global `core.hooksPath`; default `status`, refuses to replace another global hook directory. |
 | `qgate land` | Fetch, rebase onto `origin/main` and `git push` (pre-push hook still gates) under one machine-wide lock per push URL + branch, so parallel sessions stop losing push races; `-Remote`, `-Branch`, `-WaitMinutes` (60), `-Root`. Refuses a dirty tree, detached HEAD or an operation in progress; a failed rebase is aborted. |
 | `qgate update` | Fast-forward the installed clone; concurrent updates are serialized. |
-| `qgate tools [name]` | Download the gate's external linters pinned and SHA-256 checked (from each release's checksums file) into `<install>\tools\bin` (gitignored): `betterleaks` 1.10.1, `oxlint` 1.93.0, `typos` 1.52.2, `osv-scanner` 2.7.1, `gitleaks` 8.30.1, `golangci-lint` 2.15.0, `lefthook` 2.2.2, `buf` 1.75.0; `govulncheck` 1.9.0 is built with `go install` (needs Go on PATH, else skipped). The gate puts that directory before PATH for its own process only; nothing touches the system PATH. No name = all. Windows x64 only. Toolchains (`go`, `dotnet`, `cargo`, `node`) and `cppcheck`, `clang-format`, `gdtoolkit` stay on PATH. |
+| `qgate tools [name]` | Download the gate's external linters pinned and SHA-256 checked (from each release's checksums file) into `<install>\tools\bin` (gitignored): `betterleaks` 1.10.1, `oxlint` 1.93.0, `typos` 1.52.2, `osv-scanner` 2.7.1, `gitleaks` 8.30.1, `golangci-lint` 2.15.0, `lefthook` 2.2.2, `buf` 1.75.0, `cargo-deny` 0.22.1, `cargo-shear` 1.14.1, `cargo-nextest` 0.9.152, `cargo-mutants` 27.1.0; `govulncheck` 1.9.0 is built with `go install` (needs Go on PATH, else skipped). The gate puts that directory before PATH for its own process only; nothing touches the system PATH. No name = all. Windows x64 only. Toolchains (`go`, `dotnet`, `cargo`, `node`) and `cppcheck`, `clang-format`, `gdtoolkit` stay on PATH. |
 | `qgate where` | Print install path, commit, resolved command, and tool versions or missing-tool status; each found tool is marked `(tools\bin)` or `(PATH)`. |
 | `qgate selftest` | Run the gate's failure/pass fixtures; `-Only <sections>`, `-Sequential`, `-Exact`, `-SectionTimeoutSec <seconds>` (1500), `-Throttle <jobs>` (4). |
 | `qgate help` | Show CLI help; aliases `-h`, `-?`, `--help`, `/?`. |
@@ -67,8 +67,8 @@ Self-test sections: `detect`, `go`, `go2`, `core`, `wiring`, `rust`, `dotnet`, `
 | `-Quiet` | Suppress a passing report except selected operational warnings; retain the failure report. |
 | `-Why` | Show stack markers and absent stacks; also show resolved Harmony patch targets. |
 | `-Baseline <rev>` | Filter supported diagnostics against a Git revision; overrides `qgate.json`'s baseline. |
-| `-Mutate` | Opt into advisory Go mutation testing with gremlins. |
-| `-Fix` | Apply `gofmt -w` and available `golangci-lint --fix`, then check normally; hooks never request this. |
+| `-Mutate` | Opt into advisory mutation testing (Go: `gremlins`; Rust: `cargo-mutants`). |
+| `-Fix` | Apply format/lint autofixes (Go: `gofmt -w`, `golangci-lint --fix`; Rust: `cargo fmt`), then check normally; hooks never request this. |
 | `-Root <path>` | Choose the repository; defaults to the current Git root. |
 | `-Sarif <file>` | Also write SARIF 2.1.0 from the printed report; `-Quiet` can leave a passing report empty. |
 | `-Parallel` | Run independent Go, web, Rust, .NET, C/C++, and Godot stacks concurrently. |
@@ -132,6 +132,7 @@ Place one optional `qgate.json` at the repository root. Tool-specific rules rema
 | `go.fuzzParallel` | Fuzz worker processes per target (`go test -parallel`); default half the cores, 1..4; allowed 1..256. |
 | `go.fuzzMemLimit` | `GOMEMLIMIT` for fuzz runs (`"2GiB"`); default an inherited `GOMEMLIMIT`, else `2GiB`. |
 | `dotnet` | `sonar: true` enables cached Sonar analyzers; `inspectcode: true` enables JetBrains inspection; `testRunner: "fail"` makes executable test-runner failures blocking; `fastTest: false` keeps `dotnet test` off the fast lane (it still runs at the full level). |
+| `rust` | `preset` (`""` off, `"recommended"` warn, `"strict"` fail for `strictClippy`, `doc`, `deny`, `shear`), per-check `"off"`/`"warn"`/`"fail"` (`strictClippy`, `doc`, `deny`, `shear`, `semver`), `extraLints` (additional `clippy strict` lint names), `testRunner` (`"cargo"` default or `"nextest"`), `denyOffline` (`bool`), `featurePowerset` (`"each"` or `"powerset"`), and `miri` (`true` or `{"packages": [...], "toolchain": "..."}`). |
 | `powershell.findings` | `"fail"` makes the PowerShell `parse` and `PSScriptAnalyzer` findings blocking; default advisory `[WARN]`. |
 | `secrets.engine` | `"betterleaks"` (default) or `"gitleaks"` (opt-out). betterleaks is gitleaks' successor by its authors: same flags, config, `.gitleaksignore` and fingerprints; live validation stays off. A repo `.betterleaks.toml`/`.gitleaks.toml` is passed with `-c`, since betterleaks never auto-loads it. Its two extra rules `generic-password` and `generic-credential-uri` (98 of 98 findings false across 12 consumer repos) stay off unless the repo ships a `.betterleaks.toml`. betterleaks missing falls back to gitleaks; both missing is a `[SKIP]`, an unknown value a `[WARN]`. Install with `qgate tools`. |
 | `web.linter` | `"eslint"` or `"oxlint"`; overrides the default choice. Default: a package with ESLint configured (`eslint.config.*`, `.eslintrc*`, `eslintConfig` or an `eslint` dependency) runs eslint, since oxlint never reads `eslint.config.*` (port with `npx @oxlint/migrate`); one with `.oxlintrc.json` runs oxlint (`--deny-warnings`); one with neither runs oxlint on its defaults as an advisory `[WARN]`. oxlint ignores `node_modules` and the build output dir. Install with `qgate tools oxlint`; configured but missing fails the stack, an unknown value is a `[WARN]`. |
@@ -162,11 +163,11 @@ Names below match printed phase/advisory labels; angle-bracket suffixes stand fo
 | `hadolint` | Advisory (fast/full) | hadolint; skip if missing | Checks Dockerfiles for build and container best-practice problems. |
 | `yamllint` | Advisory (fast/full) | yamllint; skip if missing | Checks YAML syntax and formatting to catch malformed configuration. |
 | `editorconfig` | Advisory (fast/full) | editorconfig-checker; skip if missing | Checks matching files against a root `.editorconfig` to expose inconsistent whitespace and encoding. |
-| `<n> dependency update(s) available` | Advisory (after passing full run) | Go, npm, golangci-lint, Cargo as available; network | Reports newer direct Go/npm dependencies and Go/golangci-lint/Rust toolchains so maintenance work is visible. |
+| `<n> dependency update(s) available` | Advisory (after passing full run) | Go, npm, golangci-lint, Cargo/rustc/cargo-outdated as available; network | Reports newer direct Go/npm/Cargo dependencies and Go/golangci-lint/Rust toolchains (noting `rust-toolchain` pins) so maintenance work is visible. |
 
 Repository linters inspect changed files, or tracked files with `-All`/`-Full`. Secret scanning excludes ignored files, nested repositories, and binary media. Without a project gitleaks config, [qgate's rules](gate/qgate.gitleaks.toml) disable `generic-api-key`, `curl-auth-header`, and `curl-auth-user`; provider-specific rules remain enabled. Typos honors the repository's own `_typos.toml`, `typos.toml` or `.typos.toml`, merged with [the gate's defaults](gate/qgate.typos.toml): a name the project cannot rename, such as a misspelled external API, goes under `[default.extend-identifiers]` (whole identifier, as `ExternalName = "ExternalName"`) or `[default.extend-words]` (a word inside identifiers and prose). A typos failure fails the run but does not skip the build stacks after it.
 
-The runner also validates requested stacks/revisions and tool pins, rejects an unexpected zero-check run, and fails a Git hook if the staged tree changes during its execution. The update advisory starts with the full run, beside the checks, and gets 30 more seconds once they finish; `QGATE_NO_ADVISORY=1` disables its summary queries. Detailed `qgate outdated` labels are `go`, `npm`, and `tool`.
+The runner also validates requested stacks/revisions and tool pins, rejects an unexpected zero-check run, and fails a Git hook if the staged tree changes during its execution. The update advisory starts with the full run, beside the checks, and gets 30 more seconds once they finish; `QGATE_NO_ADVISORY=1` disables its summary queries. Detailed `qgate outdated` labels are `go`, `npm`, `rust`, and `tool`.
 
 ### Docs / Markdown (part of `base`)
 
@@ -265,15 +266,25 @@ When `tailwindcss` is present, `wire` adds `scss/at-rule-no-unknown` `ignoreAtRu
 
 Configured Stylelint/ESLint phases require their local binaries; they are not optional missing-tool skips. No type-check script/tsconfig or build/test script means that phase does not run.
 
-### Rust (`Cargo.toml` with `[package]`)
+### Rust (`Cargo.toml` workspace or `[package]`)
+
+Detected at Cargo workspace or standalone `[package]` roots (`Cargo.toml`). Missing Cargo fails the stack; missing required Cargo components fail their commands.
 
 | Printed check | Tier | External tool | What it checks and why |
 | --- | --- | --- | --- |
-| `cargo fmt` | Fast | Cargo + rustfmt | Rejects formatting differences to keep Rust source consistent. |
-| `cargo clippy` | Fast | Cargo + Clippy | Lints all targets with warnings treated as errors to catch likely defects. |
-| `cargo test` | Fast | Cargo | Runs tests to catch behavioral regressions. |
+| `cargo fmt` | Fast | Cargo + rustfmt | Rejects formatting differences to keep Rust source consistent; `-Fix` runs `cargo fmt` first. |
+| `cargo clippy` | Fast | Cargo + Clippy | Lints workspace targets with warnings treated as errors (`-D warnings`) to catch likely defects. |
+| `cargo test`, or `cargo nextest` + `cargo doctest` | Fast | Cargo; `cargo-nextest` (`qgate tools cargo-nextest`) when `rust.testRunner: "nextest"` | Runs workspace tests (falling back to `cargo test` if `cargo-nextest` is absent, and running `cargo test --doc` alongside nextest) to catch behavioral regressions. |
+| `clippy strict` | Full (`rust.preset` / opt-in) | Cargo + Clippy | Enforces an allocation/perf/drop/unsafe lint floor plus configured `rust.extraLints` (baseline-filtered when `-Baseline` is set). |
+| `cargo doc` | Full (`rust.preset` / opt-in) | Cargo (`rustdoc`) | Builds workspace docs without dependencies, failing on broken/private intra-doc links. |
+| `cargo deny` | Full (`rust.preset` / opt-in) | `cargo-deny` (`qgate tools cargo-deny`) | Checks advisories, bans, sources, and licenses (uses repo `deny.toml` / `.deny.toml`, or fallback rules without license policy; see [templates/deny.toml](templates/deny.toml)). |
+| `cargo shear` | Full (`rust.preset` / opt-in) | `cargo-shear` (`qgate tools cargo-shear`) | Reports unused dependencies declared in `Cargo.toml`. |
+| `cargo hack` | Full (opt-in `rust.featurePowerset`) | `cargo-hack` (`cargo install cargo-hack`) | Checks feature combinations (`"each"` or `"powerset"` depth 2). |
+| `cargo semver-checks` | Full (opt-in `rust.semver`, library crates) | `cargo-semver-checks` (`cargo install cargo-semver-checks`) | Checks public API semantic-version compatibility. |
+| `cargo miri` | Full (opt-in `rust.miri`) | Cargo + Miri | Runs tests under Miri (`nightly` by default, or configured toolchain/packages) to detect undefined behavior. |
+| `cargo mutants` | Advisory (`-Mutate`) | `cargo-mutants` (`qgate tools cargo-mutants`) | Mutates Rust code (scoped by `-Baseline` when set) to expose weak test assertions. |
 
-Missing Cargo fails the stack; missing required Cargo components fail their commands.
+Configure `qgate.json` with `"rust": { "preset": "recommended" }` or `"strict"`, or toggle individual keys (`strictClippy`, `extraLints`, `doc`, `deny`, `denyOffline`, `shear`, `testRunner`, `featurePowerset`, `semver`, `miri`). Pin `cargo-deny`, `cargo-shear`, `cargo-nextest`, and `cargo-mutants` via `qgate tools` (the [CI template](templates/ci.yml) installs `cargo-deny,cargo-shear` when Rust is detected). Starter configs live in `templates/`: [clippy.toml](templates/clippy.toml), [rust-lints.toml](templates/rust-lints.toml) (for `[workspace.lints]` in `Cargo.toml`), [deny.toml](templates/deny.toml), and [rustfmt.toml](templates/rustfmt.toml); `qgate wire` keeps existing configs, adds `*.rs text eol=lf` to `.gitattributes`, and prints hints for anything missing.
 
 ### .NET / C# (`*.csproj`)
 

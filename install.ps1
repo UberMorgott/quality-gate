@@ -76,6 +76,7 @@ function Install-WebConfigs([string]$dir, [string]$where) {
 }
 
 $stacks = @(Get-Stacks $root)
+$rustRepoHinted = $false
 # Said out loud, so the scope is visible: what the gate does NOT check reads like a pass.
 foreach ($n in Get-NestedRepos $root) { Write-Output "skipped nested repository $n/" }
 foreach ($s in $stacks) {
@@ -103,6 +104,29 @@ foreach ($s in $stacks) {
     } elseif ($s.Stack -eq 'web') {
         Write-Output "web       $where -- enabled"
         Install-WebConfigs $s.Dir $where
+    } elseif ($s.Stack -eq 'rust') {
+        Write-Output "rust      $where -- enabled"
+        $missing = @(
+            if (-not (Test-AnyFile $s.Dir @('clippy.toml', '.clippy.toml')) -and -not (Test-AnyFile $root @('clippy.toml', '.clippy.toml'))) { 'clippy.toml' }
+            if (-not (Test-AnyFile $s.Dir @('deny.toml', '.deny.toml')) -and -not (Test-AnyFile $root @('deny.toml', '.deny.toml'))) { 'deny.toml' }
+            if (-not (Test-AnyFile $s.Dir @('rustfmt.toml', '.rustfmt.toml')) -and -not (Test-AnyFile $root @('rustfmt.toml', '.rustfmt.toml'))) { 'rustfmt.toml' }
+        )
+        if ($missing) {
+            Write-Output "  next:   missing $($missing -join ', ') -- optional templates in $(Join-Path $PSScriptRoot 'templates') (pair clippy.toml with rust-lints.toml)"
+        }
+        if (-not $rustRepoHinted) {
+            $rustRepoHinted = $true
+            $absent = @('cargo-deny', 'cargo-shear', 'cargo-nextest', 'cargo-mutants' | Where-Object { -not (Get-Command $_ -ErrorAction SilentlyContinue) })
+            if ($absent) {
+                Write-Output "  next:   not on PATH: $($absent -join ', ') -- install with: qgate tools `"cargo-deny,cargo-shear,cargo-nextest,cargo-mutants`""
+            }
+            $qj = Join-Path $root 'qgate.json'
+            $hasPreset = $false
+            if (Test-Path $qj) { try { $hasPreset = [bool]((Get-Content $qj -Raw | ConvertFrom-Json).rust.preset) } catch { } }
+            if (-not $hasPreset) {
+                Write-Output '  next:   optional strict full-lane checks: set "rust": { "preset": "strict" } in qgate.json'
+            }
+        }
     } elseif ($s.Stack -eq 'cpp') {
         Write-Output "cpp       $where -- enabled"
         # No template for this one: .clang-format is a house style, and writing one
@@ -130,11 +154,15 @@ foreach ($s in $stacks) {
 # clone. This is not advice, it is a prerequisite -- write it. Once, at the repo
 # root: it is a repo-wide rule, and a monorepo has one .gitattributes however many
 # modules it holds.
-if ($stacks | Where-Object { $_.Stack -eq 'go' -and $_.Implemented }) {
+foreach ($lf in @(
+    @{ Stack = 'go'; Ext = '*.go'; Tool = 'gofmt'; Fix = 'gofmt -w .'; Scope = 'go module' },
+    @{ Stack = 'rust'; Ext = '*.rs'; Tool = 'cargo fmt'; Fix = 'cargo fmt'; Scope = 'cargo workspace' }
+)) {
+    if (-not ($stacks | Where-Object { $_.Stack -eq $lf.Stack -and $_.Implemented })) { continue }
     $ga = Join-Path $root '.gitattributes'
     $gaBody = if (Test-Path $ga) { Get-Content $ga -Raw } else { '' }
-    if ($gaBody -notmatch '\*\.go') {
-        $line = '*.go text eol=lf'
+    if ($gaBody -notmatch [regex]::Escape($lf.Ext)) {
+        $line = "$($lf.Ext) text eol=lf"
         Set-Content -Path $ga -Value (($gaBody.TrimEnd() + "`n" + $line).TrimStart() + "`n") -Encoding utf8 -NoNewline
         Write-Output "  fixed:  added `"$line`" to .gitattributes"
     }
@@ -143,19 +171,19 @@ if ($stacks | Where-Object { $_.Stack -eq 'go' -and $_.Implemented }) {
     # report -- with nothing on screen tying that to the line just written. The rule
     # was added, the problem was not, and only one of those was ever said out loud.
     #
-    # The command named here is gofmt, not git, because the obvious git answer does
+    # The command named here is gofmt (or cargo fmt), not git, because the obvious git answer does
     # nothing. `git add --renormalize .` leaves the index stat cache matching the CRLF
     # file on disk, so the `git checkout -- .` after it decides the file is up to date
     # and skips it. Measured on git 2.53 with core.autocrlf both true and false, and
     # the same no-op holds for `checkout -f`, `restore --worktree --source=:0`,
     # `checkout-index -f -a` and a stash round-trip: only deleting the files first
-    # makes checkout rewrite them. gofmt -w needs no git surgery at all -- it is the
+    # makes checkout rewrite them. gofmt -w / cargo fmt needs no git surgery at all -- it is the
     # tool doing the complaining, it always writes LF, and the next `git add`
     # normalises the index through the rule written above.
-    $crlf = @(& git -C $root ls-files --eol -- '*.go' 2>$null | Where-Object { $_ -match '\sw/crlf\s' })
+    $crlf = @(& git -C $root ls-files --eol -- $lf.Ext 2>$null | Where-Object { $_ -match '\sw/crlf\s' })
     if ($crlf) {
-        Write-Output "  next:   $($crlf.Count) tracked .go file(s) are CRLF on disk -- gofmt fails on every one until you run, in each go module:"
-        Write-Output "            gofmt -w ."
+        Write-Output "  next:   $($crlf.Count) tracked $($lf.Ext.TrimStart('*')) file(s) are CRLF on disk -- $($lf.Tool) fails on every one until you run, in each $($lf.Scope):"
+        Write-Output "            $($lf.Fix)"
     }
 }
 

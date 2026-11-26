@@ -1,0 +1,59 @@
+# Recommended workspace lints for Rust projects (paste into root Cargo.toml,
+# and add `[lints]\nworkspace = true` to each member crate's Cargo.toml).
+# Verified against rustc/clippy 1.100.0. Pair with templates/clippy.toml.
+#
+# Philosophy (same as templates/.golangci.yml): high defect/allocation/safety
+# signal, low style noise. Enable blanket `pedantic` only if you actively prune
+# noisy stylistic lints; NEVER enable blanket `restriction`.
+
+[workspace.lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+unreachable_pub = "warn"
+unused_qualifications = "warn"
+missing_debug_implementations = "warn"
+
+[workspace.lints.clippy]
+# Core defect & performance groups
+correctness = { level = "deny", priority = -1 }
+suspicious = { level = "warn", priority = -1 }
+perf = { level = "warn", priority = -1 }
+
+# Allocations, clones & memory/stack discipline
+redundant_clone = "warn"
+needless_collect = "warn"
+inefficient_to_string = "warn"
+cloned_instead_of_copied = "warn"
+implicit_clone = "warn"
+trivially_copy_pass_by_ref = "warn"
+collection_is_never_read = "warn"
+large_futures = "warn"
+large_stack_arrays = "warn"
+large_stack_frames = "warn"
+large_types_passed_by_value = "warn"
+rc_buffer = "warn"
+rc_mutex = "warn"
+mutex_atomic = "warn"
+clone_on_ref_ptr = "warn"
+mem_forget = "warn"
+
+# Lock/drop & unsafe safety discipline
+significant_drop_in_scrutinee = "warn"
+significant_drop_tightening = "warn"
+undocumented_unsafe_blocks = "warn"
+multiple_unsafe_ops_per_block = "warn"
+
+# Numeric / cast bug classes
+cast_possible_truncation = "warn"
+cast_sign_loss = "warn"
+cast_lossless = "warn"
+suboptimal_flops = "warn"
+
+# Production panic & debug hygiene (pair with allow-*-in-tests = true in clippy.toml)
+dbg_macro = "warn"
+todo = "warn"
+unimplemented = "warn"
+unwrap_used = "warn"
+expect_used = "warn"
+# panic = "warn"            # uncomment for libraries / panic-free services
+# indexing_slicing = "warn" # uncomment for untrusted-input parsers / services
+# exit = "warn"             # uncomment for libraries / daemons

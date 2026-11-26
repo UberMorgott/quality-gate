@@ -26,7 +26,7 @@ $cacheFile = Join-Path ([IO.Path]::GetTempPath()) "quality-gate-outdated-$(Get-P
 # A manifest edited after the cache was written invalidates it: otherwise adding a
 # dependency leaves yesterday's answer standing for another day.
 $newestManifest = Get-ChildItem $Root -Recurse -Depth 3 -File -Force -ErrorAction SilentlyContinue |
-    Where-Object { $_.Name -in 'go.mod', 'go.sum', 'package.json', 'package-lock.json', 'Cargo.toml', 'qgate.deferrals.json' } |
+    Where-Object { $_.Name -in 'go.mod', 'go.sum', 'package.json', 'package-lock.json', 'Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml', 'rust-toolchain', 'qgate.deferrals.json' } |
     Sort-Object LastWriteTime -Descending | Select-Object -First 1
 
 # Optional qgate.deferrals.json: an update knowingly postponed, with the reason
@@ -105,6 +105,17 @@ $found = @()
 # never replied is worse than saying nothing.
 $unknown = @()
 
+$latestRust = $null
+$rustChecked = $false
+$checkedRootRust = $false
+function Get-LatestRust {
+    if (-not $script:rustChecked) {
+        $script:rustChecked = $true
+        $script:latestRust = Get-Latest 'https://api.github.com/repos/rust-lang/rust/releases/latest' 'tag_name'
+    }
+    $script:latestRust
+}
+
 foreach ($s in @(Get-Stacks $Root)) {
     if (-not $s.Implemented) { continue }
     Push-Location $s.Dir
@@ -133,6 +144,33 @@ foreach ($s in @(Get-Stacks $Root)) {
                     }
                 } catch { $unknown += "npm packages at $where" }
             }
+        } elseif ($s.Stack -eq 'rust') {
+            if (Get-Command cargo-outdated -ErrorAction SilentlyContinue) {
+                $lines = & cargo outdated --exit-code 0 --root-deps-only 2>$null
+                if ($LASTEXITCODE -ne 0) {
+                    $unknown += "rust dependencies at $where"
+                } else {
+                    foreach ($line in $lines) {
+                        if ($line -match '^\s*(\S+)\s+(\d+\S*)\s+(\S+)\s+(\d+\S*)\s+(Normal|Development|Build)\b' -and $Matches[2] -ne $Matches[4]) {
+                            $found += "[OUTDATED] rust $where $($Matches[1]) $($Matches[2]) -> $($Matches[4])"
+                        }
+                    }
+                }
+            }
+            if (Get-Command rustc -ErrorAction SilentlyContinue) {
+                if ($s.Dir -eq $Root) { $checkedRootRust = $true }
+                $rv = (& rustc --version 2>$null)
+                $cur = if ($LASTEXITCODE -eq 0 -and $rv -match 'rustc (\S+)') { $Matches[1] } else { $null }
+                $latest = Get-LatestRust
+                if (-not $latest) {
+                    if ($unknown -notcontains 'rust toolchain') { $unknown += 'rust toolchain' }
+                } elseif ($cur -and $cur -ne $latest) {
+                    $pinned = (Test-Path (Join-Path $s.Dir 'rust-toolchain.toml')) -or (Test-Path (Join-Path $s.Dir 'rust-toolchain')) -or
+                        (($s.Dir -ne $Root) -and ((Test-Path (Join-Path $Root 'rust-toolchain.toml')) -or (Test-Path (Join-Path $Root 'rust-toolchain'))))
+                    $note = if ($pinned) { ' (pinned by rust-toolchain)' } else { '' }
+                    $found += "[OUTDATED] tool $where rustc $cur -> $latest$note"
+                }
+            }
         }
     } finally { Pop-Location }
 }
@@ -151,11 +189,14 @@ if (Get-Command golangci-lint -ErrorAction SilentlyContinue) {
     if (-not $latest) { $unknown += 'golangci-lint' }
     elseif ($cur -and $cur -ne $latest.TrimStart('v')) { $found += "[OUTDATED] tool golangci-lint $cur -> $($latest.TrimStart('v'))" }
 }
-if (Get-Command cargo -ErrorAction SilentlyContinue) {
+if (-not $checkedRootRust -and (Get-Command cargo -ErrorAction SilentlyContinue)) {
     $cur = if ((& cargo --version) -match 'cargo (\S+)') { $Matches[1] } else { $null }
-    $latest = Get-Latest 'https://api.github.com/repos/rust-lang/rust/releases/latest' 'tag_name'
-    if (-not $latest) { $unknown += 'rust toolchain' }
-    elseif ($cur -and $cur -ne $latest) { $found += "[OUTDATED] tool rust/cargo $cur -> $latest" }
+    $latest = Get-LatestRust
+    if (-not $latest) {
+        if ($unknown -notcontains 'rust toolchain') { $unknown += 'rust toolchain' }
+    } elseif ($cur -and $cur -ne $latest) {
+        $found += "[OUTDATED] tool rust/cargo $cur -> $latest"
+    }
 }
 
 $split = Split-Deferred $found $deferrals

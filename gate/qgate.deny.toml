@@ -1,0 +1,27 @@
+# Fallback cargo-deny config used by quality-gate when a Rust workspace has no
+# deny.toml / .deny.toml of its own. Invoked with `check advisories bans sources`
+# only: license allowlists are repository policy and belong in the repo's own
+# deny.toml (see templates/deny.toml).
+
+[graph]
+all-features = false
+no-default-features = false
+
+[advisories]
+version = 2
+yanked = "warn"
+ignore = []
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+allow-wildcard-paths = true
+highlight = "all"
+workspace-default-features = "allow"
+external-default-features = "allow"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []

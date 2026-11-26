@@ -22,7 +22,7 @@ try { (Get-Process -Id $PID).PriorityClass = 'BelowNormal' } catch { $null = $_ 
 # NORMAL_PRIORITY_CLASS (measured: Normal under a BelowNormal gate), so csc runs per build instead.
 $env:UseSharedCompilation = 'false'
 $home_ = Split-Path -Parent $PSScriptRoot
-$rest = @($args)
+$rest = @(foreach ($a in $args) { if ($a -is [array]) { $a -join ',' } else { $a } })
 $cmd = if ($rest.Count -gt 0 -and $rest[0] -notlike '-*') { $rest[0] } else { '' }
 # Help flags are not gate flags: without this they reached check.ps1 and came back
 # as "A parameter cannot be found that matches parameter name 'h'".
@@ -66,8 +66,9 @@ Gate flags: -All  -Fast  -Full  -Push  -Only <stack[,stack]>  -Quiet  -Why  -Bas
   -Quiet prints nothing on a green run and the whole report on a red one
        (what the generated pre-commit hook uses; CI wants the [PASS] lines).
        A [WARN] about the gate's own unreadable config is not silenced.
-  -Fix  rewrites first (Go: gofmt -w, golangci-lint run --fix), then runs the normal gate.
+  -Fix  rewrites first (Go: gofmt -w, golangci-lint run --fix; Rust: cargo fmt), then runs the normal gate.
        Explicit only: hooks and CI never pass it, the gate itself never rewrites.
+  -Mutate  on-demand mutation testing (Go: gremlins; Rust: cargo-mutants), advisory.
   -Only takes base go web rust proto godot dotnet cpp powershell custom: -Only go,web ("go,web" and `go web` are the same)
        base has no marker file -- it is every git work tree, and -Only base runs it alone
        python is detected but not checked, so a run that names it alone checks
@@ -154,7 +155,7 @@ switch ($cmd) {
         . (Join-Path $home_ 'gate\detect.ps1')
         Write-Output "install   $home_  $(git -C $home_ rev-parse --short HEAD 2>$null)"
         Write-Output "resolved  $((Get-Command qgate -ErrorAction SilentlyContinue).Source)"
-        foreach ($t in 'go', 'golangci-lint', 'govulncheck', 'node', 'npm', 'cargo', 'dotnet', 'cmake', 'clang-format', 'clang-tidy', 'cppcheck', 'gitleaks', 'typos', 'osv-scanner', 'lefthook', 'buf', 'gdformat', 'gdlint') {
+        foreach ($t in 'go', 'golangci-lint', 'govulncheck', 'node', 'npm', 'cargo', 'rustc', 'cargo-clippy', 'cargo-fmt', 'cargo-deny', 'cargo-shear', 'cargo-nextest', 'cargo-mutants', 'dotnet', 'cmake', 'clang-format', 'clang-tidy', 'cppcheck', 'gitleaks', 'typos', 'osv-scanner', 'lefthook', 'buf', 'gdformat', 'gdlint') {
             $exe = Get-Command $t -ErrorAction SilentlyContinue
             # An absent tool is reported, not skipped: "what does the gate think it
             # has right now" is the whole question this command answers.
@@ -164,7 +165,15 @@ switch ($cmd) {
                 'golangci-lint' { (& golangci-lint --version) }
                 'node' { "node $(& node --version)" }
                 'npm' { "npm $(& npm --version)" }
-                'cargo' { (& cargo --version) }
+                # Call the resolved path directly so Cargo never shadows tools\bin with $CARGO_HOME\bin.
+                'cargo' { (& $exe.Source --version) }
+                'rustc' { (& $exe.Source --version) }
+                'cargo-clippy' { (& $exe.Source --version) }
+                'cargo-fmt' { (& $exe.Source --version) }
+                'cargo-deny' { (& $exe.Source --version) }
+                'cargo-shear' { "cargo-shear $(((& $exe.Source --version | Select-Object -First 1) -replace '^(?:cargo-shear|Version:)\s*', '').Trim())" }
+                'cargo-nextest' { (& $exe.Source nextest --version) }
+                'cargo-mutants' { (& $exe.Source mutants --version) }
                 # The SDK list, not `--version`: the x86 host answers the latter and
                 # can still build nothing at all.
                 'dotnet' { "dotnet SDKs: $((@(& dotnet --list-sdks 2>$null | ForEach-Object { ($_ -split ' ')[0] }) -join ', '))" }

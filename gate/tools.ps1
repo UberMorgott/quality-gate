@@ -33,6 +33,18 @@ $pins = [ordered]@{
         Sha256 = 'de35b288e7962ac72aefee5048aff80551a4f0e6ac865a21f838693461ac8b8d' }
     # No release binaries: built by the system Go; go.sum and the checksum database verify the source.
     govulncheck = @{ Go = 'golang.org/x/vuln/cmd/govulncheck@v1.9.0' }
+    # https://github.com/EmbarkStudios/cargo-deny/releases/tag/0.22.1 (cargo-deny-0.22.1-x86_64-pc-windows-msvc.tar.gz.sha256)
+    'cargo-deny' = @{ Url = 'https://github.com/EmbarkStudios/cargo-deny/releases/download/0.22.1/cargo-deny-0.22.1-x86_64-pc-windows-msvc.tar.gz'
+        Sha256 = 'b8d7e473f54c328cc528ef8aea221c40b5ccac3d63844aa056f86ed0886800a2'; Exe = 'cargo-deny-0.22.1-x86_64-pc-windows-msvc\cargo-deny.exe' }
+    # https://github.com/Boshen/cargo-shear/releases/tag/v1.14.1 (GitHub asset digest)
+    'cargo-shear' = @{ Url = 'https://github.com/Boshen/cargo-shear/releases/download/v1.14.1/cargo-shear-x86_64-pc-windows-msvc.zip'
+        Sha256 = '439a3c203c177b06c538e13cfb7260972738b9e9e8dc6433d4ace416cf40eb36'; Exe = 'cargo-shear.exe' }
+    # https://github.com/nextest-rs/nextest/releases/tag/cargo-nextest-0.9.152 (cargo-nextest-0.9.152-x86_64-pc-windows-msvc.sha256)
+    'cargo-nextest' = @{ Url = 'https://github.com/nextest-rs/nextest/releases/download/cargo-nextest-0.9.152/cargo-nextest-0.9.152-x86_64-pc-windows-msvc.zip'
+        Sha256 = 'cc6bf4b6a7ac18e462cd6c9bae67e26921b888249c2988c6acabf3df387ed9d6'; Exe = 'cargo-nextest.exe' }
+    # https://github.com/sourcefrog/cargo-mutants/releases/tag/v27.1.0 (GitHub asset digest)
+    'cargo-mutants' = @{ Url = 'https://github.com/sourcefrog/cargo-mutants/releases/download/v27.1.0/cargo-mutants-x86_64-pc-windows-msvc.zip'
+        Sha256 = '2a2f00e47d4b458262a41501b0820aa26015fd35779903d2c8b30b2993f36791'; Exe = 'cargo-mutants.exe' }
 }
 
 $Name = @($Name -split ',' | ForEach-Object Trim | Where-Object { $_ })
@@ -61,8 +73,15 @@ foreach ($n in $Name) {
         if ($got -ne $p.Sha256) { Write-Output "qgate tools: $n checksum mismatch (got $got, pinned $($p.Sha256)) -- not installed"; exit 1 }
         # No Exe = the asset is the bare .exe itself.
         if ($p.Exe) {
-            Expand-Archive -LiteralPath $dl -DestinationPath (Join-Path $work 'x') -Force
-            $dl = Join-Path $work "x\$($p.Exe)"
+            $out = Join-Path $work 'x'
+            New-Item -ItemType Directory -Force -Path $out | Out-Null
+            if ($p.Url -match '\.(tar\.gz|tgz)$') {
+                & tar -xzf $dl -C $out
+                if ($LASTEXITCODE -ne 0) { Write-Output "qgate tools: tar extract failed for $n -- not installed"; exit 1 }
+            } else {
+                Expand-Archive -LiteralPath $dl -DestinationPath $out -Force
+            }
+            $dl = Join-Path $out $p.Exe
         }
         Copy-Item -LiteralPath $dl -Destination (Join-Path $bin "$n.exe") -Force
         Write-Output "installed $n -> $(Join-Path $bin "$n.exe")"

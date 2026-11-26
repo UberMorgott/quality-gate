@@ -1,0 +1,31 @@
+# Production Clippy configuration template. Drop next to the workspace Cargo.toml.
+# Pair with [workspace.lints.clippy] from templates/rust-lints.toml.
+
+# Complexity & size guards
+cognitive-complexity-threshold = 20
+too-many-lines-threshold = 120
+too-many-arguments-threshold = 8
+
+# Stack / memory / async-future size guards
+large-error-threshold = 128
+future-size-threshold = 16384
+array-size-threshold = 16384
+stack-size-threshold = 512000
+trivial-copy-size-limit = 16
+
+# Keep strict panic/debug lints actionable by allowing them inside #[cfg(test)]
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+allow-panic-in-tests = true
+allow-dbg-in-tests = true
+allow-indexing-slicing-in-tests = true
+allow-print-in-tests = true
+
+# Hot-path / determinism guardrails (uncomment & tailor per project):
+# disallowed-types = [
+#     { path = "std::collections::HashMap", reason = "use a deterministic or fast hasher (e.g. IndexMap / FxHashMap) on hot/deterministic paths" },
+# ]
+# disallowed-methods = [
+#     { path = "std::time::Instant::now", reason = "inject a Clock trait for deterministic tests" },
+#     { path = "std::process::exit", reason = "return ExitCode from main so destructors run" },
+# ]

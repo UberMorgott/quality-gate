@@ -1444,21 +1444,710 @@ Check 'wire allows Tailwind at-rules when tailwindcss is a dependency' `
 }
 
 if (Want 'rust') {
-# 11. Rust is checked for real now, red then green like Go.
-$rust = Join-Path $tmp 'rust'
-Copy-Item (Join-Path $PSScriptRoot 'testdata\rust-fixture') $rust -Recurse
-$r = Invoke-Gate $rust
-Check 'clean rust fixture passes' ($r.Code -eq 0) $r.Out
-$rsMain = Join-Path $rust 'src\main.rs'
-$rsClean = Get-Content $rsMain -Raw
-# Badly formatted AND clippy-hostile: `== true` is a clippy error, the spacing is
-# a rustfmt error. Either one alone would prove only half the pipeline.
-[IO.File]::WriteAllText($rsMain, 'fn main() {  let x = true; if x == true { println!("y"); } }' + "`n")
-$r = Invoke-Gate $rust
-Check 'rust violation fails the gate' ($r.Code -ne 0) $r.Out
-[IO.File]::WriteAllText($rsMain, $rsClean)
-$r = Invoke-Gate $rust
-Check 'rust green again after the fix' ($r.Code -eq 0) $r.Out
+# 11. Rust: fast/full baseline, virtual workspaces, strict clippy + -Baseline,
+# rustdoc intra-doc links, hermetic tool shims (deny, shear, nextest, mutants), and preset.
+$rustDirs = [Collections.Generic.List[string]]::new()
+$priorRustPath = $env:PATH
+$priorRustToolsFlag = $env:QGATE_TOOLS_BIN_ON_PATH
+$priorRustEncodedDoc = $env:CARGO_ENCODED_RUSTDOCFLAGS
+$hadPriorRustEncodedDoc = Test-Path env:CARGO_ENCODED_RUSTDOCFLAGS
+$sep = [IO.Path]::PathSeparator
+$writeLf = { param([string]$P, [string]$T) [IO.File]::WriteAllText($P, (($T -replace "`r`n", "`n").TrimEnd() + "`n")) }
+$runRustGate = {
+    param([string]$Dir, [string[]]$GateArgs)
+    $o = (& pwsh -NoProfile -File $gate -Root $Dir @GateArgs 2>&1 | Out-String)
+    [pscustomobject]@{ Code = $LASTEXITCODE; Out = $o }
+}
+
+try {
+    # 11.1 Existing rust-fixture: fast & -Full (zero regression), plus separate fmt vs clippy failures.
+    $rust = Join-Path $tmp 'rust'
+    $rustDirs.Add($rust)
+    Copy-Item (Join-Path $PSScriptRoot 'testdata\rust-fixture') $rust -Recurse
+    $r = Invoke-Gate $rust
+    Check 'clean rust fixture passes' `
+        (($r.Code -eq 0) -and ($r.Out -match '\[PASS\] cargo fmt') -and ($r.Out -match '\[PASS\] cargo clippy') -and ($r.Out -match '\[PASS\] cargo test')) $r.Out
+
+    $r = & $runRustGate $rust @('-All', '-Full')
+    Check 'clean rust fixture passes at -Full with no rust config' `
+        (($r.Code -eq 0) -and ($r.Out -match '\[PASS\] cargo test') -and
+            ($r.Out -notmatch 'clippy strict|cargo doc|cargo deny|cargo shear|cargo hack|cargo semver-checks|cargo miri')) $r.Out
+
+    $rsMain = Join-Path $rust 'src\main.rs'
+    $rsClean = [IO.File]::ReadAllText($rsMain)
+    & $writeLf $rsMain ($rsClean.Replace("fn add(a: i32, b: i32) -> i32 {`n    a + b`n}", "fn add(a: i32, b: i32) -> i32 {  a + b }"))
+    $r = Invoke-Gate $rust
+    Check 'rust fmt-only violation fails cargo fmt without failing clippy' `
+        (($r.Code -ne 0) -and ($r.Out -match '\[FAIL\] cargo fmt') -and ($r.Out -notmatch '\[FAIL\] cargo clippy')) $r.Out
+    [IO.File]::WriteAllText($rsMain, $rsClean)
+    $r = Invoke-Gate $rust
+    Check 'rust green again after fmt fix' ($r.Code -eq 0) $r.Out
+
+    & $writeLf $rsMain ($rsClean.Replace('    println!("{}", add(1, 2));', "    let x = true;`n    if x == true {`n        println!(`"{}`", add(1, 2));`n    }"))
+    $r = Invoke-Gate $rust
+    Check 'rust clippy-only violation passes fmt and fails cargo clippy' `
+        (($r.Code -ne 0) -and ($r.Out -match '\[PASS\] cargo fmt') -and ($r.Out -match '\[FAIL\] cargo clippy')) $r.Out
+    [IO.File]::WriteAllText($rsMain, $rsClean)
+    $r = Invoke-Gate $rust
+    Check 'rust green again after clippy fix' ($r.Code -eq 0) $r.Out
+
+    # 11.2 Virtual Cargo workspace: root detected once, excluded-pkg separate, beta defect fails,
+    # -Fix formats workspace members without touching excluded-pkg.
+    $wsRepo = Join-Path $tmp 'rust-ws'
+    $rustDirs.Add($wsRepo)
+    foreach ($sub in @('alpha\src', 'beta\src', 'excluded-pkg\src')) {
+        New-Item -ItemType Directory -Path (Join-Path $wsRepo $sub) -Force | Out-Null
+    }
+    & $writeLf (Join-Path $wsRepo '.gitignore') "target/`nCargo.lock"
+    & $writeLf (Join-Path $wsRepo 'Cargo.toml') "[workspace]`nresolver = `"2`"`nmembers = [`"alpha`", `"beta`"]`nexclude = [`"excluded-pkg`"]"
+    & $writeLf (Join-Path $wsRepo 'alpha\Cargo.toml') "[package]`nname = `"alpha`"`nversion = `"0.1.0`"`nedition = `"2021`""
+    $alphaClean = @'
+/// Doubles a value.
+///
+/// ```
+/// assert_eq!(alpha::double(2), 4);
+/// ```
+pub fn double(n: i32) -> i32 {
+    n * 2
+}
+
+#[cfg(test)]
+mod tests {
+    use super::double;
+
+    #[test]
+    fn doubles() {
+        assert_eq!(double(3), 6);
+    }
+}
+'@
+    & $writeLf (Join-Path $wsRepo 'alpha\src\lib.rs') $alphaClean
+    & $writeLf (Join-Path $wsRepo 'beta\Cargo.toml') "[package]`nname = `"beta`"`nversion = `"0.1.0`"`nedition = `"2021`""
+    $betaClean = "fn main() {`n    println!(`"beta`");`n}"
+    & $writeLf (Join-Path $wsRepo 'beta\src\main.rs') $betaClean
+    & $writeLf (Join-Path $wsRepo 'excluded-pkg\Cargo.toml') "[package]`nname = `"excluded-pkg`"`nversion = `"0.1.0`"`nedition = `"2021`""
+    $exClean = "fn main() {`n    println!(`"excluded`");`n}"
+    & $writeLf (Join-Path $wsRepo 'excluded-pkg\src\main.rs') $exClean
+    git -C $wsRepo init -q 2>$null
+    git -C $wsRepo add -A 2>$null
+    git -C $wsRepo -c user.email=selftest@local -c user.name=selftest commit -qm init 2>$null
+
+    $wsStacks = @(Get-Stacks $wsRepo | Where-Object { $_.Stack -eq 'rust' })
+    Check 'Get-Stacks detects virtual workspace root once and excluded-pkg separately' `
+        (($wsStacks.Count -eq 2) -and ((($wsStacks.Rel | Sort-Object) -join ',') -eq ',excluded-pkg')) `
+        (($wsStacks | ForEach-Object { "rust '$($_.Rel)'" }) -join ' | ')
+
+    $r = & $runRustGate $wsRepo @('-All', '-Only', 'rust')
+    Check 'clean virtual workspace and excluded-pkg pass' `
+        (($r.Code -eq 0) -and ($r.Out -match '\[PASS\] rust \(Cargo\.toml\)') -and ($r.Out -match '\[PASS\] rust excluded-pkg/ \(Cargo\.toml\)')) $r.Out
+
+    & $writeLf (Join-Path $wsRepo 'beta\src\main.rs') "fn main() {`n    let x = true;`n    if x == true {`n        println!(`"beta`");`n    }`n}"
+    $r = & $runRustGate $wsRepo @('-All', '-Only', 'rust')
+    Check 'real defect in workspace member beta fails workspace gate' `
+        (($r.Code -ne 0) -and ($r.Out -match '(?m)^\[FAIL\] rust\r?$') -and ($r.Out -match '\[FAIL\] cargo clippy')) $r.Out
+    & $writeLf (Join-Path $wsRepo 'beta\src\main.rs') $betaClean
+
+    $exBad = "fn main() {   println!(`"excluded`"); }`n"
+    [IO.File]::WriteAllText((Join-Path $wsRepo 'excluded-pkg\src\main.rs'), $exBad)
+    git -C $wsRepo add excluded-pkg/src/main.rs 2>$null
+    git -C $wsRepo -c user.email=selftest@local -c user.name=selftest commit -qm 'unformat excluded' 2>$null
+    & $writeLf (Join-Path $wsRepo 'alpha\src\lib.rs') ($alphaClean.Replace('    n * 2', '        n * 2'))
+    & $writeLf (Join-Path $wsRepo 'beta\src\main.rs') "fn main() {   println!(`"beta`"); }"
+    $r = & $runRustGate $wsRepo @('-Fix')
+    $alphaAfter = [IO.File]::ReadAllText((Join-Path $wsRepo 'alpha\src\lib.rs'))
+    $betaAfter = [IO.File]::ReadAllText((Join-Path $wsRepo 'beta\src\main.rs'))
+    $exAfter = [IO.File]::ReadAllText((Join-Path $wsRepo 'excluded-pkg\src\main.rs'))
+    Check '-Fix formats workspace members alpha and beta without touching excluded-pkg' `
+        (($r.Code -eq 0) -and ($r.Out -match '\[INFO\] fix: cargo fmt') -and
+            ($alphaAfter -eq (($alphaClean -replace "`r`n", "`n").TrimEnd() + "`n")) -and
+            ($betaAfter -eq ($betaClean + "`n")) -and ($exAfter -eq $exBad)) "$($r.Out)`nEX=$exAfter"
+    $r = & $runRustGate $wsRepo @('-All', '-Only', 'rust')
+    Check 'excluded-pkg stays independently gated and unformatted after workspace -Fix' `
+        (($r.Code -ne 0) -and ($r.Out -match '\[PASS\] rust \(Cargo\.toml\)') -and ($r.Out -match '(?m)^\[FAIL\] rust excluded-pkg/\r?$') -and ($r.Out -match '\[FAIL\] cargo fmt')) $r.Out
+    & $writeLf (Join-Path $wsRepo 'excluded-pkg\src\main.rs') $exClean
+    git -C $wsRepo add -A 2>$null
+    git -C $wsRepo -c user.email=selftest@local -c user.name=selftest commit -qm 'restore clean' 2>$null
+
+    # 11.3 Strict Clippy floor + -Baseline.
+    $scRepo = Join-Path $tmp 'rust-strict'
+    $rustDirs.Add($scRepo)
+    New-Item -ItemType Directory -Path (Join-Path $scRepo 'src') -Force | Out-Null
+    & $writeLf (Join-Path $scRepo '.gitignore') "target/`nCargo.lock"
+    & $writeLf (Join-Path $scRepo 'Cargo.toml') "[package]`nname = `"strict_probe`"`nversion = `"0.1.0`"`nedition = `"2021`""
+    $scBase = @'
+pub fn first_copy(items: &[i32]) -> Option<i32> {
+    items.first().cloned()
+}
+
+pub fn read_local() -> i32 {
+    let x = 1;
+    let p: *const i32 = &x;
+    unsafe { *p }
+}
+'@
+    & $writeLf (Join-Path $scRepo 'src\lib.rs') $scBase
+    [IO.File]::WriteAllText((Join-Path $scRepo 'qgate.json'), '{"rust":{"strictClippy":"warn"}}')
+    git -C $scRepo init -q 2>$null
+    git -C $scRepo add -A 2>$null
+    git -C $scRepo -c user.email=selftest@local -c user.name=selftest commit -qm init 2>$null
+
+    $r = & $runRustGate $scRepo @('-All', '-Only', 'rust', '-Full')
+    Check 'strictClippy warn emits [WARN] without failing' `
+        (($r.Code -eq 0) -and ($r.Out -match '\[WARN\] clippy strict \(2 finding\(s\)\)') -and
+            ($r.Out -match 'cloned_instead_of_copied') -and ($r.Out -match 'undocumented_unsafe_blocks') -and ($r.Out -notmatch '\[FAIL\]')) $r.Out
+
+    [IO.File]::WriteAllText((Join-Path $scRepo 'qgate.json'), '{"strict":true,"rust":{"strictClippy":"warn"}}')
+    $r = & $runRustGate $scRepo @('-All', '-Only', 'rust', '-Full')
+    Check 'strictClippy warn fails when repo strict is true' `
+        (($r.Code -ne 0) -and ($r.Out -match '\[WARN\] clippy strict \(2 finding\(s\)\)') -and ($r.Out -match '\[FAIL\] strict --')) $r.Out
+
+    [IO.File]::WriteAllText((Join-Path $scRepo 'qgate.json'), '{"rust":{"strictClippy":"fail"}}')
+    $r = & $runRustGate $scRepo @('-All', '-Only', 'rust', '-Full')
+    Check 'strictClippy fail fails on allocation and safety defects' `
+        (($r.Code -ne 0) -and ($r.Out -match '\[FAIL\] clippy strict \(2 finding\(s\)\)') -and
+            ($r.Out -match 'cloned_instead_of_copied') -and ($r.Out -match 'undocumented_unsafe_blocks')) $r.Out
+
+    $r = & $runRustGate $scRepo @('-All', '-Only', 'rust', '-Full', '-Baseline', 'HEAD')
+    Check 'strictClippy -Baseline hides old committed violations' `
+        (($r.Code -eq 0) -and ($r.Out -match '\[PASS\] clippy strict') -and
+            ($r.Out -match '\[NOTE\] clippy strict: 2 pre-existing finding\(s\) hidden by -Baseline HEAD') -and
+            ($r.Out -notmatch 'cloned_instead_of_copied') -and ($r.Out -notmatch 'undocumented_unsafe_blocks')) $r.Out
+
+    & $writeLf (Join-Path $scRepo 'src\lib.rs') ($scBase + "`n`npub fn second_copy(items: &[i32]) -> Option<i32> {`n    items.last().cloned()`n}")
+    $r = & $runRustGate $scRepo @('-All', '-Only', 'rust', '-Full', '-Baseline', 'HEAD')
+    Check 'strictClippy -Baseline still catches newly introduced violation' `
+        (($r.Code -ne 0) -and ($r.Out -match '\[FAIL\] clippy strict \(1 finding\(s\)\)') -and
+            ($r.Out -match '\[NOTE\] clippy strict: 2 pre-existing finding\(s\) hidden by -Baseline HEAD') -and
+            ($r.Out -match 'src/lib\.rs:1[12]: \[clippy::cloned_instead_of_copied\]') -and ($r.Out -notmatch 'undocumented_unsafe_blocks')) $r.Out
+
+    # 11.4 cargo doc (rust.doc): broken intra-doc link warn vs fail, fixed passes.
+    $docRepo = Join-Path $tmp 'rust-doc'
+    $rustDirs.Add($docRepo)
+    New-Item -ItemType Directory -Path (Join-Path $docRepo 'src') -Force | Out-Null
+    & $writeLf (Join-Path $docRepo '.gitignore') "target/`nCargo.lock"
+    & $writeLf (Join-Path $docRepo 'Cargo.toml') "[package]`nname = `"doc_probe`"`nversion = `"0.1.0`"`nedition = `"2021`""
+    & $writeLf (Join-Path $docRepo 'src\lib.rs') "/// Broken [nonexistent_item]`npub fn greet() -> i32 {`n    1`n}"
+    git -C $docRepo init -q 2>$null
+    git -C $docRepo add -A 2>$null
+    git -C $docRepo -c user.email=selftest@local -c user.name=selftest commit -qm init 2>$null
+
+    [IO.File]::WriteAllText((Join-Path $docRepo 'qgate.json'), '{"rust":{"doc":"warn"}}')
+    $r = & $runRustGate $docRepo @('-All', '-Only', 'rust', '-Full')
+    Check 'rust.doc warn warns on broken intra-doc link' `
+        (($r.Code -eq 0) -and ($r.Out -match '\[WARN\] cargo doc') -and ($r.Out -match 'nonexistent_item') -and ($r.Out -notmatch '\[FAIL\]')) $r.Out
+
+    [IO.File]::WriteAllText((Join-Path $docRepo 'qgate.json'), '{"rust":{"doc":"fail"}}')
+    $r = & $runRustGate $docRepo @('-All', '-Only', 'rust', '-Full')
+    Check 'rust.doc fail fails on broken intra-doc link' `
+        (($r.Code -ne 0) -and ($r.Out -match '\[FAIL\] cargo doc') -and ($r.Out -match 'nonexistent_item')) $r.Out
+
+    # P1 #3: CARGO_ENCODED_RUSTDOCFLAGS (non-empty or empty "") must not shadow intra-doc link checks and must be restored.
+    try {
+        $env:CARGO_ENCODED_RUSTDOCFLAGS = '--document-private-items'
+        $r = & $runRustGate $docRepo @('-All', '-Only', 'rust', '-Full')
+        Check 'rust.doc fail still fails when CARGO_ENCODED_RUSTDOCFLAGS is set' `
+            (($r.Code -ne 0) -and ($r.Out -match '\[FAIL\] cargo doc') -and ($r.Out -match 'nonexistent_item')) $r.Out
+        $restoredEnc = (& pwsh -NoProfile -Command "& '$gate' -Root '$docRepo' -All -Only rust -Full *> `$null; Write-Output ('ENC=' + `$env:CARGO_ENCODED_RUSTDOCFLAGS)" 2>&1 | Out-String)
+        Check 'rust.doc restores CARGO_ENCODED_RUSTDOCFLAGS after running' `
+            ($restoredEnc -match '(?m)^ENC=--document-private-items\r?$') $restoredEnc
+
+        $env:CARGO_ENCODED_RUSTDOCFLAGS = ''
+        $r = & $runRustGate $docRepo @('-All', '-Only', 'rust', '-Full')
+        Check 'rust.doc fail still fails when CARGO_ENCODED_RUSTDOCFLAGS is empty string' `
+            (($r.Code -ne 0) -and ($r.Out -match '\[FAIL\] cargo doc') -and ($r.Out -match 'nonexistent_item')) $r.Out
+    } finally {
+        if ($hadPriorRustEncodedDoc) { $env:CARGO_ENCODED_RUSTDOCFLAGS = $priorRustEncodedDoc }
+        else { Remove-Item env:CARGO_ENCODED_RUSTDOCFLAGS -ErrorAction SilentlyContinue }
+    }
+
+    & $writeLf (Join-Path $docRepo 'src\lib.rs') ('/// Returns one via [`greet`].' + "`npub fn greet() -> i32 {`n    1`n}")
+    $r = & $runRustGate $docRepo @('-All', '-Only', 'rust', '-Full')
+    Check 'rust.doc fail passes once intra-doc link is fixed' `
+        (($r.Code -eq 0) -and ($r.Out -match '\[PASS\] cargo doc')) $r.Out
+
+    # P1 #3b: .cargo/config.toml [build] rustdocflags must be preserved (valid doc passes, broken fails).
+    $docCfgRepo = Join-Path $tmp 'rust-doc-cfg'
+    $rustDirs.Add($docCfgRepo)
+    New-Item -ItemType Directory -Path (Join-Path $docCfgRepo 'src'), (Join-Path $docCfgRepo '.cargo') -Force | Out-Null
+    & $writeLf (Join-Path $docCfgRepo '.gitignore') "target/`nCargo.lock"
+    & $writeLf (Join-Path $docCfgRepo '.cargo\config.toml') "[build]`nrustdocflags = [`"--cfg`", `"qgate_doc_cfg`"]"
+    & $writeLf (Join-Path $docCfgRepo 'Cargo.toml') "[package]`nname = `"doc_cfg_probe`"`nversion = `"0.1.0`"`nedition = `"2021`"`n`n[lints.rust]`nunexpected_cfgs = { level = `"warn`", check-cfg = ['cfg(qgate_doc_cfg)'] }"
+    [IO.File]::WriteAllText((Join-Path $docCfgRepo 'qgate.json'), '{"rust":{"doc":"fail"}}')
+    & $writeLf (Join-Path $docCfgRepo 'src\lib.rs') ('#[cfg(all(doc, not(qgate_doc_cfg)))]' + "`ncompile_error!(`"missing cfg`");`n`n/// Returns one via [`greet`].`npub fn greet() -> i32 {`n    1`n}")
+    git -C $docCfgRepo init -q 2>$null
+    git -C $docCfgRepo add -A 2>$null
+    git -C $docCfgRepo -c user.email=selftest@local -c user.name=selftest commit -qm init 2>$null
+    $r = & $runRustGate $docCfgRepo @('-All', '-Only', 'rust', '-Full')
+    Check 'rust.doc preserves .cargo/config.toml rustdocflags on valid doc link' `
+        (($r.Code -eq 0) -and ($r.Out -match '\[PASS\] cargo doc')) $r.Out
+    & $writeLf (Join-Path $docCfgRepo 'src\lib.rs') "#[cfg(all(doc, not(qgate_doc_cfg)))]`ncompile_error!(`"missing cfg`");`n`n/// Broken [nonexistent_item]`npub fn greet() -> i32 {`n    1`n}"
+    $r = & $runRustGate $docCfgRepo @('-All', '-Only', 'rust', '-Full')
+    Check 'rust.doc preserves .cargo/config.toml rustdocflags and still fails broken doc link' `
+        (($r.Code -ne 0) -and ($r.Out -match '\[FAIL\] cargo doc') -and ($r.Out -match 'nonexistent_item')) $r.Out
+
+    # P1 #5: Typo/unknown lint in rust.extraLints must FAIL clippy strict as a config error (even in warn mode).
+    [IO.File]::WriteAllText((Join-Path $docRepo 'qgate.json'), '{"rust":{"strictClippy":"warn","extraLints":["clippy::definitely_not_a_real_lint_xyz"]}}')
+    $r = & $runRustGate $docRepo @('-All', '-Only', 'rust', '-Full')
+    Check 'rust.extraLints unknown lint fails clippy strict as config error' `
+        (($r.Code -ne 0) -and ($r.Out -match '\[FAIL\] clippy strict: unknown/removed lint in qgate\.json rust\.extraLints: clippy::definitely_not_a_real_lint_xyz') -and ($r.Out -notmatch '\[PASS\] clippy strict')) $r.Out
+
+    # P1 #1: Outer workspace boundary enforcement (never write/check outside -Root).
+    $outerWs = Join-Path $tmp 'rust-outer-ws'
+    $rustDirs.Add($outerWs)
+    $innerRepo = Join-Path $outerWs 'inner-repo'
+    $siblingOut = Join-Path $outerWs 'sibling-outside'
+    foreach ($sub in @((Join-Path $innerRepo 'src'), (Join-Path $siblingOut 'src'))) {
+        New-Item -ItemType Directory -Path $sub -Force | Out-Null
+    }
+    & $writeLf (Join-Path $outerWs 'Cargo.toml') "[workspace]`nresolver = `"2`"`nmembers = [`"inner-repo`", `"sibling-outside`"]"
+    & $writeLf (Join-Path $innerRepo '.gitignore') "target/`nCargo.lock"
+    & $writeLf (Join-Path $innerRepo 'Cargo.toml') "[package]`nname = `"inner_repo`"`nversion = `"0.1.0`"`nedition = `"2021`""
+    & $writeLf (Join-Path $innerRepo 'src\main.rs') "fn main() {`n    println!(`"init`");`n}"
+    & $writeLf (Join-Path $siblingOut 'Cargo.toml') "[package]`nname = `"sibling_outside`"`nversion = `"0.1.0`"`nedition = `"2021`""
+    $sibMain = Join-Path $siblingOut 'src\main.rs'
+    & $writeLf $sibMain "fn main() {   println!(`"sibling`"); }"
+    $sibBytesBefore = [Convert]::ToBase64String([IO.File]::ReadAllBytes($sibMain))
+    git -C $innerRepo init -q 2>$null
+    git -C $innerRepo add -A 2>$null
+    git -C $innerRepo -c user.email=selftest@local -c user.name=selftest commit -qm init 2>$null
+    & $writeLf (Join-Path $innerRepo 'src\main.rs') "fn main() {   println!(`"inner`"); }"
+    $wsOuterInfo = Get-RustWorkspaceInfo $innerRepo $innerRepo
+    Check 'Get-RustWorkspaceInfo detects outer workspace boundary and filters to in-repo members' `
+        ((-not $wsOuterInfo.InRepoWorkspace) -and (($wsOuterInfo.MemberNames -join ',') -eq 'inner_repo')) `
+        "InRepo=$($wsOuterInfo.InRepoWorkspace) Members=$($wsOuterInfo.MemberNames -join ',')"
+    $r = & $runRustGate $innerRepo @('-Fix')
+    $sibBytesAfter = [Convert]::ToBase64String([IO.File]::ReadAllBytes($sibMain))
+    $innerAfter = [IO.File]::ReadAllText((Join-Path $innerRepo 'src\main.rs'))
+    Check 'outer workspace: qgate -Fix on inner-repo formats inner-repo and leaves sibling-outside byte-for-byte unchanged' `
+        (($r.Code -eq 0) -and ($r.Out -match '\[INFO\] fix: cargo fmt') -and ($r.Out -match '\[PASS\] cargo fmt') -and
+            ($innerAfter -eq "fn main() {`n    println!(`"inner`");`n}`n") -and ($sibBytesAfter -eq $sibBytesBefore)) $r.Out
+
+    # P1 #1b: #[path = "../../shared/helper.rs"] outside -Root must NEVER be rewritten by -Fix.
+    $pathOuter = Join-Path $tmp 'rust-fix-path'
+    $rustDirs.Add($pathOuter)
+    $pathShared = Join-Path $pathOuter 'shared'
+    $pathInner = Join-Path $pathOuter 'inner'
+    New-Item -ItemType Directory -Path $pathShared, (Join-Path $pathInner 'src') -Force | Out-Null
+    $sharedRs = Join-Path $pathShared 'helper.rs'
+    & $writeLf $sharedRs "pub fn greet() {   println!(`"hi`"); }"
+    $sharedBytesBefore = [Convert]::ToBase64String([IO.File]::ReadAllBytes($sharedRs))
+    & $writeLf (Join-Path $pathInner '.gitignore') "target/`nCargo.lock"
+    & $writeLf (Join-Path $pathInner 'Cargo.toml') "[package]`nname = `"path_probe`"`nversion = `"0.1.0`"`nedition = `"2021`""
+    $pathMain = Join-Path $pathInner 'src\main.rs'
+    & $writeLf $pathMain "#[path = `"../../shared/helper.rs`"]`nmod helper;`nfn main() {`n    helper::greet();`n}"
+    git -C $pathInner init -q 2>$null
+    git -C $pathInner add -A 2>$null
+    git -C $pathInner -c user.email=selftest@local -c user.name=selftest commit -qm init 2>$null
+    & $writeLf $pathMain "#[path = `"../../shared/helper.rs`"]`nmod helper;`nfn main() {   helper::greet(); }"
+    $r = & $runRustGate $pathInner @('-Fix')
+    $sharedBytesAfter = [Convert]::ToBase64String([IO.File]::ReadAllBytes($sharedRs))
+    $pathMainAfter = ([IO.File]::ReadAllText($pathMain) -replace "`r`n", "`n")
+    Check 'qgate -Fix with #[path] outside -Root formats in-root main.rs and leaves external file byte-for-byte unchanged' `
+        (($r.Out -match '\[INFO\] fix: skipped 1 rustfmt file\(s\) outside repo root') -and ($r.Out -match '\[INFO\] fix: cargo fmt') -and
+            ($pathMainAfter -eq "#[path = `"../../shared/helper.rs`"]`nmod helper;`nfn main() {`n    helper::greet();`n}`n") -and
+            ($sharedBytesAfter -eq $sharedBytesBefore)) $r.Out
+
+    # P1 #1c: NTFS junction pointing outside -Root must NEVER be rewritten by -Fix.
+    if ($IsWindows) {
+        $jOuter = Join-Path $tmp 'rust-fix-junction'
+        $jExt = Join-Path $jOuter 'ext'
+        $jRepo = Join-Path $jOuter 'repo'
+        $jLink = Join-Path $jRepo 'linked'
+        New-Item -ItemType Directory -Path $jExt, (Join-Path $jRepo 'src') -Force | Out-Null
+        try {
+            $jHelper = Join-Path $jExt 'helper.rs'
+            & $writeLf $jHelper "pub fn hi() {   println!(`"j`"); }"
+            $jBytesBefore = [Convert]::ToBase64String([IO.File]::ReadAllBytes($jHelper))
+            New-Item -ItemType Junction -Path $jLink -Target $jExt | Out-Null
+            & $writeLf (Join-Path $jRepo '.gitignore') "target/`nCargo.lock"
+            & $writeLf (Join-Path $jRepo 'Cargo.toml') "[package]`nname = `"junction_probe`"`nversion = `"0.1.0`"`nedition = `"2021`""
+            $jMain = Join-Path $jRepo 'src\main.rs'
+            & $writeLf $jMain "#[path = `"../linked/helper.rs`"]`nmod helper;`nfn main() {   helper::hi(); }"
+            git -C $jRepo init -q 2>$null
+            git -C $jRepo add -A 2>$null
+            git -C $jRepo -c user.email=selftest@local -c user.name=selftest commit -qm init 2>$null
+            $r = & $runRustGate $jRepo @('-All', '-Only', 'rust', '-Fix')
+            $jBytesAfter = [Convert]::ToBase64String([IO.File]::ReadAllBytes($jHelper))
+            $jMainAfter = ([IO.File]::ReadAllText($jMain) -replace "`r`n", "`n")
+            Check 'qgate -Fix skips #[path] file through NTFS junction outside -Root and leaves external target unchanged' `
+                (($r.Out -match '\[INFO\] fix: skipped 1 rustfmt file\(s\) outside repo root') -and
+                    ($jMainAfter -eq "#[path = `"../linked/helper.rs`"]`nmod helper;`nfn main() {`n    helper::hi();`n}`n") -and
+                    ($jBytesAfter -eq $jBytesBefore)) $r.Out
+        } finally {
+            if (Test-Path -LiteralPath $jLink) { [IO.Directory]::Delete($jLink) }
+            Remove-Item -LiteralPath $jOuter -Recurse -Force -ErrorAction SilentlyContinue
+        }
+
+        # P1 #1d: NTFS hard-linked source file must NEVER be rewritten in-place by -Fix.
+        $hlOuter = Join-Path $tmp 'rust-fix-hardlink'
+        $rustDirs.Add($hlOuter)
+        $hlExt = Join-Path $hlOuter 'ext'
+        $hlRepo = Join-Path $hlOuter 'repo'
+        New-Item -ItemType Directory -Path $hlExt, (Join-Path $hlRepo 'src') -Force | Out-Null
+        $hlTarget = Join-Path $hlExt 'shared_lib.rs'
+        & $writeLf $hlTarget "pub fn val() -> i32 {   42 }"
+        $hlBytesBefore = [Convert]::ToBase64String([IO.File]::ReadAllBytes($hlTarget))
+        New-Item -ItemType HardLink -Path (Join-Path $hlRepo 'src\lib.rs') -Target $hlTarget | Out-Null
+        & $writeLf (Join-Path $hlRepo '.gitignore') "target/`nCargo.lock"
+        & $writeLf (Join-Path $hlRepo 'Cargo.toml') "[package]`nname = `"hl_probe`"`nversion = `"0.1.0`"`nedition = `"2021`""
+        $hlMain = Join-Path $hlRepo 'src\main.rs'
+        & $writeLf $hlMain "fn main() {   println!(`"{}`", hl_probe::val()); }"
+        git -C $hlRepo init -q 2>$null
+        git -C $hlRepo add -A 2>$null
+        git -C $hlRepo -c user.email=selftest@local -c user.name=selftest commit -qm init 2>$null
+        $r = & $runRustGate $hlRepo @('-All', '-Only', 'rust', '-Fix')
+        $hlBytesAfter = [Convert]::ToBase64String([IO.File]::ReadAllBytes($hlTarget))
+        $hlMainAfter = ([IO.File]::ReadAllText($hlMain) -replace "`r`n", "`n")
+        Check 'qgate -Fix skips hard-linked src/lib.rs with explicit diagnostic and leaves external link target unchanged' `
+            (($r.Out -match '\[INFO\] fix: skipped 1 hard-linked rustfmt file\(s\)') -and
+                ($hlMainAfter -eq "fn main() {`n    println!(`"{}`", hl_probe::val());`n}`n") -and
+                ($hlBytesAfter -eq $hlBytesBefore)) $r.Out
+
+        # P1 #1e: symlink/junction -> in-repo hard link pointing outside -Root must also be skipped by -Fix.
+        $chOuter = Join-Path $tmp 'rust-fix-chain'
+        $chExt = Join-Path $chOuter 'ext'
+        $chRepo = Join-Path $chOuter 'repo'
+        $chSub = Join-Path $chRepo 'sub'
+        $chJunc = Join-Path $chRepo 'junc'
+        New-Item -ItemType Directory -Path $chExt, (Join-Path $chRepo 'src'), $chSub -Force | Out-Null
+        try {
+            $chTarget = Join-Path $chExt 'ext_chain.rs'
+            & $writeLf $chTarget "pub fn c() -> i32 {   7 }"
+            $chBytesBefore = [Convert]::ToBase64String([IO.File]::ReadAllBytes($chTarget))
+            $chHard = Join-Path $chSub 'hard.rs'
+            New-Item -ItemType HardLink -Path $chHard -Target $chTarget | Out-Null
+            $chAlias = Join-Path $chRepo 'src\alias.rs'
+            $usedSym = $false
+            try {
+                New-Item -ItemType SymbolicLink -Path $chAlias -Target $chHard -ErrorAction Stop | Out-Null
+                $usedSym = $true
+            } catch {
+                New-Item -ItemType Junction -Path $chJunc -Target $chSub | Out-Null
+            }
+            $modPath = if ($usedSym) { 'alias.rs' } else { '../junc/hard.rs' }
+            & $writeLf (Join-Path $chRepo '.gitignore') "target/`nCargo.lock"
+            & $writeLf (Join-Path $chRepo 'Cargo.toml') "[package]`nname = `"chain_probe`"`nversion = `"0.1.0`"`nedition = `"2021`""
+            $chMain = Join-Path $chRepo 'src\main.rs'
+            & $writeLf $chMain "#[path = `"$modPath`"]`nmod m;`nfn main() {   println!(`"{}`", m::c()); }"
+            git -C $chRepo init -q 2>$null
+            git -C $chRepo add -A 2>$null
+            git -C $chRepo -c user.email=selftest@local -c user.name=selftest commit -qm init 2>$null
+            $r = & $runRustGate $chRepo @('-All', '-Only', 'rust', '-Fix')
+            $chBytesAfter = [Convert]::ToBase64String([IO.File]::ReadAllBytes($chTarget))
+            $chMainAfter = ([IO.File]::ReadAllText($chMain) -replace "`r`n", "`n")
+            Check 'qgate -Fix skips symlink/junction -> hard-link chain and leaves external target unchanged' `
+                (($r.Out -match '\[INFO\] fix: skipped 1 hard-linked rustfmt file\(s\)') -and
+                    ($chMainAfter -eq "#[path = `"$modPath`"]`nmod m;`nfn main() {`n    println!(`"{}`", m::c());`n}`n") -and
+                    ($chBytesAfter -eq $chBytesBefore)) $r.Out
+        } finally {
+            if (Test-Path -LiteralPath $chJunc) { [IO.Directory]::Delete($chJunc) }
+            Remove-Item -LiteralPath $chOuter -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    # P1 #2: Tracked Cargo.lock enforces --locked from the first dependency-resolving phase (cargo clippy).
+    $lockRepo = Join-Path $tmp 'rust-locked'
+    $rustDirs.Add($lockRepo)
+    New-Item -ItemType Directory -Path (Join-Path $lockRepo 'src'), (Join-Path $lockRepo 'local_dep\src') -Force | Out-Null
+    & $writeLf (Join-Path $lockRepo '.gitignore') 'target/'
+    & $writeLf (Join-Path $lockRepo 'local_dep\Cargo.toml') "[package]`nname = `"local_dep`"`nversion = `"0.1.0`"`nedition = `"2021`""
+    & $writeLf (Join-Path $lockRepo 'local_dep\src\lib.rs') "pub fn one() -> i32 {`n    1`n}"
+    & $writeLf (Join-Path $lockRepo 'Cargo.toml') "[package]`nname = `"lock_probe`"`nversion = `"0.1.0`"`nedition = `"2021`""
+    & $writeLf (Join-Path $lockRepo 'src\main.rs') "fn main() {`n    println!(`"ok`");`n}"
+    Push-Location $lockRepo
+    try { cargo generate-lockfile --offline 2>$null } finally { Pop-Location }
+    git -C $lockRepo init -q 2>$null
+    git -C $lockRepo add -A 2>$null
+    git -C $lockRepo -c user.email=selftest@local -c user.name=selftest commit -qm init 2>$null
+    $lockFile = Join-Path $lockRepo 'Cargo.lock'
+    $lockBefore = [IO.File]::ReadAllText($lockFile)
+    & $writeLf (Join-Path $lockRepo 'Cargo.toml') "[package]`nname = `"lock_probe`"`nversion = `"0.1.0`"`nedition = `"2021`"`n`n[dependencies]`nlocal_dep = { path = `"local_dep`" }"
+    $r = & $runRustGate $lockRepo @('-All', '-Only', 'rust')
+    $lockAfter = [IO.File]::ReadAllText($lockFile)
+    Check 'stale tracked Cargo.lock fails at cargo clippy --locked without rewriting Cargo.lock' `
+        (($r.Code -ne 0) -and ($r.Out -match '\[FAIL\] cargo clippy') -and ($r.Out -match 'Cargo\.lock') -and ($lockAfter -eq $lockBefore)) $r.Out
+
+    # P1 #2a: Deleted tracked Cargo.lock still enforces --locked and is NOT recreated on disk.
+    $delLockRepo = Join-Path $tmp 'rust-deleted-lock'
+    $rustDirs.Add($delLockRepo)
+    New-Item -ItemType Directory -Path (Join-Path $delLockRepo 'src') -Force | Out-Null
+    & $writeLf (Join-Path $delLockRepo '.gitignore') 'target/'
+    & $writeLf (Join-Path $delLockRepo 'Cargo.toml') "[package]`nname = `"del_lock_probe`"`nversion = `"0.1.0`"`nedition = `"2021`""
+    & $writeLf (Join-Path $delLockRepo 'src\main.rs') "fn main() {`n    println!(`"ok`");`n}"
+    Push-Location $delLockRepo
+    try { cargo generate-lockfile --offline 2>$null } finally { Pop-Location }
+    git -C $delLockRepo init -q 2>$null
+    git -C $delLockRepo add -A 2>$null
+    git -C $delLockRepo -c user.email=selftest@local -c user.name=selftest commit -qm init 2>$null
+    $delLockFile = Join-Path $delLockRepo 'Cargo.lock'
+    Remove-Item -LiteralPath $delLockFile -Force
+    $r = & $runRustGate $delLockRepo @('-All', '-Only', 'rust')
+    Check 'deleted tracked Cargo.lock fails with --locked and is not recreated on disk' `
+        (($r.Code -ne 0) -and ($r.Out -match '\[FAIL\] cargo clippy') -and ($r.Out -match 'Cargo\.lock') -and (-not (Test-Path -LiteralPath $delLockFile))) $r.Out
+
+    # P1 #2b: Outer workspace tracked Cargo.lock enforces --locked on inner repo without modifying outer Cargo.lock.
+    $outLockWs = Join-Path $tmp 'rust-outer-lock'
+    $rustDirs.Add($outLockWs)
+    $outLockInner = Join-Path $outLockWs 'inner'
+    $outLockDep = Join-Path $outLockWs 'dep'
+    New-Item -ItemType Directory -Path (Join-Path $outLockInner 'src'), (Join-Path $outLockDep 'src') -Force | Out-Null
+    & $writeLf (Join-Path $outLockWs '.gitignore') 'target/'
+    & $writeLf (Join-Path $outLockWs 'Cargo.toml') "[workspace]`nresolver = `"2`"`nmembers = [`"inner`"]"
+    & $writeLf (Join-Path $outLockDep 'Cargo.toml') "[package]`nname = `"outer_dep`"`nversion = `"0.1.0`"`nedition = `"2021`""
+    & $writeLf (Join-Path $outLockDep 'src\lib.rs') "pub fn one() -> i32 {`n    1`n}"
+    & $writeLf (Join-Path $outLockInner '.gitignore') 'target/'
+    & $writeLf (Join-Path $outLockInner 'Cargo.toml') "[package]`nname = `"inner_lock`"`nversion = `"0.1.0`"`nedition = `"2021`""
+    & $writeLf (Join-Path $outLockInner 'src\main.rs') "fn main() {`n    println!(`"ok`");`n}"
+    Push-Location $outLockWs
+    try { cargo generate-lockfile --offline 2>$null } finally { Pop-Location }
+    $outLockFile = Join-Path $outLockWs 'Cargo.lock'
+    $outLockBefore = [Convert]::ToBase64String([IO.File]::ReadAllBytes($outLockFile))
+    git -C $outLockWs init -q 2>$null
+    git -C $outLockWs add Cargo.toml .gitignore Cargo.lock dep 2>$null
+    git -C $outLockWs -c user.email=selftest@local -c user.name=selftest commit -qm init 2>$null
+    git -C $outLockInner init -q 2>$null
+    git -C $outLockInner add -A 2>$null
+    git -C $outLockInner -c user.email=selftest@local -c user.name=selftest commit -qm init 2>$null
+    & $writeLf (Join-Path $outLockInner 'Cargo.toml') "[package]`nname = `"inner_lock`"`nversion = `"0.1.0`"`nedition = `"2021`"`n`n[dependencies]`nouter_dep = { path = `"../dep`" }"
+    $r = & $runRustGate $outLockInner @('-All', '-Only', 'rust')
+    $outLockAfter = [Convert]::ToBase64String([IO.File]::ReadAllBytes($outLockFile))
+    Check 'outer workspace tracked Cargo.lock fails inner repo with --locked without modifying outer Cargo.lock' `
+        (($r.Code -ne 0) -and ($r.Out -match '\[FAIL\] cargo clippy') -and ($r.Out -match 'Cargo\.lock') -and ($outLockAfter -eq $outLockBefore)) $r.Out
+
+    # P1 #4 (real binary): fallback qgate.deny.toml allows private path deps, and exit-0 warn JSON surfaces [WARN].
+    $realDeny = Join-Path $PSScriptRoot 'tools\bin\cargo-deny.exe'
+    if (-not (Test-Path -LiteralPath $realDeny -PathType Leaf)) {
+        $realDeny = (Get-Command cargo-deny -ErrorAction SilentlyContinue | Select-Object -First 1).Source
+    }
+    if ($realDeny) {
+        $denyRealDir = Join-Path $tmp 'rust-deny-real'
+        $rustDirs.Add($denyRealDir)
+        $denyApp = Join-Path $denyRealDir 'app'
+        $denyLocal = Join-Path $denyRealDir 'local'
+        New-Item -ItemType Directory -Path (Join-Path $denyApp 'src'), (Join-Path $denyLocal 'src') -Force | Out-Null
+        & $writeLf (Join-Path $denyLocal 'Cargo.toml') "[package]`nname = `"local_dep`"`nversion = `"0.1.0`"`nedition = `"2021`"`npublish = false"
+        & $writeLf (Join-Path $denyLocal 'src\lib.rs') "pub fn one() -> i32 {`n    1`n}"
+        & $writeLf (Join-Path $denyApp '.gitignore') "target/`nCargo.lock"
+        & $writeLf (Join-Path $denyApp 'Cargo.toml') "[package]`nname = `"app_probe`"`nversion = `"0.1.0`"`nedition = `"2021`"`npublish = false`n`n[dependencies]`nlocal_dep = { path = `"../local`" }"
+        & $writeLf (Join-Path $denyApp 'src\main.rs') "fn main() {`n    println!(`"{}`", local_dep::one());`n}"
+        git -C $denyApp init -q 2>$null
+        git -C $denyApp add -A 2>$null
+        git -C $denyApp -c user.email=selftest@local -c user.name=selftest commit -qm init 2>$null
+
+        $fbDenyOut = (& $realDeny --manifest-path (Join-Path $denyApp 'Cargo.toml') --offline --format json --config (Join-Path $PSScriptRoot 'gate\qgate.deny.toml') check bans sources 2>&1 | ForEach-Object { "$_" } | Out-String)
+        $fbDenyCode = $LASTEXITCODE
+        Check 'real cargo-deny passes fallback qgate.deny.toml (offline bans sources) on private local path dep' `
+            (($fbDenyCode -eq 0) -and ($fbDenyOut -notmatch '"severity"\s*:\s*"(error|warning)"')) "code=$fbDenyCode`n$fbDenyOut"
+
+        $cargoHomeDir = if ($env:CARGO_HOME) { $env:CARGO_HOME } else { Join-Path $HOME '.cargo' }
+        if (Test-Path -LiteralPath (Join-Path $cargoHomeDir 'advisory-dbs')) {
+            [IO.File]::WriteAllText((Join-Path $denyApp 'qgate.json'), '{"rust":{"deny":"fail","denyOffline":true}}')
+            $r = & $runRustGate $denyApp @('-All', '-Only', 'rust', '-Full')
+            Check 'qgate with real cargo-deny and fallback qgate.deny.toml passes on private local path dep' `
+                (($r.Code -eq 0) -and ($r.Out -match '\[PASS\] cargo deny')) $r.Out
+
+            & $writeLf (Join-Path $denyApp 'deny.toml') "[advisories]`nversion = 2`n`n[licenses]`nversion = 2`nprivate = { ignore = true }`n`n[bans]`nwildcards = `"warn`"`n`n[sources]`nunknown-registry = `"deny`"`nunknown-git = `"deny`"`nallow-registry = [`"https://github.com/rust-lang/crates.io-index`"]"
+            $r = & $runRustGate $denyApp @('-All', '-Only', 'rust', '-Full')
+            Check 'qgate with real cargo-deny wildcards=warn emits [WARN] instead of silent [PASS]' `
+                (($r.Code -eq 0) -and ($r.Out -match '\[WARN\] cargo deny \(1 warning\(s\)\)') -and ($r.Out -match 'wildcard') -and ($r.Out -notmatch '\[PASS\] cargo deny') -and ($r.Out -notmatch '\[FAIL\]')) $r.Out
+        } else {
+            Write-Output '[skip] advisory-dbs not cached in CARGO_HOME -- skipping offline end-to-end cargo-deny advisories check'
+        }
+    } else {
+        Write-Output '[skip] cargo-deny not installed -- skipping real cargo-deny binary regression test'
+    }
+
+    # 11.5 Hermetic PATH shims (prepended ahead of tools\bin; QGATE_TOOLS_BIN_ON_PATH=1 keeps shim first).
+    $shimDir = Join-Path $tmp 'rust-shims'
+    $rustDirs.Add($shimDir)
+    New-Item -ItemType Directory -Path $shimDir -Force | Out-Null
+    $denyLog = Join-Path $shimDir 'deny-args.txt'
+    $shearCleanJson = Join-Path $shimDir 'shear-clean.json'
+    $shearFindJson = Join-Path $shimDir 'shear-findings.json'
+    [IO.File]::WriteAllText($shearCleanJson, '{"findings":[]}')
+    [IO.File]::WriteAllText($shearFindJson, '{"findings":[{"file":"Cargo.toml","severity":"warning","code":"unused_dependency","message":"shim-unused-crate","help":"remove it"}]}')
+
+    if ($IsWindows) {
+        [IO.File]::WriteAllText((Join-Path $shimDir 'cargo-deny.cmd'), @"
+@setlocal enabledelayedexpansion
+@set "A=%*"
+@echo(!A!>> "$denyLog"
+@if "%QGATE_ST_DENY_EXIT%"=="1" (echo {"type":"diagnostic","fields":{"severity":"error","code":"advisory","message":"shim-deny-advisory-fail"}}& exit /b 1)
+@if "%QGATE_ST_DENY_WARN%"=="1" (echo {"type":"diagnostic","fields":{"severity":"warning","code":"wildcard","message":"shim-deny-warn-finding"}}& echo {"type":"summary","fields":{"bans":{"errors":0,"warnings":1}}}& exit /b 0)
+@echo {"type":"summary","fields":{"advisories":{"errors":0,"warnings":0},"bans":{"errors":0,"warnings":0},"sources":{"errors":0,"warnings":0}}}
+@exit /b 0
+"@)
+        [IO.File]::WriteAllText((Join-Path $shimDir 'cargo-shear.cmd'), @"
+@if "%QGATE_ST_SHEAR_MODE%"=="findings" (type "$shearFindJson"& exit /b 0)
+@if "%QGATE_ST_SHEAR_MODE%"=="badjson" (echo not-json& echo shim-shear-crash>&2& exit /b 2)
+@type "$shearCleanJson"
+@exit /b 0
+"@)
+        [IO.File]::WriteAllText((Join-Path $shimDir 'cargo-mutants.cmd'), @"
+@if "%QGATE_ST_MUTANTS_MODE%"=="exit2" (echo 2 mutants tested: 1 caught, 1 missed& echo MISSED src/lib.rs:1:1: replace greet& exit /b 2)
+@if "%QGATE_ST_MUTANTS_MODE%"=="exit4" (echo baseline tests failed& exit /b 4)
+@echo 1 mutants tested: 1 caught
+@exit /b 0
+"@)
+    } else {
+        $pDeny = Join-Path $shimDir 'cargo-deny'
+        [IO.File]::WriteAllText($pDeny, "#!/bin/sh`necho `"`$*`" >> '$denyLog'`n[ `"`$QGATE_ST_DENY_EXIT`" = 1 ] && { echo '{`"type`":`"diagnostic`",`"fields`":{`"severity`":`"error`",`"code`":`"advisory`",`"message`":`"shim-deny-advisory-fail`"}}'; exit 1; }`n[ `"`$QGATE_ST_DENY_WARN`" = 1 ] && { echo '{`"type`":`"diagnostic`",`"fields`":{`"severity`":`"warning`",`"code`":`"wildcard`",`"message`":`"shim-deny-warn-finding`"}}'; echo '{`"type`":`"summary`",`"fields`":{`"bans`":{`"errors`":0,`"warnings`":1}}}'; exit 0; }`necho '{`"type`":`"summary`",`"fields`":{`"advisories`":{`"errors`":0,`"warnings`":0},`"bans`":{`"errors`":0,`"warnings`":0},`"sources`":{`"errors`":0,`"warnings`":0}}}'`nexit 0`n")
+        chmod +x $pDeny
+        $pShear = Join-Path $shimDir 'cargo-shear'
+        [IO.File]::WriteAllText($pShear, "#!/bin/sh`ncase `"`$QGATE_ST_SHEAR_MODE`" in findings) cat '$shearFindJson'; exit 0;; badjson) echo 'not-json'; echo 'shim-shear-crash' >&2; exit 2;; esac`ncat '$shearCleanJson'`nexit 0`n")
+        chmod +x $pShear
+        $pMut = Join-Path $shimDir 'cargo-mutants'
+        [IO.File]::WriteAllText($pMut, "#!/bin/sh`ncase `"`$QGATE_ST_MUTANTS_MODE`" in exit2) echo '2 mutants tested: 1 caught, 1 missed'; echo 'MISSED src/lib.rs:1:1: replace greet'; exit 2;; exit4) echo 'baseline tests failed'; exit 4;; esac`necho '1 mutants tested: 1 caught'`nexit 0`n")
+        chmod +x $pMut
+    }
+
+    $env:QGATE_TOOLS_BIN_ON_PATH = '1'
+    $env:PATH = "$shimDir$sep$priorRustPath"
+
+    # 11.5a cargo-deny shim.
+    [IO.File]::WriteAllText((Join-Path $docRepo 'qgate.json'), '{"rust":{"deny":"warn"}}')
+    Remove-Item $denyLog -Force -ErrorAction SilentlyContinue
+    $r = & $runRustGate $docRepo @('-All', '-Only', 'rust', '-Full')
+    $denyArgs1 = if (Test-Path $denyLog) { [IO.File]::ReadAllText($denyLog) } else { '' }
+    Check 'cargo-deny shim is hit and passes fallback qgate.deny.toml when no deny.toml exists' `
+        (($r.Code -eq 0) -and ($r.Out -match '\[PASS\] cargo deny') -and
+            ($denyArgs1 -match '--workspace\s+--format\s+json\s+--config\s+\S*qgate\.deny\.toml\s+check\s+advisories\s+bans\s+sources')) "$($r.Out)`nARGS=$denyArgs1"
+
+    [IO.File]::WriteAllText((Join-Path $docRepo 'deny.toml'), "[advisories]`n")
+    Remove-Item $denyLog -Force -ErrorAction SilentlyContinue
+    $r = & $runRustGate $docRepo @('-All', '-Only', 'rust', '-Full')
+    $denyArgs2 = if (Test-Path $denyLog) { [IO.File]::ReadAllText($denyLog) } else { '' }
+    Check 'cargo-deny shim omits fallback --config when deny.toml exists' `
+        (($r.Code -eq 0) -and ($r.Out -match '\[PASS\] cargo deny') -and
+            ($denyArgs2 -match '--workspace\s+--format\s+json\s+check\b') -and ($denyArgs2 -notmatch '--config|qgate\.deny\.toml|advisories bans sources')) "$($r.Out)`nARGS=$denyArgs2"
+
+    $env:QGATE_ST_DENY_WARN = '1'
+    [IO.File]::WriteAllText((Join-Path $docRepo 'qgate.json'), '{"rust":{"deny":"fail"}}')
+    $r = & $runRustGate $docRepo @('-All', '-Only', 'rust', '-Full')
+    Check 'cargo-deny exit 0 with warning JSON emits [WARN] even in fail mode' `
+        (($r.Code -eq 0) -and ($r.Out -match '\[WARN\] cargo deny \(1 warning\(s\)\)') -and ($r.Out -match 'shim-deny-warn-finding') -and ($r.Out -notmatch '\[PASS\] cargo deny') -and ($r.Out -notmatch '\[FAIL\]')) $r.Out
+    Remove-Item env:QGATE_ST_DENY_WARN -ErrorAction SilentlyContinue
+
+    [IO.File]::WriteAllText((Join-Path $docRepo 'qgate.json'), '{"rust":{"deny":"warn"}}')
+    $env:QGATE_ST_DENY_EXIT = '1'
+    $r = & $runRustGate $docRepo @('-All', '-Only', 'rust', '-Full')
+    Check 'cargo-deny warn emits [WARN] on non-zero exit' `
+        (($r.Code -eq 0) -and ($r.Out -match '\[WARN\] cargo deny') -and ($r.Out -match 'shim-deny-advisory-fail') -and ($r.Out -notmatch '\[FAIL\]')) $r.Out
+
+    [IO.File]::WriteAllText((Join-Path $docRepo 'qgate.json'), '{"rust":{"deny":"fail"}}')
+    $r = & $runRustGate $docRepo @('-All', '-Only', 'rust', '-Full')
+    Check 'cargo-deny fail fails on non-zero exit' `
+        (($r.Code -ne 0) -and ($r.Out -match '\[FAIL\] cargo deny') -and ($r.Out -match 'shim-deny-advisory-fail')) $r.Out
+    Remove-Item env:QGATE_ST_DENY_EXIT -ErrorAction SilentlyContinue
+    Remove-Item (Join-Path $docRepo 'deny.toml') -Force -ErrorAction SilentlyContinue
+
+    # 11.5b cargo-shear shim.
+    $env:QGATE_ST_SHEAR_MODE = 'findings'
+    [IO.File]::WriteAllText((Join-Path $docRepo 'qgate.json'), '{"rust":{"shear":"warn"}}')
+    $r = & $runRustGate $docRepo @('-All', '-Only', 'rust', '-Full')
+    Check 'cargo-shear non-empty findings JSON with exit 0 still triggers [WARN]' `
+        (($r.Code -eq 0) -and ($r.Out -match '\[WARN\] cargo shear \(1 finding\(s\)\)') -and ($r.Out -match 'shim-unused-crate') -and ($r.Out -notmatch '\[FAIL\]')) $r.Out
+
+    [IO.File]::WriteAllText((Join-Path $docRepo 'qgate.json'), '{"rust":{"shear":"fail"}}')
+    $r = & $runRustGate $docRepo @('-All', '-Only', 'rust', '-Full')
+    Check 'cargo-shear non-empty findings JSON with exit 0 fails in fail mode' `
+        (($r.Code -ne 0) -and ($r.Out -match '\[FAIL\] cargo shear \(1 finding\(s\)\)') -and ($r.Out -match 'shim-unused-crate')) $r.Out
+
+    $env:QGATE_ST_SHEAR_MODE = 'badjson'
+    [IO.File]::WriteAllText((Join-Path $docRepo 'qgate.json'), '{"rust":{"shear":"warn"}}')
+    $r = & $runRustGate $docRepo @('-All', '-Only', 'rust', '-Full')
+    Check 'cargo-shear invalid JSON / crash is surfaced in warn mode' `
+        (($r.Code -eq 0) -and ($r.Out -match '\[WARN\] cargo shear') -and ($r.Out -match 'shim-shear-crash')) $r.Out
+
+    [IO.File]::WriteAllText((Join-Path $docRepo 'qgate.json'), '{"rust":{"shear":"fail"}}')
+    $r = & $runRustGate $docRepo @('-All', '-Only', 'rust', '-Full')
+    Check 'cargo-shear invalid JSON / crash fails in fail mode' `
+        (($r.Code -ne 0) -and ($r.Out -match '\[FAIL\] cargo shear') -and ($r.Out -match 'shim-shear-crash')) $r.Out
+    $env:QGATE_ST_SHEAR_MODE = 'clean'
+
+    # 11.5c cargo-nextest shim + doctest targeting on virtual workspace (alpha only, not beta).
+    $nxDir = Join-Path $tmp 'rust-nextest-shim'
+    $rustDirs.Add($nxDir)
+    New-Item -ItemType Directory -Path $nxDir -Force | Out-Null
+    $nxLog = Join-Path $nxDir 'nextest-args.txt'
+    $cargoLog = Join-Path $nxDir 'cargo-args.txt'
+    $realCargo = (Get-Command cargo -CommandType Application | Select-Object -First 1).Source
+    if ($IsWindows) {
+        [IO.File]::WriteAllText((Join-Path $nxDir 'cargo-nextest.cmd'), "@echo off`r`nsetlocal enabledelayedexpansion`r`nset `"A=%*`"`r`necho(!A!>> `"$nxLog`"`r`necho shim-nextest-ok`r`nexit /b 0`r`n")
+        [IO.File]::WriteAllText((Join-Path $nxDir 'cargo.cmd'), "@echo off`r`nsetlocal enabledelayedexpansion`r`nset `"A=%*`"`r`necho(!A!>> `"$cargoLog`"`r`nendlocal`r`n`"$realCargo`" %*`r`nexit /b %errorlevel%`r`n")
+    } else {
+        $pNx = Join-Path $nxDir 'cargo-nextest'
+        [IO.File]::WriteAllText($pNx, "#!/bin/sh`necho `"`$*`" >> '$nxLog'`necho 'shim-nextest-ok'`nexit 0`n")
+        chmod +x $pNx
+        $pCg = Join-Path $nxDir 'cargo'
+        [IO.File]::WriteAllText($pCg, "#!/bin/sh`necho `"`$*`" >> '$cargoLog'`nexec '$realCargo' `"`$@`"`n")
+        chmod +x $pCg
+    }
+    try {
+        $env:PATH = "$nxDir$sep$shimDir$sep$priorRustPath"
+        [IO.File]::WriteAllText((Join-Path $wsRepo 'qgate.json'), '{"rust":{"testRunner":"nextest"}}')
+        $r = & $runRustGate $wsRepo @('-All', '-Only', 'rust')
+        $nxArgs = if (Test-Path $nxLog) { [IO.File]::ReadAllText($nxLog) } else { '' }
+        $docCalls = @((Get-Content $cargoLog -ErrorAction SilentlyContinue) | Where-Object { $_ -match '^test --doc\b' })
+        Check 'testRunner nextest runs nextest (--no-tests=pass) and cargo test --doc only for alpha' `
+            (($r.Code -eq 0) -and ($r.Out -match '\[PASS\] cargo nextest') -and ($r.Out -match '\[PASS\] cargo doctest') -and
+                ($nxArgs -match 'nextest run --workspace --no-tests=pass') -and
+                ($docCalls.Count -eq 1) -and ($docCalls[0] -match '-p alpha') -and ($docCalls[0] -notmatch '-p beta|excluded-pkg')) `
+            "$($r.Out)`nNX=$nxArgs`nDOC=$($docCalls -join '; ')"
+
+        & $writeLf (Join-Path $wsRepo 'alpha\src\lib.rs') ($alphaClean.Replace('assert_eq!(alpha::double(2), 4);', 'assert_eq!(alpha::double(2), 99);'))
+        $r = & $runRustGate $wsRepo @('-All', '-Only', 'rust')
+        Check 'failing doctest in alpha fails the gate under nextest' `
+            (($r.Code -ne 0) -and ($r.Out -match '\[PASS\] cargo nextest') -and ($r.Out -match '\[FAIL\] cargo doctest')) $r.Out
+    } finally {
+        $env:PATH = "$shimDir$sep$priorRustPath"
+    }
+
+    # 11.5d cargo-mutants shim (-Mutate).
+    Remove-Item (Join-Path $docRepo 'qgate.json') -Force -ErrorAction SilentlyContinue
+    $env:QGATE_ST_MUTANTS_MODE = 'exit2'
+    $r = & $runRustGate $docRepo @('-All', '-Only', 'rust', '-Mutate')
+    Check 'cargo-mutants exit 2 (survived mutant) produces [WARN] and exit 0' `
+        (($r.Code -eq 0) -and ($r.Out -match '\[WARN\] cargo mutants: survived mutant\(s\)') -and
+            ($r.Out -match 'MISSED src/lib\.rs:1:1') -and ($r.Out -notmatch '\[FAIL\]')) $r.Out
+
+    $env:QGATE_ST_MUTANTS_MODE = 'exit0'
+    $r = & $runRustGate $docRepo @('-All', '-Only', 'rust', '-Mutate')
+    Check 'cargo-mutants exit 0 produces [PASS]' `
+        (($r.Code -eq 0) -and ($r.Out -match '\[PASS\] cargo mutants') -and ($r.Out -notmatch '\[WARN\] cargo mutants')) $r.Out
+
+    $env:QGATE_ST_MUTANTS_MODE = 'exit4'
+    $r = & $runRustGate $docRepo @('-All', '-Only', 'rust', '-Mutate')
+    Check 'cargo-mutants exit 4 produces [FAIL] and non-zero exit' `
+        (($r.Code -ne 0) -and ($r.Out -match '\[FAIL\].*cargo mutants: baseline tests failed / unviable')) $r.Out
+    Remove-Item env:QGATE_ST_MUTANTS_MODE -ErrorAction SilentlyContinue
+
+    # 11.6 rust.preset "strict" activates all 4 -Full checks in one line.
+    [IO.File]::WriteAllText((Join-Path $docRepo 'qgate.json'), '{"rust":{"preset":"strict"}}')
+    $env:QGATE_ST_SHEAR_MODE = 'clean'
+    $r = & $runRustGate $docRepo @('-All', '-Only', 'rust', '-Full')
+    Check 'rust.preset strict activates all 4 -Full checks and passes with clean shims' `
+        (($r.Code -eq 0) -and ($r.Out -match '\[PASS\] clippy strict') -and ($r.Out -match '\[PASS\] cargo doc') -and
+            ($r.Out -match '\[PASS\] cargo deny') -and ($r.Out -match '\[PASS\] cargo shear')) $r.Out
+
+    $env:QGATE_ST_DENY_EXIT = '1'
+    $r = & $runRustGate $docRepo @('-All', '-Only', 'rust', '-Full')
+    Check 'rust.preset strict fails when a -Full check fails' `
+        (($r.Code -ne 0) -and ($r.Out -match '\[FAIL\] cargo deny') -and ($r.Out -match 'shim-deny-advisory-fail')) $r.Out
+}
+finally {
+    $env:PATH = $priorRustPath
+    if ($null -eq $priorRustToolsFlag) { Remove-Item env:QGATE_TOOLS_BIN_ON_PATH -ErrorAction SilentlyContinue }
+    else { $env:QGATE_TOOLS_BIN_ON_PATH = $priorRustToolsFlag }
+    if ($hadPriorRustEncodedDoc) { $env:CARGO_ENCODED_RUSTDOCFLAGS = $priorRustEncodedDoc }
+    else { Remove-Item env:CARGO_ENCODED_RUSTDOCFLAGS -ErrorAction SilentlyContinue }
+    foreach ($v in 'QGATE_ST_DENY_EXIT', 'QGATE_ST_DENY_WARN', 'QGATE_ST_SHEAR_MODE', 'QGATE_ST_MUTANTS_MODE') {
+        Remove-Item "env:$v" -ErrorAction SilentlyContinue
+    }
+    foreach ($d in $rustDirs) {
+        if ($d -and (Test-Path -LiteralPath $d)) { Remove-Item -LiteralPath $d -Recurse -Force -ErrorAction SilentlyContinue }
+    }
+}
 
 }
 
