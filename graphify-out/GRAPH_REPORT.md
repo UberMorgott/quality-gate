@@ -1,7 +1,7 @@
 # Graph Report - quality-gate  (2026-11-27)
 
 ## Corpus Check
-- 65 files · ~191,537 words
+- 65 files · ~191,896 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 23 file(s) not represented in the graph (top: .toml 8, (none) 5, .gd 2)
 - WARNING: 23 of 89 files seen (26%) have no supported extractor and are missing from this graph entirely. It may look complete while representing only part of the codebase.
@@ -12,7 +12,7 @@
 - Token cost: 128,013 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `1c3e2d88`
+- Built from commit: `7ffa5a7a`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -62,9 +62,9 @@
 5. `Get-PathKey()` - 14 edges
 6. `Get-Stacks()` - 14 edges
 7. `Invoke-CppStack()` - 13 edges
-8. `Invoke-SmokeCheck()` - 12 edges
-9. `Phase()` - 12 edges
-10. `Invoke-CustomStack()` - 12 edges
+8. `Phase()` - 12 edges
+9. `Invoke-CustomStack()` - 12 edges
+10. `Invoke-SmokeCheck()` - 12 edges
 
 ## Surprising Connections (you probably didn't know these)
 - `detect stacks step (monorepo-aware marker search)` --semantically_similar_to--> `Marker-file stack detection`  [INFERRED] [semantically similar]
@@ -206,7 +206,7 @@ _Questions this graph is uniquely positioned to answer:_
   _Cohesion score 0.04440333024976873 - nodes in this community are weakly interconnected._
 - **Why does `Lookups` connect `Lookups` to `Patches.cs`?**
   _High betweenness centrality (0.027) - this node is a cross-community bridge._
+- **Are the 12 inferred relationships involving `Get-PathKey()` (e.g. with `check.ps1` and `Get-DotnetSharedFormat()`) actually correct?**
+  _`Get-PathKey()` has 12 INFERRED edges - model-reasoned connections that need verification._
 - **Should `Get-PathKey` be split into smaller, more focused modules?**
   _Cohesion score 0.0907258064516129 - nodes in this community are weakly interconnected._
-- **Why does `AccessTools` connect `Lookups` to `Patches.cs`?**
-  _High betweenness centrality (0.007) - this node is a cross-community bridge._
