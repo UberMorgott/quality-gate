@@ -1,5 +1,4 @@
 {
-  "4": "Lookups",
   "6": "QGateHarmony",
   "7": "extends",
   "8": "package.json",
@@ -23,7 +22,6 @@
   "31": "string",
   "32": "Harmony.csproj",
   "33": "Mod.csproj",
-  "34": "harmony.ps1",
   "35": "app.ps1",
   "40": "gopurity/main.go",
   "41": "Hud",

@@ -1,8 +1,8 @@
 {
   "bin/qgate.ps1": {
-    "mtime": 1795095879.0539505,
-    "seen": 1795096303.1565719,
-    "ast_hash": "0da19f81e6dea9d9f42898809b3df85f",
+    "mtime": 1795725972.6242719,
+    "seen": 1795726994.9169517,
+    "ast_hash": "6f8661329be5057fc3e4b66df373c188",
     "semantic_hash": ""
   },
   "bootstrap.ps1": {
@@ -12,21 +12,21 @@
     "semantic_hash": ""
   },
   "gate/check.ps1": {
-    "mtime": 1795095879.0554872,
-    "seen": 1795096303.1565762,
-    "ast_hash": "58cfe848b6578874863ab276e5f15253",
+    "mtime": 1795732282.0803874,
+    "seen": 1795732309.58725,
+    "ast_hash": "413aa5aa3148cd18bedb8d96a76c60ab",
     "semantic_hash": ""
   },
   "gate/detect.ps1": {
-    "mtime": 1795095879.0559995,
-    "seen": 1795096303.156577,
-    "ast_hash": "e1064db0820e972cc26bc85c0cc479cb",
+    "mtime": 1795730693.2813833,
+    "seen": 1795731768.3334196,
+    "ast_hash": "5071d97eb23a8d57b3a2f18d8d748671",
     "semantic_hash": ""
   },
   "gate/outdated.ps1": {
-    "mtime": 1789655060.286738,
-    "seen": 1793178666.4504778,
-    "ast_hash": "9fa078db63274d482a54d540fbf9b155",
+    "mtime": 1795725975.9511173,
+    "seen": 1795726994.916963,
+    "ast_hash": "c44589e4ace8d52bbaf7faab2ffb8e58",
     "semantic_hash": ""
   },
   "gate/stop-hook.ps1": {
@@ -36,15 +36,15 @@
     "semantic_hash": ""
   },
   "install.ps1": {
-    "mtime": 1793221515.8515215,
-    "seen": 1793223317.0155694,
-    "ast_hash": "a87bd7ffd7958f33811b1592816f1844",
+    "mtime": 1795725974.3676293,
+    "seen": 1795726994.91697,
+    "ast_hash": "b12abf3ce1d4a5a5e7a7b577d45163fb",
     "semantic_hash": ""
   },
   "selftest.ps1": {
-    "mtime": 1795095879.1300135,
-    "seen": 1795096303.156591,
-    "ast_hash": "f602e96d4f897380bfcf6d80bf2d3030",
+    "mtime": 1795737087.1638746,
+    "seen": 1795737101.3435128,
+    "ast_hash": "1f19c56c500ba9c6428fb420d3a9660f",
     "semantic_hash": ""
   },
   "templates/.stylelintrc.json": {
@@ -126,9 +126,9 @@
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1795095879.0539505,
-    "seen": 1795096303.1566234,
-    "ast_hash": "ba95f375b4b447af0ee8f71b1b0df6ff",
+    "mtime": 1795730550.0699582,
+    "seen": 1795731768.3334656,
+    "ast_hash": "efd77d90de3d76dba69dde258bdd47bd",
     "semantic_hash": ""
   },
   "templates/.golangci.yml": {
@@ -138,9 +138,9 @@
     "semantic_hash": ""
   },
   "templates/ci.yml": {
-    "mtime": 1793177580.3649461,
-    "seen": 1793178666.4504957,
-    "ast_hash": "4a8af0de0e98ed8934f25fe481d91504",
+    "mtime": 1795725980.186052,
+    "seen": 1795726994.9169745,
+    "ast_hash": "b2c8dfa07f06da19cadd4452b4e49d0d",
     "semantic_hash": ""
   },
   "templates/lefthook.yml": {
@@ -210,15 +210,15 @@
     "semantic_hash": ""
   },
   "gate/harmony.cs": {
-    "mtime": 1795095879.127673,
-    "seen": 1795096303.1565795,
-    "ast_hash": "8ed892b8cc30ed958fec5a27c9ecc177",
+    "mtime": 1795737086.086107,
+    "seen": 1795737101.3435013,
+    "ast_hash": "df1a90364a6e334304a4e98ec10cd3ae",
     "semantic_hash": ""
   },
   "gate/harmony.ps1": {
-    "mtime": 1794087176.0021193,
-    "seen": 1794088193.2941492,
-    "ast_hash": "680a93b6478e6399bb45b387ac0dd428",
+    "mtime": 1795210999.8347485,
+    "seen": 1795211523.2075388,
+    "ast_hash": "cee9968235fa8df446093e9c59259907",
     "semantic_hash": ""
   },
   "testdata/harmony-fixture/Game/Game.csproj": {
@@ -252,9 +252,9 @@
     "semantic_hash": ""
   },
   "testdata/harmony-fixture/Mod/Patches.cs": {
-    "mtime": 1795095879.1300135,
-    "seen": 1795096303.1566138,
-    "ast_hash": "a46a039fa2e302a45ef8c1ad25c32fc7",
+    "mtime": 1795735567.9906127,
+    "seen": 1795735578.9633048,
+    "ast_hash": "1dfaaaf14cfebc1004a948117ffdfdcc",
     "semantic_hash": ""
   },
   "gate/smoke.ps1": {
@@ -384,9 +384,9 @@
     "semantic_hash": ""
   },
   "gate/tools.ps1": {
-    "mtime": 1794616021.3512032,
-    "seen": 1794616441.025219,
-    "ast_hash": "ae130ccf71ecf868bdc4b90c12d59fa9",
+    "mtime": 1795725529.9086337,
+    "seen": 1795726994.9169662,
+    "ast_hash": "db7ed27799171bb5f9120f846d12e3e3",
     "semantic_hash": ""
   },
   "gate/land.ps1": {
