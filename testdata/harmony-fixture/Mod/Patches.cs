@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Reflection;
 using HarmonyLib;
 
@@ -128,12 +129,65 @@ public static class Lookups
 
     static MethodInfo Find(Type type, string name) => type == null ? null : AccessTools.Method(type, name);
 
+    // Stored local/field passed to AccessTools.Field whose result is null-checked, and getters
+    // returning TypeByName whose callers null-check the return value (#247): warnings.
+    public static string ProbeStoredField()
+    {
+        var t = AccessTools.TypeByName("SoftDep.IdleLod");
+        if (!(AccessTools.Field(t, "s_state")?.GetValue(null) is IDictionary _)) return "na";
+        return "ok";
+    }
+
+    public static bool ProbeStoredFieldIs()
+    {
+        var t = AccessTools.TypeByName("SoftDep.IdleIs");
+        return ((object)AccessTools.Field(t, "s_state")) is FieldInfo;
+    }
+
+    static Type SkirtRigType => AccessTools.TypeByName("SoftDep.SkirtRig");
+
+    public static object ProbeGetterField() => AccessTools.Field(SkirtRigType, "x")?.GetValue(null);
+
+    static Type SkirtLocalType => AccessTools.TypeByName("SoftDep.SkirtLocal");
+
+    public static bool ProbeGetterLocal()
+    {
+        var t = SkirtLocalType;
+        return t != null;
+    }
+
+    static Type GuardThenDerefGetter => AccessTools.TypeByName("SoftDep.GuardThenDeref");
+
+    public static string ProbeGuardThenDeref()
+    {
+        var t = GuardThenDerefGetter;
+        if (t == null) return "";
+        return t.FullName;
+    }
+
+    // Non-null fallback helper (`t == null ? typeof(string) : t`) makes caller deref safe: probe.
+    static Type FallbackHelperGetter => AccessTools.TypeByName("SoftDep.HelperNonNullFallback");
+    static Type FallbackNonNull(Type t) => t == null ? typeof(string) : t;
+    public static string ProbeNonNullFallback() => FallbackNonNull(FallbackHelperGetter).FullName;
+
     // The same nulls never checked: failures.
     public static object DanglingThroughField() => AccessTools.Field(AccessTools.TypeByName("SoftDep.Unchecked"), "All").GetValue(null);
 
     public static object DanglingThroughHelper() => Use(AccessTools.TypeByName("SoftDep.Used"));
 
     public static object DanglingDeref() => AccessTools.TypeByName("SoftDep.Deref").GetMethod("Run");
+
+    public static object DanglingStoredField()
+    {
+        var t = AccessTools.TypeByName("SoftDep.IdleBad");
+        return AccessTools.Field(t, "s_state").GetValue(null);
+    }
+
+    static Type BadGetter => AccessTools.TypeByName("SoftDep.SkirtBad");
+
+    public static object DanglingGetter() => AccessTools.Field(BadGetter, "x").GetValue(null);
+
+    static Type UnusedGetter => AccessTools.TypeByName("SoftDep.Unused");
 
     static object Use(Type type) => type.Name;
 }

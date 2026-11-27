@@ -3349,6 +3349,146 @@ public sealed class Bad
     Check 'a TypeByName null never checked still fails (unchecked AccessTools, plain helper, dereference)' `
         (@((Get-InlineReport $out) -split "`r?`n" -match '^\s*type SoftDep\.(Unchecked|Used|Deref) not found \(AccessTools\.TypeByName\)' |
             ForEach-Object Trim | Select-Object -Unique).Count -eq 3) $out
+    # Stored local passed to AccessTools.Field whose result is null-checked, and getters
+    # returning TypeByName whose callers null-check the result (#247): warnings; unchecked, failures.
+    Check 'a stored TypeByName local or getter checked by callers is a probe (#247)' `
+        (($out -match '\[WARN\] harmony: type SoftDep\.IdleLod not found .*null-checked') -and
+            ($out -match '\[WARN\] harmony: type SoftDep\.IdleIs not found .*null-checked') -and
+            ($out -match '\[WARN\] harmony: type SoftDep\.SkirtRig not found .*null-checked') -and
+            ($out -match '\[WARN\] harmony: type SoftDep\.SkirtLocal not found .*null-checked') -and
+            ($out -match '\[WARN\] harmony: type SoftDep\.GuardThenDeref not found .*null-checked') -and
+            ($out -match '\[WARN\] harmony: type SoftDep\.HelperNonNullFallback not found .*null-checked') -and
+            ((Get-InlineReport $out) -notmatch '(?m)^(?!\[WARN\]).*SoftDep\.(IdleLod|IdleIs|SkirtRig|SkirtLocal|GuardThenDeref|HelperNonNullFallback)')) $out
+    Check 'an unchecked stored TypeByName local or getter still fails (#247)' `
+        (@((Get-InlineReport $out) -split "`r?`n" -match '^\s*type SoftDep\.(IdleBad|SkirtBad|Unused) not found \(AccessTools\.TypeByName\)' |
+            ForEach-Object Trim | Select-Object -Unique).Count -eq 3) $out
+    # Soundness cases for #247 (tested in BOTH Debug and Release via harmony.ps1 without 6000-char cap).
+    $hmSound = Join-Path $hm 'Sound247'
+    New-Item -ItemType Directory -Path $hmSound -Force | Out-Null
+    Copy-Item (Join-Path $hmMod 'Mod.csproj') (Join-Path $hmSound 'Sound247.csproj')
+    [IO.File]::WriteAllText((Join-Path $hmSound 'Sound.cs'), @'
+using System;
+using HarmonyLib;
+static class Sound247
+{
+    static Type FallbackHelperGetter => AccessTools.TypeByName("SoftDep.HelperNonNullFallback");
+    static Type FallbackNonNull(Type t) => t == null ? typeof(string) : t;
+    public static string ProbeNonNullFallback() => FallbackNonNull(FallbackHelperGetter).FullName;
+
+    static Type MixedGetter => AccessTools.TypeByName("SoftDep.MixedGetter");
+    public static bool MixedGetterChecked() => MixedGetter != null;
+    public static string MixedGetterUnchecked() => MixedGetter.FullName;
+
+    static Type BranchGetter => AccessTools.TypeByName("SoftDep.BranchUnchecked");
+    public static string BranchMerged(bool flag)
+    {
+        Type found;
+        if (flag) { found = BranchGetter; if (found == null) return ""; }
+        else { found = BranchGetter; }
+        return found.FullName;
+    }
+
+    static Type AfterDerefGetter => AccessTools.TypeByName("SoftDep.CheckAfterDeref");
+    public static string DerefBeforeCheck() { var found = AfterDerefGetter; var n = found.FullName; return found != null ? n : ""; }
+
+    static Type DelegateGetter() => AccessTools.TypeByName("SoftDep.DelegateEscape");
+    public static bool DelegateDirectCheck() => DelegateGetter() != null;
+    public static string DelegateUnchecked() { Func<Type> fetch = DelegateGetter; return fetch().FullName; }
+
+    static Type CondCheckGetter => AccessTools.TypeByName("SoftDep.CondCheck");
+    public static string ConditionalNullCheck(bool flag) { var found = CondCheckGetter; if (flag && found == null) return ""; return found.FullName; }
+
+    static Type CondOverwriteGetter => AccessTools.TypeByName("SoftDep.CondOverwrite");
+    public static string ConditionalOverwrite(bool replace) { var t = CondOverwriteGetter; if (t != null) _ = t.Name; if (replace) t = typeof(string); return t.FullName; }
+
+    static Type CondArgGetter => AccessTools.TypeByName("SoftDep.CondArgUse");
+    public static string ConditionalArgUse(bool flag) { var found = CondArgGetter; if (flag && found == null) return ""; return NameOf(found); }
+    static string NameOf(Type t) => t.FullName;
+
+    static Type AliasGetter => AccessTools.TypeByName("SoftDep.AliasUnchecked");
+    public static string AliasDereference(bool flag) { var t = AliasGetter; var alias = t; if (flag && t == null) return ""; return alias.FullName; }
+
+    static Type HelperCondGetter => AccessTools.TypeByName("SoftDep.HelperCondCheck");
+    public static string CallHelperCond(bool flag) => CondHelper(HelperCondGetter, flag);
+    static string CondHelper(Type t, bool flag) { if (flag && t == null) return ""; return t.FullName; }
+
+    static Type HelperRetDerefGetter => AccessTools.TypeByName("SoftDep.HelperRetDeref");
+    static Type PassthroughOrNull(Type t) => t == null ? null : t;
+    public static string DerefHelperReturn() => PassthroughOrNull(HelperRetDerefGetter).FullName;
+
+    static readonly Type CachedField = AccessTools.TypeByName("SoftDep.FieldOrder");
+    public static bool FieldCheckedFirst() => CachedField != null;
+    public static string FieldDerefLater() => CachedField.FullName;
+
+    static Type MutableField;
+    static Type FieldOverwriteGetter => AccessTools.TypeByName("SoftDep.FieldOverwrite");
+    public static string FieldCheckedBeforeOverwrite() { if (MutableField == null) return ""; MutableField = FieldOverwriteGetter; return MutableField.FullName; }
+
+    sealed class TypeBox { public Type Value; }
+    static Type InstFieldGetter => AccessTools.TypeByName("SoftDep.InstFieldAlias");
+    public static string InstanceFieldAliasing() { var a = new TypeBox { Value = typeof(string) }; var b = new TypeBox { Value = InstFieldGetter }; if (a.Value == null) return ""; return b.Value.FullName; }
+
+    static Type CallFallbackGetter => AccessTools.TypeByName("SoftDep.HelperCallFallback");
+    static Type NullFactory() => null;
+    static Type FallbackViaCall(Type t) => t == null ? NullFactory() : t;
+    public static string DerefCallFallback() => FallbackViaCall(CallFallbackGetter).FullName;
+
+    static Type StargFallbackGetter => AccessTools.TypeByName("SoftDep.StargFallback");
+    static Type ReassignParam(Type t) { if (t == null) t = NullFactory(); return t; }
+    public static string DerefStargFallback() => ReassignParam(StargFallbackGetter).FullName;
+
+    class BaseFinder { public virtual Type Find(Type t) => t == null ? typeof(string) : t; }
+    sealed class DerivedFinder : BaseFinder { public override Type Find(Type t) => null; }
+    static Type VirtFallbackGetter => AccessTools.TypeByName("SoftDep.VirtualOverride");
+    public static string DerefVirtualOverride(bool derived)
+    {
+        BaseFinder f = derived ? new DerivedFinder() : new BaseFinder();
+        return f.Find(VirtFallbackGetter).FullName;
+    }
+
+    sealed class OwnReadonlyBox
+    {
+        readonly Type cached = AccessTools.TypeByName("SoftDep.ReadonlyThisField");
+        public string SafeRead() => cached == null ? "" : cached.FullName;
+    }
+    public static string ProbeOwnReadonlyField() => new OwnReadonlyBox().SafeRead();
+
+    static Type RefParamGetter => AccessTools.TypeByName("SoftDep.RefParamDeref");
+    static string RequireRef(ref Type t) => t.FullName;
+    static string RefNullHelper(Type t) { if (t == null) return RequireRef(ref t); return t.FullName; }
+    public static string CallRefNullHelper() => RefNullHelper(RefParamGetter);
+
+    static Type CallMutatedField;
+    static Type FieldCallMutateGetter => AccessTools.TypeByName("SoftDep.FieldCallMutate");
+    static void RefreshField() { CallMutatedField = FieldCallMutateGetter; }
+    public static string CheckThenRefreshThenDeref() { if (CallMutatedField == null) return ""; RefreshField(); return CallMutatedField.FullName; }
+
+    static Type DelegateMutatedField;
+    static Type FieldDelegateMutateGetter => AccessTools.TypeByName("SoftDep.FieldDelegateMutate");
+    static void RefreshDelegateField() { DelegateMutatedField = FieldDelegateMutateGetter; }
+    public static string CheckThenDelegateRefreshThenDeref() { if (DelegateMutatedField == null) return ""; Action refresh = RefreshDelegateField; refresh(); return DelegateMutatedField.FullName; }
+
+    static Type SafeMutableField = AccessTools.TypeByName("SoftDep.SafeCallBetweenFieldRead");
+    static string SafePrefix() => "hi:";
+    public static string CheckThenSafeCallThenDeref() { if (SafeMutableField == null) return ""; return SafePrefix() + SafeMutableField.FullName; }
+}
+'@)
+    $hmSoundProj = Join-Path $hmSound 'Sound247.csproj'
+    foreach ($cfgName in 'Debug', 'Release') {
+        & dotnet build $hmSoundProj -c $cfgName -nologo -v q *> $null
+        $sDll = (Get-ChildItem (Join-Path $hmSound "bin\$cfgName") -Recurse -Filter Sound247.dll | Select-Object -First 1).FullName
+        $sRefs = @(Get-ChildItem (Join-Path $hm 'lib\*.dll') | ForEach-Object FullName)
+        $sOut = (& pwsh -NoProfile -Command "Add-Type -Path '$(Join-Path $PSScriptRoot 'gate\harmony.cs')'; [QGateHarmony]::Run(@('$sDll'), 1, @($($sRefs | ForEach-Object { "'$_'" } | Join-String -Separator ',')), '$hmSound', '$hm', `$false)" 2>&1 | Out-String)
+        $sFails = @($sOut -split "`r?`n" -match '^type SoftDep\.(MixedGetter|BranchUnchecked|CheckAfterDeref|DelegateEscape|CondCheck|CondOverwrite|CondArgUse|AliasUnchecked|HelperCondCheck|HelperRetDeref|FieldOrder|FieldOverwrite|InstFieldAlias|HelperCallFallback|StargFallback|VirtualOverride|RefParamDeref|FieldCallMutate|FieldDelegateMutate) not found \(AccessTools\.TypeByName\)' | Select-Object -Unique)
+        Check "harmony #247 CFG soundness holds in $cfgName (19 unchecked fail, 3 safe probes)" `
+            (($sFails.Count -eq 19) -and
+                ($sOut -match '\[WARN\] harmony: type SoftDep\.HelperNonNullFallback not found .*null-checked') -and
+                ($sOut -notmatch '(?m)^type SoftDep\.HelperNonNullFallback') -and
+                ($sOut -match '\[WARN\] harmony: type SoftDep\.ReadonlyThisField not found .*null-checked') -and
+                ($sOut -notmatch '(?m)^type SoftDep\.ReadonlyThisField') -and
+                ($sOut -match '\[WARN\] harmony: type SoftDep\.SafeCallBetweenFieldRead not found .*null-checked') -and
+                ($sOut -notmatch '(?m)^type SoftDep\.SafeCallBetweenFieldRead')) $sOut
+    }
     # Prepare() false skips the patch class: its TargetMethod's guarded type may be absent (#215).
     Check 'a TargetMethod type guarded by the same Prepare() is not a failure' `
         ((Get-InlineReport $out) -notmatch '(?m)^(?!\[WARN\]).*SoftDep\.Optional') $out
