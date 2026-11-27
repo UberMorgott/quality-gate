@@ -424,7 +424,7 @@ function Select-BaselineHits($Hits, [string]$Name, [string]$Dir) {
 if ($ParallelStacks) {
     # A -Parallel child: the parent already selected; run exactly what it was handed.
     $keys = $ParallelStacks -split ';'
-    $stacks = @($allStacks | Where-Object { $keys -contains "$($_.Stack)|$($_.Rel)" })
+    $stacks = @($allStacks | Where-Object { $keys -contains "$($_.Stack)|$($_.Rel)|$($_.Marker)" })
 } elseif ($onlyGiven) {
     # `-Only nonsense` checked nothing and exited 0, which reads exactly like a clean
     # run: a typo'd `-Only godo` in a CI or lefthook invocation was a green pipeline.
@@ -474,12 +474,15 @@ if ($ParallelStacks) {
         }
         foreach ($p in $changed) {
             # Longest match wins: with nested modules a/go.mod and a/b/go.mod, a
-            # file under a/b belongs to a/b alone.
-            $owner = $stacks | Where-Object { $_.Rel -and $p.StartsWith("$($_.Rel)/") } |
-                Sort-Object { $_.Rel.Length } -Descending | Select-Object -First 1
+            # file under a/b belongs to a/b alone. Keep every stack at that longest
+            # prefix so an excluded A.csproj cannot eclipse an active B.csproj in the same dir (#245).
+            $dirHits = @($stacks | Where-Object { $_.Rel -and $p.StartsWith("$($_.Rel)/") })
+            $owner = if ($dirHits) {
+                $maxLen = ($dirHits | Measure-Object -Property { $_.Rel.Length } -Maximum).Maximum
+                @($dirHits | Where-Object { $_.Rel.Length -eq $maxLen })
+            } else { @() }
             if (-not $owner) {
-                $owner = $stacks | Where-Object { -not $_.Rel -and $rootOwns[$_.Stack] -and $p -match $rootOwns[$_.Stack] } |
-                    Select-Object -First 1
+                $owner = @($stacks | Where-Object { -not $_.Rel -and $rootOwns[$_.Stack] -and $p -match $rootOwns[$_.Stack] })
             }
             # #123: prose outside every stack directory builds nothing, so it is left to
             # base (typos, secrets). Measured on the reporting repo: a commit of one
@@ -511,12 +514,12 @@ if ($ParallelStacks) {
         # gives a .ps1 under server/ to go alone. Any changed PowerShell file selects it.
         $psStack = @($stacks | Where-Object { $_.Stack -eq 'powershell' })
         if ($psStack -and @($changed | Where-Object { $_ -match '(?i)\.ps(m|d)?1$' })) { $selected += $psStack }
-        $stacks = @(@($selected) + $baseStack | Sort-Object Stack, Rel -Unique)
+        $stacks = @(@($selected) + $baseStack | Sort-Object Stack, Rel, Marker -Unique)
         # Commit lane: the repo's fast checks always run, and test projects link the sources
         # they test instead of referencing the project, so any .NET change runs all of them.
         if ($script:CommitLane) {
             $dotnetHit = [bool]@($selected | Where-Object Stack -EQ 'dotnet')
-            $stacks = @(@($stacks) + @($allStacks | Where-Object { $_.Stack -eq 'custom' -or ($dotnetHit -and $_.Stack -eq 'dotnet') }) | Sort-Object Stack, Rel -Unique)
+            $stacks = @(@($stacks) + @($allStacks | Where-Object { $_.Stack -eq 'custom' -or ($dotnetHit -and $_.Stack -eq 'dotnet') }) | Sort-Object Stack, Rel, Marker -Unique)
         }
         # Generated code crosses stack boundaries: a .proto edit produces Go and
         # GDScript that nobody touched, so narrowing to the schema directory would
@@ -4949,7 +4952,7 @@ if ($Parallel -and -not $ParallelStacks) {
         New-Item -ItemType Directory -Force $pdir | Out-Null
         $childArgv = @(Get-SelfArgv $PSBoundParameters 'Parallel', 'Sarif', 'Extra', 'Root', 'ParallelStacks', 'ParallelOut') + @('-Root', $Root)
         $jobs = @($groups | ForEach-Object {
-            [pscustomobject]@{ Keys = @($_.Group | ForEach-Object { "$($_.Stack)|$($_.Rel)" }); Out = Join-Path $pdir "$($_.Name).xml" }
+            [pscustomobject]@{ Keys = @($_.Group | ForEach-Object { "$($_.Stack)|$($_.Rel)|$($_.Marker)" }); Out = Join-Path $pdir "$($_.Name).xml" }
         })
         $parallelKeys = @($jobs | ForEach-Object { $_.Keys })
         $jobs | ForEach-Object -ThrottleLimit ([Math]::Min($jobs.Count, [Environment]::ProcessorCount)) -Parallel {
@@ -4969,10 +4972,10 @@ $script:Skipped = @()
 
 foreach ($s in $stacks) {
     $label = if ($s.Rel) { "$($s.Stack) $($s.Rel)/" } else { $s.Stack }
-    $key = "$($s.Stack)|$($s.Rel)"
+    $key = "$($s.Stack)|$($s.Rel)|$($s.Marker)"
     if (-not $s.Implemented) {
         $report += "[SKIP] $label ($($s.Marker)) -- $($s.Warn)"
-        $script:Skipped += "$label ($($s.Marker)) -- $($s.Warn)"
+        if (-not $s.Excluded) { $script:Skipped += "$label ($($s.Marker)) -- $($s.Warn)" }
         continue
     }
     # Fail-fast across stacks, but never in silence: `break` ended the loop and the

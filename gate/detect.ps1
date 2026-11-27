@@ -1008,6 +1008,33 @@ function Get-OrphanProjects([string]$Root, [int]$Depth = 3) {
     }
     $orphans = @($projs | Where-Object { -not $ref.Contains($_.FullName) } |
             ForEach-Object { ($_.FullName.Substring($Root.Length).TrimStart('\', '/')) -replace '\\', '/' })
+    if ($orphans) {
+        $ex = @()
+        $qj = Join-Path $Root 'qgate.json'
+        if (Test-Path -LiteralPath $qj -PathType Leaf) {
+            $dn = try { (Get-Content -LiteralPath $qj -Raw | ConvertFrom-Json).dotnet } catch { $null }
+            if ($dn -and $dn.exclude) {
+                $ex = @($dn.exclude | Where-Object { $_ -is [string] } | ForEach-Object { (($_ -replace '\\', '/').Trim() -replace '^\./', '').Trim('/') } | Where-Object { $_ -and $_ -ne '.' })
+            }
+        }
+        $vend = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+        if (Test-Path -LiteralPath (Join-Path $Root '.git')) {
+            $prevA = $global:LASTEXITCODE; $encA = [Console]::OutputEncoding
+            try {
+                [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
+                $rawA = ((@($orphans) -join "`0") + "`0") | & git -C $Root check-attr -z --stdin linguist-vendored 2>$null
+            } finally { [Console]::OutputEncoding = $encA; $global:LASTEXITCODE = $prevA }
+            $fA = ($rawA -join '') -split "`0"
+            for ($i = 0; $i + 2 -lt $fA.Count; $i += 3) {
+                if ($fA[$i] -like '*.csproj' -and ($fA[$i + 2] -notin 'unspecified', 'unset', 'false', '')) { [void]$vend.Add(($fA[$i] -replace '\\', '/')) }
+            }
+        }
+        $orphans = @($orphans | Where-Object {
+            $pRel = $_
+            $dRel = if ($pRel.Contains('/')) { $pRel.Substring(0, $pRel.LastIndexOf('/')) } else { '' }
+            -not ($ex -and (Test-DotnetExcluded $dRel $pRel $ex)) -and -not $vend.Contains($pRel)
+        })
+    }
     if (-not $orphans) { return }
     "[WARN] orphan projects: $($orphans.Count) project(s) no solution or project references -- advisory, not a failure"
     $orphans | Select-Object -First 20 | ForEach-Object { "       $_" }
@@ -2374,6 +2401,22 @@ function Test-AnyFile([string]$Dir, [string[]]$Patterns) {
     return $false
 }
 
+function Test-DotnetExcluded([string]$RelDir, [string]$RelProj, [string[]]$Patterns) {
+    foreach ($pat in $Patterns) {
+        $base = if ($pat.EndsWith('/**')) { $pat.Substring(0, $pat.Length - 3).TrimEnd('/') } else { $pat }
+        if ($RelProj.Equals($pat, [StringComparison]::OrdinalIgnoreCase) -or
+            ($RelDir -and $RelDir.Equals($pat, [StringComparison]::OrdinalIgnoreCase)) -or
+            ($base -and $RelProj.StartsWith("$base/", [StringComparison]::OrdinalIgnoreCase)) -or
+            ($RelProj -like $pat) -or
+            ($RelDir -and ($RelDir -like $pat)) -or
+            ($pat.Contains('/**/') -and ($RelProj -like ($pat -replace '/\*\*/', '/'))) -or
+            ($pat.StartsWith('**/') -and ($RelProj -like $pat.Substring(3)))) {
+            return $true
+        }
+    }
+    return $false
+}
+
 # Returns one object per detected stack:
 #   Stack       base | go | web | godot | proto | python | rust | dotnet | cpp | powershell | custom
 #   Dir         absolute directory holding the marker
@@ -2383,10 +2426,23 @@ function Test-AnyFile([string]$Dir, [string[]]$Patterns) {
 #   Warn        one-line message about missing tooling/config, or ''
 function Get-Stacks([string]$Root) {
     $stacks = @()
+    $rootTrim = $Root.TrimEnd('\', '/')
     $rel = {
         param($d)
         $r = $d.Substring($Root.Length).Trim('\').Replace('\', '/')
         $r
+    }
+    # A marker under a test-fixture directory inside an enclosing project of the same
+    # kind is a test fixture, not a stack of its own (#107); standalone fixture trees
+    # with no outer marker stay detectable.
+    $dropFixture = {
+        param($Markers, [string]$Pat)
+        $dirs = @($Markers | ForEach-Object { $_.DirectoryName.TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar })
+        @($Markers | Where-Object {
+                $d = $_.DirectoryName
+                -not ($d.Substring($rootTrim.Length) -match $Pat -and
+                    ($dirs | Where-Object { $_.Length -lt $d.Length + 1 -and $d.StartsWith($_, [StringComparison]::OrdinalIgnoreCase) }))
+            })
     }
 
     # First, and unconditional: gitleaks, typos and osv-scanner ask nothing about a
@@ -2487,9 +2543,44 @@ function Get-Stacks([string]$Root) {
     # One stack per PROJECT FILE, not per directory: a .NET repo carries several
     # (root plus tools/*, demos/*, tests/*) and every one of them builds on its own.
     # No .sln handling -- these repos have none, and the csproj is what the SDK takes.
+    $csprojMarkers = @(Find-Marker $Root @('*.csproj'))
+    $dnExclude = @()
+    $qj = Join-Path $Root 'qgate.json'
+    if ($csprojMarkers -and (Test-Path -LiteralPath $qj -PathType Leaf)) {
+        $dn = try { (Get-Content -LiteralPath $qj -Raw | ConvertFrom-Json).dotnet } catch { $null }
+        if ($dn -and $dn.exclude) {
+            $dnExclude = @($dn.exclude | Where-Object { $_ -is [string] } | ForEach-Object {
+                    (($_ -replace '\\', '/').Trim() -replace '^\./', '').Trim('/')
+                } | Where-Object { $_ -and $_ -ne '.' })
+        }
+    }
+    $vendoredCsproj = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    if ($isRepo -and $csprojMarkers) {
+        $relPaths = @($csprojMarkers | ForEach-Object {
+                $r = & $rel $_.DirectoryName
+                if ($r) { "$r/$($_.Name)" } else { $_.Name }
+            })
+        $prevAttr = $global:LASTEXITCODE
+        $enc = [Console]::OutputEncoding
+        try {
+            [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
+            $rawAttr = ((@($relPaths) -join "`0") + "`0") | & git -C $Root check-attr -z --stdin linguist-vendored 2>$null
+        } finally {
+            [Console]::OutputEncoding = $enc
+            $global:LASTEXITCODE = $prevAttr
+        }
+        $attrFields = ($rawAttr -join '') -split "`0"
+        for ($i = 0; $i + 2 -lt $attrFields.Count; $i += 3) {
+            if ($attrFields[$i] -like '*.csproj' -and ($attrFields[$i + 2] -notin 'unspecified', 'unset', 'false', '')) {
+                [void]$vendoredCsproj.Add(($attrFields[$i] -replace '\\', '/'))
+            }
+        }
+    }
     $unitySeen = @{}
-    foreach ($m in Find-Marker $Root @('*.csproj')) {
+    foreach ($m in $csprojMarkers) {
         $dir = $m.DirectoryName
+        $dirRel = & $rel $dir
+        $projRel = if ($dirRel) { "$dirRel/$($m.Name)" } else { $m.Name }
         # A Unity project's csproj are the editor's own output: regenerated on every
         # open, referencing the editor install, not buildable by `dotnet`. Reported from
         # the field: six of them became six stacks, each an [UNKNOWN] format and a
@@ -2508,11 +2599,21 @@ function Get-Stacks([string]$Root) {
             }
             continue
         }
+        if ($dnExclude -and (Test-DotnetExcluded $dirRel $projRel $dnExclude)) {
+            $stacks += [pscustomobject]@{ Stack = 'dotnet'; Dir = $dir; Rel = $dirRel; Marker = $m.Name; Implemented = $false; Excluded = $true
+                Warn = 'excluded (qgate.json dotnet.exclude)' }
+            continue
+        }
+        if ($vendoredCsproj.Contains($projRel)) {
+            $stacks += [pscustomobject]@{ Stack = 'dotnet'; Dir = $dir; Rel = $dirRel; Marker = $m.Name; Implemented = $false; Excluded = $true
+                Warn = 'vendored (.gitattributes linguist-vendored)' }
+            continue
+        }
         $warn = ''
         if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) {
             $warn = 'dotnet not on PATH -- the gate cannot verify this stack until it is'
         }
-        $stacks += [pscustomobject]@{ Stack = 'dotnet'; Dir = $dir; Rel = (& $rel $dir); Marker = $m.Name; Implemented = $true; Warn = $warn }
+        $stacks += [pscustomobject]@{ Stack = 'dotnet'; Dir = $dir; Rel = $dirRel; Marker = $m.Name; Implemented = $true; Warn = $warn }
     }
 
     # One stack per TREE, not per marker: a CMakeLists.txt inside a project that

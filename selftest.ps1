@@ -2523,6 +2523,82 @@ if ($dnSdks) {
     Check 'Unity-generated csproj are not stacks' `
         (($out -notmatch 'Assembly-CSharp') -and ($out -notmatch 'could not load its solution')) $out
 
+    # #245: vendored/upstream .csproj outside the solution skipped via qgate.json dotnet.exclude
+    # or .gitattributes linguist-vendored, without failing strict: true or flagging as orphan.
+    # Named ThirdParty/ (not Vendor/, which $script:SkipDirs skips before exclusion checks run).
+    $dnEx = Join-Path $tmp 'dotnet-exclude'
+    try {
+        New-Item -ItemType Directory -Path (Join-Path $dnEx 'App'), (Join-Path $dnEx 'App.Tests'), (Join-Path $dnEx 'ThirdParty') -Force | Out-Null
+        [IO.File]::WriteAllText((Join-Path $dnEx '.gitignore'), "bin/`nobj/`n")
+        [IO.File]::WriteAllText((Join-Path $dnEx 'App\App.csproj'), $dnProjClean)
+        [IO.File]::WriteAllText((Join-Path $dnEx 'App\Greeter.cs'), $dnCsClean)
+        [IO.File]::WriteAllText((Join-Path $dnEx 'App.Tests\App.Tests.csproj'),
+            $dnProjClean.Replace('<Nullable>enable</Nullable>', "<OutputType>Exe</OutputType>`n    <Nullable>enable</Nullable>"))
+        [IO.File]::WriteAllText((Join-Path $dnEx 'App.Tests\Program.cs'), "System.Console.WriteLine(`"all checks passed`");`r`nreturn 0;`r`n")
+        [IO.File]::WriteAllText((Join-Path $dnEx 'ThirdParty\Broken.csproj'), $dnProjClean)
+        [IO.File]::WriteAllText((Join-Path $dnEx 'ThirdParty\Bad.cs'), "class {`r`n")
+        [IO.File]::WriteAllText((Join-Path $dnEx 'App.sln'),
+            "Microsoft Visual Studio Solution File, Format Version 12.00`r`n" +
+            "Project(`"{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}`") = `"App`", `"App\App.csproj`", `"{11111111-1111-1111-1111-111111111111}`"`r`nEndProject`r`n" +
+            "Project(`"{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}`") = `"App.Tests`", `"App.Tests\App.Tests.csproj`", `"{22222222-2222-2222-2222-222222222222}`"`r`nEndProject`r`n")
+        [IO.File]::WriteAllText((Join-Path $dnEx 'qgate.json'), '{"dotnet":{"exclude":["ThirdParty"]},"strict":true}')
+        git -C $dnEx init -q 2>$null
+        git -C $dnEx add -A 2>$null
+        git -C $dnEx -c user.email=selftest@local -c user.name=selftest commit -qm init 2>$null
+        $hasBaseTools = [bool]((Get-Command betterleaks, gitleaks -ErrorAction SilentlyContinue) -and
+            (Get-Command typos -ErrorAction SilentlyContinue) -and (Get-Command osv-scanner -ErrorAction SilentlyContinue))
+        $exArgs = if ($hasBaseTools) { @('-All', '-Full') } else { @('-All', '-Only', 'dotnet', '-Full') }
+        $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $dnEx @exArgs 2>&1 | Out-String)
+        $dnExCode = $LASTEXITCODE
+        $dnExOrph = (Get-OrphanProjects $dnEx) -join "`n"
+        Check 'dotnet.exclude skips broken csproj without failing strict or flagging orphan (#245)' `
+            (($dnExCode -eq 0) -and ($out -match '\[SKIP\] dotnet ThirdParty/ \(Broken\.csproj\) -- excluded \(qgate\.json dotnet\.exclude\)') -and
+                ($out -match '\[PASS\] dotnet App/ \(App\.csproj\)') -and ($out -match '\[PASS\] build') -and
+                ($out -notmatch 'orphan projects') -and (-not $dnExOrph) -and ($out -notmatch '\[FAIL\]')) "code=$dnExCode orph=$dnExOrph $out"
+
+        [IO.File]::WriteAllText((Join-Path $dnEx 'qgate.json'), '{"strict":true}')
+        [IO.File]::WriteAllText((Join-Path $dnEx '.gitattributes'), "ThirdParty/** linguist-vendored`n")
+        git -C $dnEx add qgate.json .gitattributes 2>$null
+        git -C $dnEx -c user.email=selftest@local -c user.name=selftest commit -qm vendored 2>$null
+        $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $dnEx @exArgs 2>&1 | Out-String)
+        $dnExCode = $LASTEXITCODE
+        $dnExOrph = (Get-OrphanProjects $dnEx) -join "`n"
+        Check 'linguist-vendored skips broken csproj while App still passes (#245)' `
+            (($dnExCode -eq 0) -and ($out -match '\[SKIP\] dotnet ThirdParty/ \(Broken\.csproj\) -- vendored \(\.gitattributes linguist-vendored\)') -and
+                ($out -match '\[PASS\] dotnet App/ \(App\.csproj\)') -and ($out -match '\[PASS\] build') -and
+                ($out -notmatch 'orphan projects') -and (-not $dnExOrph) -and ($out -notmatch '\[FAIL\]')) "code=$dnExCode orph=$dnExOrph $out"
+
+        [IO.File]::WriteAllText((Join-Path $dnEx 'App\Greeter.cs'), $dnCsClean.Replace('return $"Hello, {name}!";', 'int x = "s"; return $"Hello, {name}!{x}";'))
+        $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $dnEx -All -Only dotnet 2>&1 | Out-String)
+        $dnExCode = $LASTEXITCODE
+        Check 'a real compile error in shipped App.csproj still fails when ThirdParty is vendored (#245)' `
+            (($dnExCode -ne 0) -and ($out -match '\[FAIL\] dotnet App/') -and ($out -match 'error CS0029')) "code=$dnExCode $out"
+
+        # Same-directory A.csproj (excluded) beside B.csproj (active): changed-file selection
+        # must keep B.csproj instead of letting A.csproj eclipse it by (Stack, Rel) (#245).
+        $dnSame = Join-Path $tmp 'dotnet-exclude-samedir'
+        try {
+            New-Item -ItemType Directory -Path $dnSame -Force | Out-Null
+            [IO.File]::WriteAllText((Join-Path $dnSame '.gitignore'), "bin/`nobj/`n")
+            [IO.File]::WriteAllText((Join-Path $dnSame 'A.csproj'), $dnProjClean)
+            [IO.File]::WriteAllText((Join-Path $dnSame 'B.csproj'), $dnProjClean)
+            [IO.File]::WriteAllText((Join-Path $dnSame 'Greeter.cs'), $dnCsClean)
+            [IO.File]::WriteAllText((Join-Path $dnSame 'qgate.json'), '{"dotnet":{"exclude":["A.csproj"]}}')
+            git -C $dnSame init -q 2>$null
+            git -C $dnSame add -A 2>$null
+            git -C $dnSame -c user.email=selftest@local -c user.name=selftest commit -qm init 2>$null
+            [IO.File]::WriteAllText((Join-Path $dnSame 'Greeter.cs'), $dnCsClean.Replace('return $"Hello, {name}!";', 'int x = "s"; return $"Hello, {name}!{x}";'))
+            $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $dnSame 2>&1 | Out-String)
+            $dnSameCode = $LASTEXITCODE
+            Check 'excluded A.csproj in the same dir does not eclipse active B.csproj on changed-file run (#245)' `
+                (($dnSameCode -ne 0) -and ($out -match '\[SKIP\] dotnet \(A\.csproj\) -- excluded') -and ($out -match 'error CS0029')) "code=$dnSameCode $out"
+        } finally {
+            Remove-Item -LiteralPath $dnSame -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    } finally {
+        Remove-Item -LiteralPath $dnEx -Recurse -Force -ErrorAction SilentlyContinue
+    }
+
     # The whole-project check is the one CI and the generated pre-commit hook run, and on
     # a real mod it is 1397 WHITESPACE lines -- 323k chars, which the report's global
     # 6000-char truncation then cut to 27 lines and a byte count: no total, no file count,
