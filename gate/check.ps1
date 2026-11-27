@@ -894,7 +894,10 @@ function Format-StackOutput([string[]]$Lines, [int]$Max) {
         }
         $used = 0; $cut = 0
         $hot = @(if ((($keep | Measure-Object -Property Length -Sum).Sum + $keep.Count) -gt $cap) {
-                0..($keep.Count - 1) | Where-Object { $keep[$_] -match $failing -and $keep[$_] -notmatch $passing } })
+                $diffHdrs = @(0..($keep.Count - 1) | Where-Object { $keep[$_] -match '^(Diff in |error(\[|:))' })
+                if ($diffHdrs -and ($keep | Where-Object { $_ -match '^Diff in ' } | Select-Object -First 1)) { $diffHdrs }
+                else { 0..($keep.Count - 1) | Where-Object { $keep[$_] -match $failing -and $keep[$_] -notmatch $passing } }
+            })
         if ($hot) {
             # Still over budget with failure lines in it: keep those, then fill from the tail.
             $pick = [Collections.Generic.HashSet[int]]::new()
@@ -1612,8 +1615,32 @@ function Invoke-RustStack($s) {
         $script:Lines += '[INFO] fix: cargo fmt'
     }
 
+    # -Soft + -l: like gofmt -l and dotnet format -Soft, list unformatted file paths cleanly
+    # (never a 300+ KB diff that overflows Format-StackOutput) and still run semantic phases
+    # (clippy, tests, strict/doc/deny/shear) in the same pass while keeping the stack red.
     Invoke-WithoutHookGitEnv {
-        Phase 'cargo fmt' { cargo fmt @fmtArgs -- --check }
+        Phase 'cargo fmt' {
+            $out = @(& cargo fmt @fmtArgs -- --check -l 2>&1)
+            $code = $LASTEXITCODE
+            $strCmp = if ($IsWindows) { [StringComparer]::OrdinalIgnoreCase } else { [StringComparer]::Ordinal }
+            $seen = [Collections.Generic.HashSet[string]]::new($strCmp)
+            foreach ($ln in $out) {
+                $sLine = "$ln"
+                $t = $sLine.Trim()
+                if ($t) {
+                    $clean = if ($t.StartsWith('\\?\UNC\', [StringComparison]::OrdinalIgnoreCase)) { '\\' + $t.Substring(8) }
+                             elseif ($t.StartsWith('\\?\', [StringComparison]::Ordinal)) { $t.Substring(4) }
+                             else { $t }
+                    if ([IO.Path]::IsPathRooted($clean) -and (Test-Path -LiteralPath $clean -PathType Leaf)) {
+                        $rel = [IO.Path]::GetRelativePath($s.Dir, $clean) -replace '\\', '/'
+                        if ($seen.Add($rel)) { $rel }
+                        continue
+                    }
+                }
+                $sLine
+            }
+            $global:LASTEXITCODE = $code
+        } -Soft
     }
     # clippy compiles as it lints, so a separate `cargo build` would only pay the
     # same cost twice. --all-targets covers tests and benches, not just the binary.

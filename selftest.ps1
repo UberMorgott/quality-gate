@@ -1494,11 +1494,44 @@ try {
     $rsClean = [IO.File]::ReadAllText($rsMain)
     & $writeLf $rsMain ($rsClean.Replace("fn add(a: i32, b: i32) -> i32 {`n    a + b`n}", "fn add(a: i32, b: i32) -> i32 {  a + b }"))
     $r = Invoke-Gate $rust
-    Check 'rust fmt-only violation fails cargo fmt without failing clippy' `
-        (($r.Code -ne 0) -and ($r.Out -match '\[FAIL\] cargo fmt') -and ($r.Out -notmatch '\[FAIL\] cargo clippy')) $r.Out
+    Check 'rust fmt-only violation fails cargo fmt with file path and still runs clippy and tests' `
+        (($r.Code -ne 0) -and ($r.Out -match '\[FAIL\] cargo fmt') -and ($r.Out -match '(?m)^src/main\.rs\r?$') -and
+            ($r.Out -match '\[PASS\] cargo clippy') -and ($r.Out -match '\[PASS\] cargo test') -and ($r.Out -notmatch '\[FAIL\] cargo clippy')) $r.Out
+
+    $r = & $runRustGate $rust @('-All', '-Only', 'rust', '-Push')
+    Check 'rust fmt-only violation on -Push still runs recommended semantic checks instead of skipping them' `
+        (($r.Code -ne 0) -and ($r.Out -match '\[FAIL\] cargo fmt') -and ($r.Out -match '(?m)^src/main\.rs\r?$') -and
+            ($r.Out -match '\[PASS\] cargo clippy') -and ($r.Out -match '\[PASS\] cargo test') -and
+            ($r.Out -match '\[(PASS|WARN)\] clippy strict') -and ($r.Out -match '\[(PASS|WARN)\] cargo doc') -and
+            ($r.Out -match '\[(PASS|WARN)\] cargo[- ]deny') -and ($r.Out -match '\[(PASS|WARN)\] cargo[- ]shear')) $r.Out
+
+    & $writeLf $rsMain ($rsClean.Replace("fn add(a: i32, b: i32) -> i32 {`n    a + b`n}", "fn add(a: i32, b: i32) -> i32 {  a + b }").Replace('    println!("{}", add(1, 2));', "    let x = true;`n    if x == true {`n        println!(`"{}`", add(1, 2));`n    }"))
+    $r = Invoke-Gate $rust
+    Check 'rust fmt + clippy violations report both [FAIL] cargo fmt and [FAIL] cargo clippy in one run' `
+        (($r.Code -ne 0) -and ($r.Out -match '\[FAIL\] cargo fmt') -and ($r.Out -match '(?m)^src/main\.rs\r?$') -and ($r.Out -match '\[FAIL\] cargo clippy')) $r.Out
+
     [IO.File]::WriteAllText($rsMain, $rsClean)
     $r = Invoke-Gate $rust
     Check 'rust green again after fmt fix' ($r.Code -eq 0) $r.Out
+
+    # Format-StackOutput: huge `Diff in <file>` block full of assert_eq!/panic!/error code lines
+    # must preserve `Diff in <file>` headers instead of letting code lines hijack $hot.
+    $astTokens = $null; $astErrs = $null
+    $chkAst = [Management.Automation.Language.Parser]::ParseFile($gate, [ref]$astTokens, [ref]$astErrs)
+    $fmtFn = $chkAst.Find({ param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq 'Format-StackOutput' }, $true)
+    . ([scriptblock]::Create($fmtFn.Extent.Text))
+    $fmtLines = [Collections.Generic.List[string]]::new()
+    $fmtLines.Add('[FAIL] diff check (0.1s)')
+    for ($fi = 1; $fi -le 30; $fi++) {
+        $fmtLines.Add("Diff in crates/mod_$fi/src/lib.rs at line 1:")
+        for ($li = 1; $li -le 8; $li++) {
+            $fmtLines.Add("-    assert_eq!(err_$li, panic!(`"error message $fi-$li padding padding padding`"));")
+            $fmtLines.Add("+    assert_eq!(err_$li, panic!(`"error message $fi-$li wrapped wrapped wrapped`"));")
+        }
+    }
+    $fmtOut = Format-StackOutput $fmtLines.ToArray() 1500
+    Check 'Format-StackOutput preserves Diff in file headers when diff hunks contain assert/panic/error' `
+        (($fmtOut -match 'Diff in crates/mod_1/src/lib\.rs') -and ($fmtOut -match 'Diff in crates/mod_15/src/lib\.rs') -and ($fmtOut -match 'truncated')) $fmtOut
 
     & $writeLf $rsMain ($rsClean.Replace('    println!("{}", add(1, 2));', "    let x = true;`n    if x == true {`n        println!(`"{}`", add(1, 2));`n    }"))
     $r = Invoke-Gate $rust
