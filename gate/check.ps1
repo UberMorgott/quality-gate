@@ -3123,7 +3123,7 @@ function Invoke-WebStack($s) {
         $ox = Get-ToolPath 'oxlint'
         # Configured and absent is an unverifiable stack, not a skip.
         if (-not $ox) { Fail 'web: oxlint (.oxlintrc.json or qgate.json web.linter) not installed, run `qgate tools oxlint`' }
-        else { Phase 'oxlint' { & $ox --deny-warnings @oxIgnore . } }
+        else { Phase 'oxlint' { & $ox --format unix --deny-warnings @oxIgnore . } }
     } elseif ($linter -eq 'oxlint-advisory') {
         # Absent: nothing ran here before this default either, so no new skip line.
         $ox = Get-ToolPath 'oxlint'

@@ -14,7 +14,8 @@ ignore = []
 
 [bans]
 multiple-versions = "warn"
-wildcards = "deny"
+# Local apps without publish = false using path deps hit public-crate wildcard errors; warn keeps diagnostics without false-failing (templates/deny.toml keeps deny).
+wildcards = "warn"
 allow-wildcard-paths = true
 highlight = "all"
 workspace-default-features = "allow"

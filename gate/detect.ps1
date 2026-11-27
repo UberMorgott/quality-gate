@@ -2410,14 +2410,9 @@ function Get-Stacks([string]$Root) {
     # `go build ./...` from the parent is silent about it, and gating it separately
     # turned a green repo red over a library-only fixture. Only with a go.mod above it:
     # this gate's own testdata/go-fixture sits under no Go module and must stay a stack.
-    $goMods = @(Find-Marker $Root @('go.mod'))
-    $goModDirs = @($goMods | ForEach-Object { $_.DirectoryName.TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar })
+    $goMods = @(& $dropFixture @(Find-Marker $Root @('go.mod')) '(^|[\\/])testdata([\\/]|$)')
     foreach ($m in $goMods) {
         $dir = $m.DirectoryName
-        if ($dir.Substring($Root.Length) -match '(^|[\\/])testdata([\\/]|$)' -and
-            ($goModDirs | Where-Object { $_.Length -lt $dir.Length + 1 -and $dir.StartsWith($_, [StringComparison]::OrdinalIgnoreCase) })) {
-            continue
-        }
         $warn = ''
         if (-not (Test-Path (Join-Path $dir '.golangci.yml')) -and -not (Test-Path (Join-Path $dir '.golangci.yaml'))) {
             $warn = 'no .golangci.yml -- running golangci-lint on its defaults; copy templates/.golangci.yml'
@@ -2444,7 +2439,7 @@ function Get-Stacks([string]$Root) {
     $rootNorm = [IO.Path]::GetFullPath($Root)
     $rootCmp = if ($rootNorm.Length -le 3 -and $rootNorm -match '^[A-Za-z]:\\?$') { $rootNorm.TrimEnd('\') + '\' } else { $rootNorm.TrimEnd('\', '/') }
     $rootPrefix = if ($rootCmp.EndsWith('\')) { $rootCmp } else { "$rootCmp\" }
-    $rustMarkers = @(Find-Marker $Root @('Cargo.toml') | Sort-Object { ($_.FullName -split '[\\/]').Count }, { $_.FullName.Length })
+    $rustMarkers = @(& $dropFixture @(Find-Marker $Root @('Cargo.toml')) '(^|[\\/])(tests?[\\/]fixtures|testdata)([\\/]|$)' | Sort-Object { ($_.FullName -split '[\\/]').Count }, { $_.FullName.Length })
     foreach ($m in $rustMarkers) {
         $manifestPath = [IO.Path]::GetFullPath($m.FullName)
         if ($seenMemberManifests.ContainsKey($manifestPath)) { continue }

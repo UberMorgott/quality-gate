@@ -1568,6 +1568,25 @@ mod tests {
     git -C $wsRepo add -A 2>$null
     git -C $wsRepo -c user.email=selftest@local -c user.name=selftest commit -qm 'restore clean' 2>$null
 
+    # 11.2b tests/fixtures/<subcrate> inside a Rust repo is skipped by Get-Stacks when an
+    # enclosing Cargo.toml exists, while Get-Stacks directly on that subcrate still detects rust.
+    $fixRepo = Join-Path $tmp 'rust-fixtures'
+    $rustDirs.Add($fixRepo)
+    $fixSub = Join-Path $fixRepo 'tests\fixtures\subcrate'
+    New-Item -ItemType Directory -Path (Join-Path $fixRepo 'src'), (Join-Path $fixSub 'src') -Force | Out-Null
+    & $writeLf (Join-Path $fixRepo 'Cargo.toml') "[package]`nname = `"fix_root`"`nversion = `"0.1.0`"`nedition = `"2021`""
+    & $writeLf (Join-Path $fixRepo 'src\lib.rs') "pub fn root_fn() -> i32 {`n    1`n}"
+    & $writeLf (Join-Path $fixSub 'Cargo.toml') "[package]`nname = `"fix_sub`"`nversion = `"0.1.0`"`nedition = `"2021`""
+    & $writeLf (Join-Path $fixSub 'src\lib.rs') "pub fn sub_fn() -> i32 {`n    2`n}"
+    $fixRootStacks = @(Get-Stacks $fixRepo | Where-Object { $_.Stack -eq 'rust' })
+    $fixSubStacks = @(Get-Stacks $fixSub | Where-Object { $_.Stack -eq 'rust' })
+    Check 'Get-Stacks skips tests/fixtures subcrate inside an enclosing Cargo.toml repo' `
+        (($fixRootStacks.Count -eq 1) -and ($fixRootStacks[0].Rel -eq '')) `
+        (($fixRootStacks | ForEach-Object { "rust '$($_.Rel)'" }) -join ' | ')
+    Check 'Get-Stacks directly on tests/fixtures/<subcrate> still detects rust' `
+        (($fixSubStacks.Count -eq 1) -and ($fixSubStacks[0].Rel -eq '')) `
+        (($fixSubStacks | ForEach-Object { "rust '$($_.Rel)'" }) -join ' | ')
+
     # 11.3 Strict Clippy floor + -Baseline.
     $scRepo = Join-Path $tmp 'rust-strict'
     $rustDirs.Add($scRepo)
@@ -1939,12 +1958,30 @@ pub fn read_local() -> i32 {
         Check 'real cargo-deny passes fallback qgate.deny.toml (offline bans sources) on private local path dep' `
             (($fbDenyCode -eq 0) -and ($fbDenyOut -notmatch '"severity"\s*:\s*"(error|warning)"')) "code=$fbDenyCode`n$fbDenyOut"
 
+        $denyPub = Join-Path $denyRealDir 'app_pub'
+        New-Item -ItemType Directory -Path (Join-Path $denyPub 'src') -Force | Out-Null
+        & $writeLf (Join-Path $denyPub '.gitignore') "target/`nCargo.lock"
+        & $writeLf (Join-Path $denyPub 'Cargo.toml') "[package]`nname = `"app_pub_probe`"`nversion = `"0.1.0`"`nedition = `"2021`"`n`n[dependencies]`nlocal_dep = { path = `"../local`" }"
+        & $writeLf (Join-Path $denyPub 'src\main.rs') "fn main() {`n    println!(`"{}`", local_dep::one());`n}"
+        git -C $denyPub init -q 2>$null
+        git -C $denyPub add -A 2>$null
+        git -C $denyPub -c user.email=selftest@local -c user.name=selftest commit -qm init 2>$null
+        $pubDenyOut = (& $realDeny --manifest-path (Join-Path $denyPub 'Cargo.toml') --offline --format json --config (Join-Path $PSScriptRoot 'gate\qgate.deny.toml') check bans sources 2>&1 | ForEach-Object { "$_" } | Out-String)
+        $pubDenyCode = $LASTEXITCODE
+        Check 'real cargo-deny passes fallback qgate.deny.toml with wildcard warning when publish = false is absent' `
+            (($pubDenyCode -eq 0) -and ($pubDenyOut -match '"severity"\s*:\s*"warning"') -and ($pubDenyOut -notmatch '"severity"\s*:\s*"error"')) "code=$pubDenyCode`n$pubDenyOut"
+
         $cargoHomeDir = if ($env:CARGO_HOME) { $env:CARGO_HOME } else { Join-Path $HOME '.cargo' }
         if (Test-Path -LiteralPath (Join-Path $cargoHomeDir 'advisory-dbs')) {
             [IO.File]::WriteAllText((Join-Path $denyApp 'qgate.json'), '{"rust":{"deny":"fail","denyOffline":true}}')
             $r = & $runRustGate $denyApp @('-All', '-Only', 'rust', '-Full')
             Check 'qgate with real cargo-deny and fallback qgate.deny.toml passes on private local path dep' `
                 (($r.Code -eq 0) -and ($r.Out -match '\[PASS\] cargo deny')) $r.Out
+
+            [IO.File]::WriteAllText((Join-Path $denyPub 'qgate.json'), '{"rust":{"deny":"fail","denyOffline":true}}')
+            $r = & $runRustGate $denyPub @('-All', '-Only', 'rust', '-Full')
+            Check 'qgate with fallback qgate.deny.toml emits [WARN] cargo deny instead of failing when publish = false is absent' `
+                (($r.Code -eq 0) -and ($r.Out -match '\[WARN\] cargo deny \(1 warning\(s\)\)') -and ($r.Out -match 'wildcard') -and ($r.Out -notmatch '\[FAIL\]')) $r.Out
 
             & $writeLf (Join-Path $denyApp 'deny.toml') "[advisories]`nversion = 2`n`n[licenses]`nversion = 2`nprivate = { ignore = true }`n`n[bans]`nwildcards = `"warn`"`n`n[sources]`nunknown-registry = `"deny`"`nunknown-git = `"deny`"`nallow-registry = [`"https://github.com/rust-lang/crates.io-index`"]"
             $r = & $runRustGate $denyApp @('-All', '-Only', 'rust', '-Full')
