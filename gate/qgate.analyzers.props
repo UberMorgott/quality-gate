@@ -98,6 +98,12 @@
     <!-- MA0049 type name matches its namespace: `namespace Auga { class Auga }` is the
          public API other mods reference, same class as MA0048 above. Error by default. -->
     <NoWarn>$(NoWarn);MA0049</NoWarn>
+    <!-- ReflectionIT.ClrHeapAllocationAnalyzer (HAA*, injected on .NET 9+ SDK / Roslyn 4.12+):
+         keep hidden high-signal allocations ON (HAA0601 boxing, HAA0202 boxing in string concat,
+         HAA0301/HAA0302 closures, HAA0401 non-ValueType enumerator foreach) and silence noisy
+         explicit/logging rules (HAA0101 params arrays in logs, HAA0201 non-boxing string concat,
+         HAA0501-0503/HAA0602 explicit new/array/delegate, HAA0603 method group/delegate alloc). -->
+    <NoWarn>$(NoWarn);HAA0101;HAA0201;HAA0501;HAA0502;HAA0503;HAA0602;HAA0603</NoWarn>
   </PropertyGroup>
 
   <!--
@@ -124,7 +130,12 @@
     <!-- Unity rules on a non-Unity project are noise, so the gate decides: it already reads
          the evaluated Reference/PackageReference list in the `refs` phase and passes
          -p:QGateUnity=true only when something there is called UnityEngine*. -->
-    <PackageReference Include="Microsoft.Unity.Analyzers" Version="1.27.0" QGateDir="microsoft.unity.analyzers\1.27.0" Condition="'$(QGateUnity)' == 'true'"
+    <PackageReference Include="Microsoft.Unity.Analyzers" Version="1.28.0" QGateDir="microsoft.unity.analyzers\1.28.0" Condition="'$(QGateUnity)' == 'true'"
+                      PrivateAssets="all" IncludeAssets="runtime;build;native;contentfiles;analyzers;buildtransitive" />
+    <!-- Hidden heap allocations (boxing, closures, interface enumerators). Needs Roslyn 4.12+
+         (.NET 9+ SDK), so check.ps1 sets -p:QGateAlloc=true automatically on SDK 9+ unless
+         qgate.json sets dotnet.allocations: false. -->
+    <PackageReference Include="ReflectionIT.ClrHeapAllocationAnalyzer" Version="3.2.4" QGateDir="reflectionit.clrheapallocationanalyzer\3.2.4" QGateMinRoslyn="4.12" Condition="'$(QGateAlloc)' == 'true'"
                       PrivateAssets="all" IncludeAssets="runtime;build;native;contentfiles;analyzers;buildtransitive" />
     <!-- Caps the analyzer rules that default to ERROR; see the file for why and for what
          still outranks it. -->
@@ -176,6 +187,10 @@
   </Target>
   <Target Name="_QGateLegacyAnalyzerPackage" Outputs="%(_QGatePkgDir.Identity)" DependsOnTargets="_QGateLegacyAnalyzerDirs"
           Condition="'$(UsingMicrosoftNETSdk)' != 'true'">
+    <PropertyGroup>
+      <_QGatePkgMin>%(_QGatePkgDir.QGateMinRoslyn)</_QGatePkgMin>
+      <_QGatePkgMin Condition="'$(_QGatePkgMin)' == ''">0.0</_QGatePkgMin>
+    </PropertyGroup>
     <ItemGroup>
       <_QGateCand Remove="@(_QGateCand)" />
       <_QGateCand Condition="'%(_QGatePkgDir.Identity)' != ''" Include="%(_QGatePkgDir.Identity)\analyzers\**\*.dll"
@@ -184,7 +199,7 @@
         <Ver>$([System.Text.RegularExpressions.Regex]::Replace('%(_QGateCand.RecursiveDir)', '(?s)^(?:.*?roslyn(\d+\.\d+)[\\/].*|.*)$', '$1'))</Ver>
       </_QGateCand>
       <_QGateCand Condition="'%(_QGateCand.Ver)' == ''">
-        <Ver>0.0</Ver>
+        <Ver>$(_QGatePkgMin)</Ver>
       </_QGateCand>
     </ItemGroup>
     <PropertyGroup>
@@ -204,7 +219,9 @@
       <_QGateInjected Condition="'%(PackageReference.QGateDir)' != ''">true</_QGateInjected>
     </PropertyGroup>
     <ItemGroup Condition="'$(_QGatePkgRoot)' != ''">
-      <_QGatePkgDir Include="@(PackageReference->'$(_QGatePkgRoot)\%(QGateDir)')" Condition="'%(PackageReference.QGateDir)' != ''" />
+      <_QGatePkgDir Include="@(PackageReference->'$(_QGatePkgRoot)\%(QGateDir)')" Condition="'%(PackageReference.QGateDir)' != ''">
+        <QGateMinRoslyn>%(PackageReference.QGateMinRoslyn)</QGateMinRoslyn>
+      </_QGatePkgDir>
     </ItemGroup>
   </Target>
 </Project>

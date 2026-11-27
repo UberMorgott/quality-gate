@@ -253,8 +253,10 @@ $agentDoc = @'
 <!-- quality-gate -->
 ## Completion gate (mandatory)
 
-After changing files, run `qgate` from the repository root. Use `qgate -All` when
-dependencies, build configuration, generated files or several stacks changed.
+After changing files, run `qgate` from the repository root (fast checks). Use `qgate -All -Push`
+(what `pre-push` runs) or `qgate -All -Full` (release/CI) to run the full static-analysis suite --
+including injected Roslyn/Unity/allocation analyzers and Harmony checks for C#, strict Clippy/doc/deny/shear
+for Rust, and deep Go/web checks -- and act on `[WARN]` findings, not only `[FAIL]`.
 Commits are gated by the pre-commit hook; uncommitted work is not, so run `qgate`
 before handing it off.
 

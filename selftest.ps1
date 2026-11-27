@@ -3070,6 +3070,69 @@ internal class Sealable
             (($out -match '\[WARN\] analyzer: Probe\.cs\(\d+,\d+\): MA0084 \S') -and ($out -match '\[WARN\] analyzer: Probe\.cs\(\d+,\d+\): CA1001 \S') -and
                 ($out -notmatch '\[WARN\] analyzer: [^\r\n]*\.csproj\]')) $out
         Check 'the fast lane lists no analyzer findings (#164)' ($anaFastOut -notmatch '\[WARN\] analyzer:') $anaFastOut
+
+        # Push lane (-Push) runs --no-incremental + injected analyzers on warm obj/ too, and
+        # restores obj/project.assets.json back to repo-only packages before returning.
+        $anaPushOut = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $dnAna -All -Push -Only dotnet 2>&1 | Out-String)
+        $anaPushCode = $LASTEXITCODE
+        $anaPushAssets = Get-Content -LiteralPath (Join-Path $dnAna 'obj\project.assets.json') -Raw
+        Check 'the push lane runs analyzers on warm obj/ and restores clean project.assets.json' `
+            (($anaPushCode -eq 0) -and ($anaPushOut -match 'analyzer diagnostic\(s\)') -and ($anaPushOut -match 'MA0084') -and
+                ($anaPushOut -match 'CA1001') -and ($anaPushAssets -notmatch 'Meziantou|ReflectionIT')) "code=$anaPushCode`n$anaPushOut"
+
+        $anaPushQuietOut = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $dnAna -All -Push -Quiet -Only dotnet 2>&1 | Out-String)
+        Check 'the push lane under -Quiet still surfaces [WARN] advisories on green push' `
+            (($LASTEXITCODE -eq 0) -and ($anaPushQuietOut -match '\[WARN\] advisories --') -and ($anaPushQuietOut -match 'MA0084')) $anaPushQuietOut
+
+        # ReflectionIT.ClrHeapAllocationAnalyzer (HAA*): auto-injected on .NET 9+ SDK at push/full,
+        # flagging boxing (HAA0601), closures (HAA0301/0302) and interface enumerators (HAA0401),
+        # while silencing noisy params (HAA0101) and delegate allocs (HAA0603); opt-out via dotnet.allocations: false.
+        $activeSdkVer = "$(& dotnet --version 2>$null)".Trim()
+        if ($activeSdkVer -match '^(\d+)\.' -and [int]$Matches[1] -ge 9) {
+            [IO.File]::WriteAllText((Join-Path $dnAna 'AllocProbe.cs'), @'
+using System;
+using System.Collections.Generic;
+
+namespace Fixture;
+
+public sealed class AllocProbe
+{
+    public static object Box(int x) => x;
+
+    public static Func<int> Closure(int x) => () => x + 1;
+
+    public static int ForeachIface(IEnumerable<int> xs)
+    {
+        int sum = 0;
+        foreach (int x in xs)
+        {
+            sum += x;
+        }
+        return sum;
+    }
+
+    public static int ParamsCall() => Sum(1, 2, 3);
+
+    public static int Sum(params int[] a) => a.Length;
+
+    public static Func<int, int> MethodGroup() => Inc;
+
+    private static int Inc(int x) => x + 1;
+}
+'@)
+            $allocPushOut = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $dnAna -All -Push -Only dotnet 2>&1 | Out-String)
+            $allocPushCode = $LASTEXITCODE
+            Check 'heap allocation analyzer flags boxing, closures and interface enumerators on -Push (.NET 9+ SDK)' `
+                (($allocPushCode -eq 0) -and ($allocPushOut -match 'HAA0601') -and ($allocPushOut -match 'HAA0301') -and
+                    ($allocPushOut -match 'HAA0401') -and ($allocPushOut -notmatch 'HAA0101') -and ($allocPushOut -notmatch 'HAA0603') -and
+                    ($allocPushOut -notmatch 'compiler warning\(s\)') -and ($allocPushOut -notmatch 'CS9057')) "code=$allocPushCode`n$allocPushOut"
+
+            [IO.File]::WriteAllText((Join-Path $dnAna 'qgate.json'), '{"dotnet":{"allocations":false}}')
+            $allocOffOut = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'gate\check.ps1') -Root $dnAna -All -Push -Only dotnet 2>&1 | Out-String)
+            Check 'dotnet.allocations false disables HAA injection while keeping other analyzers' `
+                (($LASTEXITCODE -eq 0) -and ($allocOffOut -match 'MA0084') -and ($allocOffOut -notmatch 'HAA0')) $allocOffOut
+            Remove-Item (Join-Path $dnAna 'qgate.json'), (Join-Path $dnAna 'AllocProbe.cs') -Force -ErrorAction SilentlyContinue
+        }
     }
 
     # #87: a net8.0 test project `<Compile Include="..\X.cs" Link=...>`-links a file that

@@ -2556,7 +2556,8 @@ function Invoke-DotnetStack($s) {
     # BepInEx plugin metadata (GUID, version, dependency GUIDs): strings BepInEx only checks
     # when the game loads the plugin. Source-only, so it runs even without the game
     # installed. Advisory; see gate/bepinex.ps1 for the regex ceiling.
-    if ($Full -and (@($refs.Identity) + @($pkgs.Identity) | Where-Object { $_ -match '^BepInEx(\.|$)' })) {
+    $dnAnalyze = $Full -or $script:PushLane
+    if ($dnAnalyze -and (@($refs.Identity) + @($pkgs.Identity) | Where-Object { $_ -match '^BepInEx(\.|$)' })) {
         $script:Lines += @(& (Join-Path $PSScriptRoot 'bepinex.ps1') -ProjectDir $s.Dir)
     }
 
@@ -2601,20 +2602,29 @@ function Invoke-DotnetStack($s) {
     # 1.3-1.7s vs 1.6-1.7s. The fast lane keeps the incremental build: it runs on every
     # commit, and its warning count is a note beside a verdict that does not depend on it.
     $buildArgs = @($proj, '-nologo', '-v', 'q', '-clp:NoSummary')
-    if ($Full) { $buildArgs += '--no-incremental' }
+    if ($dnAnalyze) { $buildArgs += '--no-incremental' }
     # Roslyn analyzers, injected into THIS build and nowhere else: no repository here edits
     # its csproj to get static analysis, so the gate brings the packages with it. See
     # gate/qgate.analyzers.props for why that property and not DirectoryBuildPropsPath.
-    # Full level only -- a fast lane that pays for an analyzer build on every commit is a
-    # fast lane people stop running. Unity rules only where UnityEngine actually is: the
-    # refs above already evaluated both item lists, so this costs nothing extra.
+    # Push and Full lanes -- fast/commit lane stays incremental and quick, while pre-push
+    # and full/release run the full analyzer set (SDK, Meziantou, Unity, and heap allocations
+    # on .NET 9+ / Roslyn 4.12+). Unity rules only where UnityEngine actually is.
     $anaArgs = @()
-    if ($Full) {
+    if ($dnAnalyze) {
         $anaArgs = @("-p:CustomBeforeMicrosoftCommonProps=$(Join-Path $PSScriptRoot 'qgate.analyzers.props')",
             '-p:EnableNETAnalyzers=true', '-p:AnalysisLevel=latest-Recommended',
             '-p:AnalysisMode=Recommended', '-p:EnforceCodeStyleInBuild=true')
         if (@($refs.Identity) + @($pkgs.Identity) | Where-Object { $_ -like 'UnityEngine*' }) {
             $anaArgs += '-p:QGateUnity=true'
+        }
+        # ReflectionIT.ClrHeapAllocationAnalyzer 3.2.4 requires Roslyn 4.12+ (.NET 9+ SDK).
+        # Check the active SDK (`dotnet --version`, respecting global.json) so .NET 8 SDK
+        # builds never hit CS9057, while .NET 9+/10+ gets allocation checks automatically
+        # (opt-out: qgate.json {"dotnet": {"allocations": false}}).
+        $activeSdkVer = "$(& dotnet --version 2>$null)".Trim()
+        $activeSdkMajor = if ($activeSdkVer -match '^(\d+)\.') { [int]$Matches[1] } else { $maxSdk }
+        if ($activeSdkMajor -ge 9 -and (Get-QGateDotnetConfig $Root).allocations -ne $false) {
+            $anaArgs += '-p:QGateAlloc=true'
         }
         # Opt-in analyzers the gate NEVER downloads: injected only when the package already
         # sits in this machine's global NuGet folder, so restore resolves it from disk
@@ -2655,7 +2665,7 @@ function Invoke-DotnetStack($s) {
         # qgate.globalconfig caps the rules that default to error, so one left here is a
         # severity the repository itself asked for. Reported from the field: MA0037 read
         # as an injection failure and every analyzer finding went with it.
-        if ($LASTEXITCODE -ne 0 -and $anaArgs -and $o -notmatch '(?m):\s+error\s+(?:CS|CA|MA|IDE|UNT|RS|S)\d+') {
+        if ($LASTEXITCODE -ne 0 -and $anaArgs -and $o -notmatch '(?m):\s+error\s+(?:CS|CA|MA|IDE|UNT|RS|S|HAA)\d+') {
             # Any coded error, not just NU/MSB: a reason nobody can act on is the generic
             # fallback the field report complained about.
             $reason = [regex]::Match($o, '(?m)error\s+[A-Z]+\d+[^\r\n]{0,60}').Value
@@ -2714,9 +2724,8 @@ function Invoke-DotnetStack($s) {
         if ($linked) {
             $script:Lines += "[INFO] ${proj}: $($linked.Count) newer-API analyzer diagnostic(s) in files linked from outside the project dir, not counted -- $((@($linked | Group-Object | Sort-Object Count, Name -Descending | ForEach-Object { "$($_.Name) x$($_.Count)" })) -join ', ')"
         }
-        # RS0030/RS0031 = BannedApiAnalyzers, S1234 = SonarAnalyzer: injected opt-in above or
-        # referenced by the repository itself.
-        $anaRx = '^(CA|MA|IDE|UNT|RS|S)\d+$'
+        # RS0030/RS0031 = BannedApiAnalyzers, S1234 = SonarAnalyzer, HAA* = ClrHeapAllocationAnalyzer.
+        $anaRx = '^(CA|MA|IDE|UNT|RS|S|HAA)\d+$'
         $ana = @($codes | Where-Object { $_ -match $anaRx })
         $w = $codes.Count - $ana.Count
         if ($w) { $script:Lines += "[WARN] ${proj}: $w compiler warning(s)" }
@@ -2751,8 +2760,30 @@ function Invoke-DotnetStack($s) {
         if (Test-DotnetMtpMode $s.Dir) { Phase 'test' { dotnet test --project $proj --no-build -v q } }
         else { Phase 'test' { dotnet test $proj --no-build -nologo -v q } }
     }
+    $dnHarmonyPhase = {
+        if (@($refs.Identity) + @($pkgs.Identity) | Where-Object { $_ -match '^(0Harmony|Lib\.Harmony|HarmonyX)\b' }) {
+            $hTfm = if ($multiTfm -and $tfms.Count) { $tfms[0] }
+            Phase 'harmony' {
+                # -Why lists every target that resolved, beside the count of them.
+                $h = @(& (Join-Path $PSScriptRoot 'harmony.ps1') -Project $projAbs -Root $Root -Tfm $hTfm -Targets:$Why)
+                $code = $LASTEXITCODE
+                # Probes, other assemblies' findings and the per-assembly count of what could not
+                # be checked are notes beside the verdict: shown on a pass too, like build's counts.
+                $script:Lines += @($h | Where-Object { $_ -match '^\[(WARN|NOTE)\] ' })
+                $h | Where-Object { $_ -notmatch '^\[(WARN|NOTE)\] ' }
+                $global:LASTEXITCODE = $code
+            }
+        }
+    }
     if (-not $Full) {
-        # Opt-out for a suite too slow for every commit: it still runs at -Full.
+        if ($script:PushLane) {
+            . $dnHarmonyPhase
+            if (Test-DotnetTestProject $info) { . $dnTestPhase }
+            # Restore obj/project.assets.json back to repo-only state after analyzer injection.
+            if ($anaArgs) { & dotnet restore $proj -nologo -v q *> $null }
+            return
+        }
+        # Opt-out for a suite too slow for every commit: it still runs at -Push and -Full.
         if ((Get-QGateDotnetConfig $Root).fastTest -ne $false -and (Test-DotnetTestProject $info)) { . $dnTestPhase }
         return
     }
@@ -2760,19 +2791,7 @@ function Invoke-DotnetStack($s) {
     # Harmony patch targets a game update removed: strings the compiler cannot check. See
     # gate/harmony.ps1. Only where Harmony is referenced; the references themselves are
     # present, or the missing-reference [SKIP] on the build above already returned.
-    if (@($refs.Identity) + @($pkgs.Identity) | Where-Object { $_ -match '^(0Harmony|Lib\.Harmony|HarmonyX)\b' }) {
-        $hTfm = if ($multiTfm -and $tfms.Count) { $tfms[0] }
-        Phase 'harmony' {
-            # -Why lists every target that resolved, beside the count of them.
-            $h = @(& (Join-Path $PSScriptRoot 'harmony.ps1') -Project $projAbs -Root $Root -Tfm $hTfm -Targets:$Why)
-            $code = $LASTEXITCODE
-            # Probes, other assemblies' findings and the per-assembly count of what could not
-            # be checked are notes beside the verdict: shown on a pass too, like build's counts.
-            $script:Lines += @($h | Where-Object { $_ -match '^\[(WARN|NOTE)\] ' })
-            $h | Where-Object { $_ -notmatch '^\[(WARN|NOTE)\] ' }
-            $global:LASTEXITCODE = $code
-        }
-    }
+    . $dnHarmonyPhase
 
     # JetBrains InspectCode, opt-in (qgate.json {"dotnet": {"inspectcode": true}}): ReSharper's
     # own dead-code / redundancy / nullability engine, a different class than the Roslyn
@@ -5290,7 +5309,11 @@ if ($script:Failed -and -not @($report | Where-Object { "$_" -match '(?m)^\[FAIL
 # not news for a commit hook -- so it stays silent here like every other [INFO] and shows
 # on any run without -Quiet. Selftest reads $QuietKeep from this line.
 $QuietKeep = '^\[WARN\] (qgate\.|dependency update advisory timed out|no full-gate slot freed|internal error in the gate|slow tests:|CI parity:)'
-if ($Quiet -and -not $script:Failed) { $report = @($report | Where-Object { $_ -match $QuietKeep }) }
+# pre-push runs -Push -Quiet so a clean push stays silent, while any static-analysis
+# [WARN] advisories (Roslyn/Unity/HAA analyzers, Rust clippy strict/deny/shear, etc.)
+# still surface to the caller instead of being swallowed silently.
+$quietRx = if ($script:PushLane) { "$QuietKeep|^\[WARN\] advisories --" } else { $QuietKeep }
+if ($Quiet -and -not $script:Failed) { $report = @($report | Where-Object { $_ -match $quietRx }) }
 # A broken qgate.deferrals.json is read by outdated and by every vuln phase; say it once.
 $seenDefer = [Collections.Generic.HashSet[string]]::new()
 $report = @($report | Where-Object { "$_" -notmatch '^\[WARN\] qgate\.deferrals\.json (is not|.*entry)' -or $seenDefer.Add("$_") })
