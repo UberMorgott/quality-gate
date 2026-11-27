@@ -1187,11 +1187,11 @@ function Get-RustWorkspaceInfo([string]$Dir, [string]$RepoRoot = '') {
 
 function Get-QGateRustConfig([string]$Root) {
     $cfg = [pscustomobject]@{
-        Preset          = ''
-        StrictClippy    = 'off'
-        Doc             = 'off'
-        Deny            = 'off'
-        Shear           = 'off'
+        Preset          = 'recommended'
+        StrictClippy    = 'warn'
+        Doc             = 'warn'
+        Deny            = 'warn'
+        Shear           = 'warn'
         Semver          = 'off'
         ExtraLints      = [string[]]@()
         DenyOffline     = $false
@@ -1218,8 +1218,8 @@ function Get-QGateRustConfig([string]$Root) {
     }
     $props = $raw.PSObject.Properties.Name
     if ($props -contains 'preset') {
-        if ($raw.preset -isnot [string] -or $raw.preset -cnotin '', 'recommended', 'strict') {
-            $cfg.Error = "qgate.json `"rust.preset`" must be '', 'recommended' or 'strict', got '$($raw.preset)'"
+        if ($raw.preset -isnot [string] -or $raw.preset -cnotin '', 'off', 'recommended', 'strict') {
+            $cfg.Error = "qgate.json `"rust.preset`" must be 'off', 'recommended' or 'strict', got '$($raw.preset)'"
             return $cfg
         }
         $cfg.Preset = $raw.preset

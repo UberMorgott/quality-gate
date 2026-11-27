@@ -1714,7 +1714,7 @@ function Invoke-RustStack($s) {
         }
     }
 
-    if ($Full -and -not $script:Failed) {
+    if (($Full -or $script:PushLane) -and -not $script:Failed) {
         if ($rcfg.StrictClippy -ne 'off') {
             $strictLints = @(
                 'clippy::redundant_clone', 'clippy::needless_collect', 'clippy::inefficient_to_string',

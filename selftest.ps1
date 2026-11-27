@@ -1465,13 +1465,30 @@ try {
     $rustDirs.Add($rust)
     Copy-Item (Join-Path $PSScriptRoot 'testdata\rust-fixture') $rust -Recurse
     $r = Invoke-Gate $rust
-    Check 'clean rust fixture passes' `
-        (($r.Code -eq 0) -and ($r.Out -match '\[PASS\] cargo fmt') -and ($r.Out -match '\[PASS\] cargo clippy') -and ($r.Out -match '\[PASS\] cargo test')) $r.Out
+    Check 'clean rust fixture passes in fast lane without heavy push/full linters' `
+        (($r.Code -eq 0) -and ($r.Out -match '\[PASS\] cargo fmt') -and ($r.Out -match '\[PASS\] cargo clippy') -and ($r.Out -match '\[PASS\] cargo test') -and
+            ($r.Out -notmatch 'clippy strict|cargo doc|cargo deny|cargo shear|cargo hack|cargo semver-checks|cargo miri')) $r.Out
+
+    $r = & $runRustGate $rust @('-All', '-Only', 'rust', '-Push')
+    Check 'clean rust fixture runs default recommended suite on -Push with no qgate.json' `
+        (($r.Code -eq 0) -and ($r.Out -match '\[PASS\] cargo test') -and
+            ($r.Out -match '\[(PASS|WARN)\] clippy strict') -and ($r.Out -match '\[(PASS|WARN)\] cargo doc') -and
+            ($r.Out -match '\[(PASS|WARN)\] cargo[- ]deny') -and ($r.Out -match '\[(PASS|WARN)\] cargo[- ]shear') -and
+            ($r.Out -notmatch 'cargo hack|cargo semver-checks|cargo miri')) $r.Out
 
     $r = & $runRustGate $rust @('-All', '-Full')
-    Check 'clean rust fixture passes at -Full with no rust config' `
+    Check 'clean rust fixture runs default recommended suite at -Full with no qgate.json' `
+        (($r.Code -eq 0) -and ($r.Out -match '\[PASS\] cargo test') -and
+            ($r.Out -match '\[(PASS|WARN)\] clippy strict') -and ($r.Out -match '\[(PASS|WARN)\] cargo doc') -and
+            ($r.Out -match '\[(PASS|WARN)\] cargo[- ]deny') -and ($r.Out -match '\[(PASS|WARN)\] cargo[- ]shear') -and
+            ($r.Out -notmatch 'cargo hack|cargo semver-checks|cargo miri')) $r.Out
+
+    [IO.File]::WriteAllText((Join-Path $rust 'qgate.json'), '{"rust":{"preset":"off"}}')
+    $r = & $runRustGate $rust @('-All', '-Only', 'rust', '-Full')
+    Check 'rust.preset off disables default push/full suite' `
         (($r.Code -eq 0) -and ($r.Out -match '\[PASS\] cargo test') -and
             ($r.Out -notmatch 'clippy strict|cargo doc|cargo deny|cargo shear|cargo hack|cargo semver-checks|cargo miri')) $r.Out
+    Remove-Item (Join-Path $rust 'qgate.json') -Force -ErrorAction SilentlyContinue
 
     $rsMain = Join-Path $rust 'src\main.rs'
     $rsClean = [IO.File]::ReadAllText($rsMain)
@@ -1605,7 +1622,7 @@ pub fn read_local() -> i32 {
 }
 '@
     & $writeLf (Join-Path $scRepo 'src\lib.rs') $scBase
-    [IO.File]::WriteAllText((Join-Path $scRepo 'qgate.json'), '{"rust":{"strictClippy":"warn"}}')
+    [IO.File]::WriteAllText((Join-Path $scRepo 'qgate.json'), '{"rust":{"preset":"off","strictClippy":"warn"}}')
     git -C $scRepo init -q 2>$null
     git -C $scRepo add -A 2>$null
     git -C $scRepo -c user.email=selftest@local -c user.name=selftest commit -qm init 2>$null
@@ -1615,12 +1632,12 @@ pub fn read_local() -> i32 {
         (($r.Code -eq 0) -and ($r.Out -match '\[WARN\] clippy strict \(2 finding\(s\)\)') -and
             ($r.Out -match 'cloned_instead_of_copied') -and ($r.Out -match 'undocumented_unsafe_blocks') -and ($r.Out -notmatch '\[FAIL\]')) $r.Out
 
-    [IO.File]::WriteAllText((Join-Path $scRepo 'qgate.json'), '{"strict":true,"rust":{"strictClippy":"warn"}}')
+    [IO.File]::WriteAllText((Join-Path $scRepo 'qgate.json'), '{"strict":true,"rust":{"preset":"off","strictClippy":"warn"}}')
     $r = & $runRustGate $scRepo @('-All', '-Only', 'rust', '-Full')
     Check 'strictClippy warn fails when repo strict is true' `
         (($r.Code -ne 0) -and ($r.Out -match '\[WARN\] clippy strict \(2 finding\(s\)\)') -and ($r.Out -match '\[FAIL\] strict --')) $r.Out
 
-    [IO.File]::WriteAllText((Join-Path $scRepo 'qgate.json'), '{"rust":{"strictClippy":"fail"}}')
+    [IO.File]::WriteAllText((Join-Path $scRepo 'qgate.json'), '{"rust":{"preset":"off","strictClippy":"fail"}}')
     $r = & $runRustGate $scRepo @('-All', '-Only', 'rust', '-Full')
     Check 'strictClippy fail fails on allocation and safety defects' `
         (($r.Code -ne 0) -and ($r.Out -match '\[FAIL\] clippy strict \(2 finding\(s\)\)') -and
@@ -1650,12 +1667,12 @@ pub fn read_local() -> i32 {
     git -C $docRepo add -A 2>$null
     git -C $docRepo -c user.email=selftest@local -c user.name=selftest commit -qm init 2>$null
 
-    [IO.File]::WriteAllText((Join-Path $docRepo 'qgate.json'), '{"rust":{"doc":"warn"}}')
+    [IO.File]::WriteAllText((Join-Path $docRepo 'qgate.json'), '{"rust":{"preset":"off","doc":"warn"}}')
     $r = & $runRustGate $docRepo @('-All', '-Only', 'rust', '-Full')
     Check 'rust.doc warn warns on broken intra-doc link' `
         (($r.Code -eq 0) -and ($r.Out -match '\[WARN\] cargo doc') -and ($r.Out -match 'nonexistent_item') -and ($r.Out -notmatch '\[FAIL\]')) $r.Out
 
-    [IO.File]::WriteAllText((Join-Path $docRepo 'qgate.json'), '{"rust":{"doc":"fail"}}')
+    [IO.File]::WriteAllText((Join-Path $docRepo 'qgate.json'), '{"rust":{"preset":"off","doc":"fail"}}')
     $r = & $runRustGate $docRepo @('-All', '-Only', 'rust', '-Full')
     Check 'rust.doc fail fails on broken intra-doc link' `
         (($r.Code -ne 0) -and ($r.Out -match '\[FAIL\] cargo doc') -and ($r.Out -match 'nonexistent_item')) $r.Out
@@ -1691,7 +1708,7 @@ pub fn read_local() -> i32 {
     & $writeLf (Join-Path $docCfgRepo '.gitignore') "target/`nCargo.lock"
     & $writeLf (Join-Path $docCfgRepo '.cargo\config.toml') "[build]`nrustdocflags = [`"--cfg`", `"qgate_doc_cfg`"]"
     & $writeLf (Join-Path $docCfgRepo 'Cargo.toml') "[package]`nname = `"doc_cfg_probe`"`nversion = `"0.1.0`"`nedition = `"2021`"`n`n[lints.rust]`nunexpected_cfgs = { level = `"warn`", check-cfg = ['cfg(qgate_doc_cfg)'] }"
-    [IO.File]::WriteAllText((Join-Path $docCfgRepo 'qgate.json'), '{"rust":{"doc":"fail"}}')
+    [IO.File]::WriteAllText((Join-Path $docCfgRepo 'qgate.json'), '{"rust":{"preset":"off","doc":"fail"}}')
     & $writeLf (Join-Path $docCfgRepo 'src\lib.rs') ('#[cfg(all(doc, not(qgate_doc_cfg)))]' + "`ncompile_error!(`"missing cfg`");`n`n/// Returns one via [`greet`].`npub fn greet() -> i32 {`n    1`n}")
     git -C $docCfgRepo init -q 2>$null
     git -C $docCfgRepo add -A 2>$null
@@ -1973,12 +1990,12 @@ pub fn read_local() -> i32 {
 
         $cargoHomeDir = if ($env:CARGO_HOME) { $env:CARGO_HOME } else { Join-Path $HOME '.cargo' }
         if (Test-Path -LiteralPath (Join-Path $cargoHomeDir 'advisory-dbs')) {
-            [IO.File]::WriteAllText((Join-Path $denyApp 'qgate.json'), '{"rust":{"deny":"fail","denyOffline":true}}')
+            [IO.File]::WriteAllText((Join-Path $denyApp 'qgate.json'), '{"rust":{"preset":"off","deny":"fail","denyOffline":true}}')
             $r = & $runRustGate $denyApp @('-All', '-Only', 'rust', '-Full')
             Check 'qgate with real cargo-deny and fallback qgate.deny.toml passes on private local path dep' `
                 (($r.Code -eq 0) -and ($r.Out -match '\[PASS\] cargo deny')) $r.Out
 
-            [IO.File]::WriteAllText((Join-Path $denyPub 'qgate.json'), '{"rust":{"deny":"fail","denyOffline":true}}')
+            [IO.File]::WriteAllText((Join-Path $denyPub 'qgate.json'), '{"rust":{"preset":"off","deny":"fail","denyOffline":true}}')
             $r = & $runRustGate $denyPub @('-All', '-Only', 'rust', '-Full')
             Check 'qgate with fallback qgate.deny.toml emits [WARN] cargo deny instead of failing when publish = false is absent' `
                 (($r.Code -eq 0) -and ($r.Out -match '\[WARN\] cargo deny \(1 warning\(s\)\)') -and ($r.Out -match 'wildcard') -and ($r.Out -notmatch '\[FAIL\]')) $r.Out
@@ -2159,15 +2176,31 @@ pub fn read_local() -> i32 {
         (($r.Code -ne 0) -and ($r.Out -match '\[FAIL\].*cargo mutants: baseline tests failed / unviable')) $r.Out
     Remove-Item env:QGATE_ST_MUTANTS_MODE -ErrorAction SilentlyContinue
 
-    # 11.6 rust.preset "strict" activates all 4 -Full checks in one line.
-    [IO.File]::WriteAllText((Join-Path $docRepo 'qgate.json'), '{"rust":{"preset":"strict"}}')
+    # 11.6 default recommended (no qgate.json) and rust.preset "strict" across -Push and -Full.
+    Remove-Item (Join-Path $docRepo 'qgate.json') -Force -ErrorAction SilentlyContinue
     $env:QGATE_ST_SHEAR_MODE = 'clean'
+    $r = & $runRustGate $docRepo @('-All', '-Only', 'rust', '-Push')
+    Check 'default rust recommended runs all 4 checks on -Push with clean shims' `
+        (($r.Code -eq 0) -and ($r.Out -match '\[PASS\] clippy strict') -and ($r.Out -match '\[PASS\] cargo doc') -and
+            ($r.Out -match '\[PASS\] cargo deny') -and ($r.Out -match '\[PASS\] cargo shear')) $r.Out
+
+    $env:QGATE_ST_DENY_EXIT = '1'
+    $r = & $runRustGate $docRepo @('-All', '-Only', 'rust', '-Push')
+    Check 'default rust recommended warns without failing on -Push when cargo-deny reports a finding' `
+        (($r.Code -eq 0) -and ($r.Out -match '\[WARN\] cargo deny') -and ($r.Out -match 'shim-deny-advisory-fail') -and ($r.Out -notmatch '\[FAIL\]')) $r.Out
+    Remove-Item env:QGATE_ST_DENY_EXIT -ErrorAction SilentlyContinue
+
+    [IO.File]::WriteAllText((Join-Path $docRepo 'qgate.json'), '{"rust":{"preset":"strict"}}')
     $r = & $runRustGate $docRepo @('-All', '-Only', 'rust', '-Full')
     Check 'rust.preset strict activates all 4 -Full checks and passes with clean shims' `
         (($r.Code -eq 0) -and ($r.Out -match '\[PASS\] clippy strict') -and ($r.Out -match '\[PASS\] cargo doc') -and
             ($r.Out -match '\[PASS\] cargo deny') -and ($r.Out -match '\[PASS\] cargo shear')) $r.Out
 
     $env:QGATE_ST_DENY_EXIT = '1'
+    $r = & $runRustGate $docRepo @('-All', '-Only', 'rust', '-Push')
+    Check 'rust.preset strict fails on -Push when a check fails' `
+        (($r.Code -ne 0) -and ($r.Out -match '\[FAIL\] cargo deny') -and ($r.Out -match 'shim-deny-advisory-fail')) $r.Out
+
     $r = & $runRustGate $docRepo @('-All', '-Only', 'rust', '-Full')
     Check 'rust.preset strict fails when a -Full check fails' `
         (($r.Code -ne 0) -and ($r.Out -match '\[FAIL\] cargo deny') -and ($r.Out -match 'shim-deny-advisory-fail')) $r.Out
