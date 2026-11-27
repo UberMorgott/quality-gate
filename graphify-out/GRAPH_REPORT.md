@@ -1,18 +1,18 @@
 # Graph Report - quality-gate  (2026-11-27)
 
 ## Corpus Check
-- 65 files · ~191,896 words
+- 65 files · ~192,380 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 23 file(s) not represented in the graph (top: .toml 8, (none) 5, .gd 2)
 - WARNING: 23 of 89 files seen (26%) have no supported extractor and are missing from this graph entirely. It may look complete while representing only part of the codebase.
 
 ## Summary
-- 703 nodes · 1207 edges · 54 communities (25 shown, 29 thin omitted)
-- Extraction: 85% EXTRACTED · 15% INFERRED · 0% AMBIGUOUS · INFERRED: 186 edges (avg confidence: 0.85)
+- 703 nodes · 1208 edges · 54 communities (25 shown, 29 thin omitted)
+- Extraction: 85% EXTRACTED · 15% INFERRED · 0% AMBIGUOUS · INFERRED: 187 edges (avg confidence: 0.85)
 - Token cost: 128,013 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `7ffa5a7a`
+- Built from commit: `69c8546b`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -106,7 +106,7 @@ Nodes (31): generated, paths, rules, default-signifies-exhaustive, disable-all, 
 
 ### Community 5 - "selftest.ps1"
 Cohesion: 0.05
-Nodes (48): ConvertFrom-GoTestJson(), Enter-QGateLock(), Get-AegisLint(), Get-CiGoGaps(), Get-DirBytes(), Get-GoBuiltWith(), Get-GoBusyCount(), Get-GoCacheLimits() (+40 more)
+Nodes (49): Format-StackOutput(), ConvertFrom-GoTestJson(), Enter-QGateLock(), Get-AegisLint(), Get-CiGoGaps(), Get-DirBytes(), Get-GoBuiltWith(), Get-GoBusyCount() (+41 more)
 
 ### Community 6 - "QGateHarmony"
 Cohesion: 0.05
@@ -121,7 +121,7 @@ Cohesion: 0.29
 Nodes (6): name, private, scripts, build-only, type-check, type
 
 ### Community 9 - "check.ps1"
-Cohesion: 0.08
+Cohesion: 0.09
 Nodes (27): Exit-GateSlot(), Get-BuildOutDirs(), Get-DotnetChangedCs(), Get-DotnetEval(), Get-DotnetFolderFormat(), Get-DotnetFormatFailure(), Get-DotnetSharedFormat(), Get-DotnetTestFrameworkDrift() (+19 more)
 
 ### Community 10 - "steps"
@@ -190,7 +190,7 @@ Nodes (13): Get-VendoredPaths(), Invoke-PowerShellStack(), Find-Marker(), Get-Cu
 
 ## Knowledge Gaps
 - **36 isolated node(s):** `Constructor`, `Enumerator`, `Getter`, `Normal`, `Setter` (+31 more)
-  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 257 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
+  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 256 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
 - **29 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
